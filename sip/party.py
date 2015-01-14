@@ -15,6 +15,7 @@ class Party(object):
     def __init__(self, username=None, host=None, displayname=None):
         """
         """
+
         self.port = defaults.port
         self.sentmessages = []
         self.rcvdmessages = []
@@ -31,7 +32,6 @@ class Party(object):
     def invite(self, ):
         """Start a call."""
         invite = prot.Message.invite
-
 
     def sendResponse(self, code, toParty=None):
         """Send a SIP response code."""

@@ -27,8 +27,16 @@ class TestProtocol(unittest.TestCase):
         self.assertRaises(AttributeError, lambda: sip.prot.Message.notareg)
 
         invite = sip.prot.Message.invite()
+        invite.startline.aor = bobAOR
         self.assertEqual(
-            str(invite), "")
+            str(invite),
+            "INVITE bob@baltimore.com SIP/2.0\r\n"
+            "Call-ID: \r\n"
+            "CSeq: \r\n"
+            "From: \r\n"
+            "Max-Forwards: \r\n"
+            "To: \r\n"
+            "Via: \r\n")
         return
 
         caller = sip.Party()

@@ -24,9 +24,8 @@ class attributesubclassgen(type):
             raise AttributeError(
                 "{name!r} is not a valid subtype of {cls.__name__!r}".format(
                     **locals()))
-        print "get " + name
+
         name = getattr(cls.__dict__["types"], name)
-        print "normalized to " + name
         subclassguess = name.title() + cls._supername
 
         try:

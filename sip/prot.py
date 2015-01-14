@@ -18,6 +18,7 @@ class ProtocolSyntaxError(Exception):
     a request with a response code.
     """
 
+
 class ProtocolValueError(ProtocolError):
     """Value errors are when a user request makes syntactic sense, but some
     value is not allowed by the protocol. For example asking for a request
@@ -92,7 +93,7 @@ class Request(object):
         Header.types.authorization, Header.types.content_disposition,
         Header.types.content_encoding, Header.types.content_language,
         Header.types.content_type)
-    streamheaders = ( # Required to be sent with stream-based protocols.
+    streamheaders = (  # Required to be sent with stream-based protocols.
         Header.types.content_length,)
     bodyheaders = None  # Required with non-empty bodies.
     naheaders = None  # By default the complement of the union of the others.
@@ -104,7 +105,7 @@ class Request(object):
     def __str__(self):
         return "{type} {aor} {protocol}".format(**self.__dict__)
 
-    def __init__(self, aor, protocol=defaults.sipprotocol):
+    def __init__(self, aor=None, protocol=defaults.sipprotocol):
         for prop in ("aor", "protocol"):
             setattr(self, prop, locals()[prop])
         self.type = self.type
@@ -145,7 +146,7 @@ class Message(object):
 
         if not startline:
             try:
-                startline = getattr(Request, self.)(self.type)
+                startline = getattr(Request, self.type)()
             except Exception:
                 raise
 
@@ -161,19 +162,17 @@ class Message(object):
         components.extend(self.headers)
         # Note we need an extra newline between headers and bodies
         components.append("")
-        components.extend(self.bodies)
-        components.append("")  # need a newline at the end.
+        if self.bodies:
+            components.extend(self.bodies)
+            components.append("")  # need a newline at the end.
 
         return EOL.join([str(_cp) for _cp in components])
 
     def autofillheaders(self):
         for hdr in self.startline.mandatoryheaders:
-            print "fill header " + hdr
             if hdr not in [_hdr.type for _hdr in self.headers]:
                 self.headers.append(getattr(Header, hdr)())
 
 
 class InviteMessage(Message):
     """An INVITE."""
-
-
