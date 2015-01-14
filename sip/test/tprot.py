@@ -12,17 +12,62 @@ class TestProtocol(unittest.TestCase):
 
     def testGeneral(self):
 
-        meURL = sip.prot.URL("dmp", "greenparksoftware.com")
-        self.assertEqual(str(meURL), "dmp@greenparksoftware.com")
+        aliceAOR = sip.prot.AOR("alice", "atlanta.com")
+        self.assertEqual(str(aliceAOR), "alice@atlanta.com")
+        bobAOR = sip.prot.AOR("bob", "baltimore.com")
 
-        self.assertRaises(sip.prot.ProtocolError,
-                          lambda: sip.prot.requesttype.notareq)
+        self.assertRaises(AttributeError, lambda: sip.prot.Request.notareq)
 
-        reqLine = sip.prot.RequestLine(
-            sip.prot.requesttype.invite, meURL)
+        inviteRequest = sip.prot.Request.invite(bobAOR)
         self.assertEqual(
-            str(reqLine), "INVITE dmp@greenparksoftware.com SIP/2.0\r\n")
+            str(inviteRequest), "INVITE bob@baltimore.com SIP/2.0")
+
+        import pdb
+        #pdb.set_trace()
+        self.assertRaises(AttributeError, lambda: sip.prot.Message.notareg)
+
+        invite = sip.prot.Message.invite()
+        self.assertEqual(
+            str(invite), "")
+        return
+
+        caller = sip.Party()
+        callee = sip.Party()
+
+        invite = caller.build(sip.prot.requesttype.invite)
+
+        self.assertEqual(invite, "")
+        return
+
+        tohdr = sip.prot.HeaderForName("To", reqLine)
+        return
+        self.assertTrue(isinstance(tohdr, sip.prot.ToHeader))
+        self.assertEqual(str(tohdr), "To: dmp@greenparksoftware.com")
+
+        #invite = sip.prot.Request(reqLine
 
 
 if __name__ == "__main__":
-    unittest.main()
+    sys.exit(unittest.main())
+
+
+caller = sipparty.SipParty()
+callee = sipparty.SipParty()
+
+callee.listen()
+
+caller.register()
+
+callee.receiveRegister()
+callee.respond(200)
+
+caller.receiveResponse(200)
+
+caller.invite()
+callee.respond(100)
+callee.respond(180)
+caller.receiveResponse(100)
+caller.receiveResponse(180)
+
+callee.bye()
+caller.respond(200)

@@ -1,4 +1,20 @@
 import sip
+import sys
+
+class A(object):
+    objs = []
+
+class AA(A):
+    objs = A.objs + [2]
+
+def afunc():
+    print "afunc"
+
+afunc(a="a")
+
+print(AA.objs)
+
+sys.exit(0)
 
 # Not yet implemented
 caller = sip.Party()

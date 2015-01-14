@@ -1,4 +1,5 @@
 """Parse and build SIP messages"""
+import collections
 import defaults
 import _util
 import pdb
@@ -7,31 +8,26 @@ EOL = "\r\n"
 
 
 class ProtocolError(Exception):
+    """Something didn't make sense in SIP."""
     pass
 
 
-class requesttype(object):
-    """Enumeration class generator"""
+class ProtocolSyntaxError(Exception):
+    """Syntax errors are when a request is missing some key bit from the
+    protocol, or is otherwise confused. Like trying to build
+    a request with a response code.
+    """
 
-    Types = ("INVITE", "BYE", "REGISTER")
-    __metaclass__ = _util.attributetomethodgenerator
-
-    @classmethod
-    def generateobjectfromname(cls, method):
-        return requesttype(method.upper())
-
-    def __str__(self):
-        return "{type}".format(**self.__dict__)
-
-    def __init__(self, type):
-        if type not in self.Types:
-            raise ProtocolError("No such SIP request type {0}".format(type))
-
-        self.type = type
+class ProtocolValueError(ProtocolError):
+    """Value errors are when a user request makes syntactic sense, but some
+    value is not allowed by the protocol. For example asking for a request
+    type of "notarequest" or a status code of "13453514".
+    """
+    pass
 
 
-class URL(object):
-    """A URL object."""
+class AOR(object):
+    """A AOR object."""
 
     def __init__(self, username, host):
 
@@ -42,15 +38,142 @@ class URL(object):
         return "{username}@{host}".format(**self.__dict__)
 
 
-class RequestLine(object):
-    """The request line for a request message."""
+def HeaderForName(headername, *args, **kwargs):
+    return(Header.FindSubClass(headername)(*args, **kwargs))
 
-    def __init__(self, method, targeturl, protocol=defaults.sipprotocol):
-        """Init a request line object."""
 
-        for prop in ("method", "targeturl", "protocol"):
+class Header(object):
+    """A SIP header."""
+
+    types = _util.Enum(
+        ("Accept", "Accept-Encoding", "Accept-Language", "Alert-Info", "Allow",
+         "Authentication-Info", "Authorization", "Call-ID", "Call-Info",
+         "Contact", "Content-Disposition", "Content-Encoding",
+         "Content-Language", "Content-Length", "Content-Type", "CSeq", "Date",
+         "Error-Info", "Expires", "From", "In-Reply-To", "Max-Forwards",
+         "Min-Expires", "MIME-Version", "Organization", "Priority",
+         "Proxy-Authenticate", "Proxy-Authorization", "Proxy-Require",
+         "Record-Route", "Reply-To", "Require", "Retry-To", "Route", "Server",
+         "Subject", "Supported", "Timestamp", "To", "Unsupported",
+         "User-Agent", "Via", "Warning", "WWW-Authenticate"),
+        normalize=_util.sipheader)
+
+    # This allows us to generate instances of subclasses by class attribute
+    # access, so Header.accept creates an accept header etc.
+    __metaclass__ = _util.attributesubclassgen
+
+    def __init__(self, values=[]):
+        """Initialize a header line.
+        """
+        for prop in ("values",):
             setattr(self, prop, locals()[prop])
 
     def __str__(self):
-        return ("{method} {targeturl} {protocol}" + EOL).format(
-            **self.__dict__)
+        return "{0}: {1}".format(self.type, ",".join(self.values))
+
+
+class ToHeader(Header):
+    """A To: header"""
+
+
+class Request(object):
+    """Enumeration class generator"""
+
+    types = _util.Enum(
+        ("ACK", "BYE", "CANCEL", "INVITE", "OPTIONS", "REGISTER"),
+        normalize=_util.upper)
+
+    mandatoryheaders = (
+        Header.types.call_id, Header.types.cseq, Header.types.From,
+        Header.types.max_forwards, Header.types.To, Header.types.Via)
+    shouldheaders = ()  # Should be sent but parties must cope without.
+    conditionalheaders = ()
+    optionalheaders = (
+        Header.types.authorization, Header.types.content_disposition,
+        Header.types.content_encoding, Header.types.content_language,
+        Header.types.content_type)
+    streamheaders = ( # Required to be sent with stream-based protocols.
+        Header.types.content_length,)
+    bodyheaders = None  # Required with non-empty bodies.
+    naheaders = None  # By default the complement of the union of the others.
+
+    # This gives me case insensitive subclass instance creation and type-
+    # checking.
+    __metaclass__ = _util.attributesubclassgen
+
+    def __str__(self):
+        return "{type} {aor} {protocol}".format(**self.__dict__)
+
+    def __init__(self, aor, protocol=defaults.sipprotocol):
+        for prop in ("aor", "protocol"):
+            setattr(self, prop, locals()[prop])
+        self.type = self.type
+
+
+class InviteRequest(Request):
+    type = Request.types.invite
+
+
+class Message(object):
+    """Generic message class. Use `Request` or `Response` rather than using
+    this directly.
+    """
+
+    types = Request.types
+    __metaclass__ = _util.attributesubclassgen
+
+    @classmethod
+    def requestname(cls):
+        if not cls.isrequest():
+            raise AttributeError(
+                "{cls.__name__!r} is not a request so has no request name."
+                .format(**locals()))
+
+        return cls.__name__.replace("Message", "")
+
+    @classmethod
+    def isrequest(cls):
+        return not cls.isresponse()
+
+    @classmethod
+    def isresponse(cls):
+        return cls.__name__.find("Response") != -1
+
+    def __init__(self, startline=None, headers=[], bodies=[],
+                 autoheader=True):
+        """Initialize a `Message`."""
+
+        if not startline:
+            try:
+                startline = getattr(Request, self.)(self.type)
+            except Exception:
+                raise
+
+        for prop in ("startline", "headers", "bodies"):
+            setattr(self, prop, locals()[prop])
+
+        if autoheader:
+            self.autofillheaders()
+
+    def __str__(self):
+
+        components = [self.startline]
+        components.extend(self.headers)
+        # Note we need an extra newline between headers and bodies
+        components.append("")
+        components.extend(self.bodies)
+        components.append("")  # need a newline at the end.
+
+        return EOL.join([str(_cp) for _cp in components])
+
+    def autofillheaders(self):
+        for hdr in self.startline.mandatoryheaders:
+            print "fill header " + hdr
+            if hdr not in [_hdr.type for _hdr in self.headers]:
+                self.headers.append(getattr(Header, hdr)())
+
+
+class InviteMessage(Message):
+    """An INVITE."""
+
+
