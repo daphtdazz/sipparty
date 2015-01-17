@@ -26,8 +26,7 @@ class attributesubclassgen(type):
                     **locals()))
 
         name = getattr(cls.__dict__["types"], name)
-        subclassguess = name.title() + cls._supername
-
+        subclassguess = name.title().replace("-", "_") + cls._supername
         try:
             mod = __import__(cls.__module__)
             for modname in cls.__module__.split(".")[1:]:

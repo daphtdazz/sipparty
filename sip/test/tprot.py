@@ -1,5 +1,6 @@
 import sys
 import os
+import re
 import unittest
 
 # Hack so we can always import the code we're testing.
@@ -28,15 +29,15 @@ class TestProtocol(unittest.TestCase):
 
         invite = sip.prot.Message.invite()
         invite.startline.aor = bobAOR
-        self.assertEqual(
-            str(invite),
+        self.assertTrue(re.match(
             "INVITE bob@baltimore.com SIP/2.0\r\n"
-            "Call-ID: \r\n"
+            "Call-ID: [\da-f]{6}-\d{14}\r\n"
             "CSeq: \r\n"
             "From: \r\n"
             "Max-Forwards: \r\n"
             "To: \r\n"
-            "Via: \r\n")
+            "Via: \r\n",
+            str(invite)), str(invite))
         return
 
         caller = sip.Party()
