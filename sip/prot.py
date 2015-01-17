@@ -133,8 +133,8 @@ class Request(object):
         normalize=_util.upper)
 
     mandatoryheaders = (
-        Header.types.call_id, Header.types.cseq, Header.types.From,
-        Header.types.max_forwards, Header.types.To, Header.types.Via)
+        Header.types.From,  Header.types.To, Header.types.Via,
+        Header.types.call_id, Header.types.cseq, Header.types.max_forwards)
     shouldheaders = ()  # Should be sent but parties must cope without.
     conditionalheaders = ()
     optionalheaders = (

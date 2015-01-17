@@ -31,12 +31,12 @@ class TestProtocol(unittest.TestCase):
         invite.startline.aor = bobAOR
         self.assertTrue(re.match(
             "INVITE bob@baltimore.com SIP/2.0\r\n"
+            "From: \r\n"
+            "To: \r\n"
+            "Via: \r\n"
             "Call-ID: [\da-f]{6}-\d{14}\r\n"
             "CSeq: \r\n"
-            "From: \r\n"
-            "Max-Forwards: \r\n"
-            "To: \r\n"
-            "Via: \r\n",
+            "Max-Forwards: \r\n",
             str(invite)), str(invite))
         return
 
