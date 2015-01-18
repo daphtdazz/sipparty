@@ -104,7 +104,6 @@ class Call_IdHeader(Header):
 
         return "{keyval:06x}-{keydate}".format(**locals())
 
-
     def __init__(self, values=[]):
         Header.__init__(self, values)
         self.host = None

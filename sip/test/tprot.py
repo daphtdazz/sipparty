@@ -65,6 +65,10 @@ class TestProtocol(unittest.TestCase):
         self.assertEqual(a.y, 1)
         a.y = 2
         self.assertEqual(a.x, 2)
+        a.unbind("x")
+        a.y = 3
+        self.assertEqual(a.x, 2)
+
 
 if __name__ == "__main__":
     sys.exit(unittest.main())
