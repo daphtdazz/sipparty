@@ -55,6 +55,16 @@ class TestProtocol(unittest.TestCase):
 
         #invite = sip.prot.Request(reqLine
 
+    def testBindings(self):
+        VB = sip._util.ValueBinder
+
+        a, b, c = [VB() for ii in range(3)]
+
+        a.bind("x", "y")
+        a.x = 1
+        self.assertEqual(a.y, 1)
+        a.y = 2
+        self.assertEqual(a.x, 2)
 
 if __name__ == "__main__":
     sys.exit(unittest.main())
