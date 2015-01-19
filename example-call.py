@@ -1,18 +1,35 @@
 import sip
 import sys
+import pdb
+import sip._util
 
-class A(object):
+
+class A(sip._util.ValueBinder, object):
     objs = []
 
-class AA(A):
-    objs = A.objs + [2]
+    def __init__(self):
+        super(A, self).__init__()
+        self.a = 1
 
-def afunc():
-    print "afunc"
 
-afunc(a="a")
+class B(sip._util.ValueBinder, object):
 
-print(AA.objs)
+    def __init__(self):
+        super(B, self).__init__()
+        self.b = None
+
+
+a = A()
+b = B()
+
+a.bind("a", "b")
+
+a.a = 1
+print a.b
+a.a = 2
+print a.b
+a.b = 3
+print a.a
 
 sys.exit(0)
 

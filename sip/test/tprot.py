@@ -2,6 +2,7 @@ import sys
 import os
 import re
 import unittest
+import pdb
 
 # Hack so we can always import the code we're testing.
 sys.path.append(os.path.join(os.pardir, os.pardir))
@@ -68,6 +69,13 @@ class TestProtocol(unittest.TestCase):
         a.unbind("x")
         a.y = 3
         self.assertEqual(a.x, 2)
+
+        a.bind("x", "b.y")
+        a.b = b
+        a.x = 5
+        self.assertEqual(a.b.y, 5)
+        a.b.y = 6
+        self.assertEqual(a.x, 6)
 
 
 if __name__ == "__main__":

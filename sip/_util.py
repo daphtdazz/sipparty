@@ -114,7 +114,7 @@ class ValueBinder(object):
         # print("Bindings before bind: {self._bindings}".format(**locals()))
 
         # Bind from to to.
-        self._bindoneway(frompath, topath, transformer)
+        self._bindoneway(frompath, topath, None, transformer)
 
         # If the first element of topath is not empty, then this means we are
         # the bottom object in the binding path, so we need to bind up to the
@@ -128,9 +128,7 @@ class ValueBinder(object):
 
         toattr, _, toattrsattr = topath.partition(ValueBinder.PS)
         if toattr:
-            self._bindoneway(topath, frompath, transformer)
-
-        # print("Bindings before bind: {self._bindings}".format(**locals()))
+            self._bindoneway(topath, frompath, None, transformer)
 
     def unbind(self, frompath):
         """Unbind an attribute path."""
@@ -161,24 +159,37 @@ class ValueBinder(object):
 
         # Protect against recursion. This might occur when one property of
         # ourself is bound to another.
-        if attr != "_settingattr" and not self._settingattr:
+        if attr in self._bindings and not self._settingattr:
             self._settingattr = True
             try:
-                if attr in self._bindings:
-                    attrbindings = self._bindings[attr]
-                    for path, bindingdict in attrbindings.iteritems():
-                        # Handle directly bound attributes.
-                        if len(path) == 0:
-                            # This attribute is bound directly.
-                            target, targetattr = (
-                                self._resolveboundobjectandattr(
-                                    bindingdict[ValueBinder.KeyTargetPath]))
-                            if target is not None:
-                                # TODO: implement transformers.
-                                setattr(target, targetattr, val)
-                            continue
-                        # Handle indirectly bound attributes.
+                attrbindings = self._bindings[attr]
+                for path, bindingdict in attrbindings.iteritems():
+                    # Handle directly bound attributes.
+                    if len(path) == 0:
+                        # This attribute is bound directly.
+                        # print("Direct bound attribute changing: {attr}."
+                        #      "{path}".format(**locals()))
+                        target, targetattr = self._resolveboundobjectandattr(
+                            bindingdict[ValueBinder.KeyTargetPath])
+                        if target is not None:
+                            # TODO: implement transformers.
+                            setattr(target, targetattr, val)
+                        continue
+                    # Handle indirectly bound attributes.
+                    else:
+                        if hasattr(self, attr):
+                            # print("Remove old binding: {attr}."
+                            #       "{path}".format(**locals()))
+                            getattr(self, attr).unbind(path)
 
+                        if val is not None:
+                            # print("Add new binding.")
+                            val._bindoneway(
+                                path,
+                                (ValueBinder.PS +
+                                 bindingdict[ValueBinder.KeyTargetPath]),
+                                self,
+                                bindingdict[ValueBinder.KeyTransformer])
             except:
                 raise
             finally:
@@ -186,7 +197,7 @@ class ValueBinder(object):
 
         super(ValueBinder, self).__setattr__(attr, val)
 
-    def _bindoneway(self, frompath, topath, transformer):
+    def _bindoneway(self, frompath, topath, parent, transformer):
         """Binds the attribute at frompath to the attribute at topath, so a
         change to frompath causes a change to topath, but not vice-versa."""
 
@@ -203,10 +214,17 @@ class ValueBinder(object):
             ValueBinder.KeyTargetPath: topath,
             ValueBinder.KeyTransformer: transformer}
 
+        currparent = self._bindingparent
+        assert currparent is None or currparent is parent
+        self._bindingparent = parent
+
         if attrsattr and hasattr(self, attr):
             child = getattr(self, attr)
-            child._bindingparent = self
-            child.bind(attrsattr, ValueBinder.PS + topath)
+            child._bindoneway(attrsattr, ValueBinder.PS + topath, self,
+                              transformer)
+
+        # print("Bindings after onewaybind: {self._bindings}".format(
+        #     **locals()))
 
     def _unbindoneway(self, frompath):
         fromattr, _, fromattrattrs = frompath.partition(ValueBinder.PS)
@@ -220,18 +238,30 @@ class ValueBinder(object):
             getattr(self, fromattr)._unbindoneway(fromattrattrs)
 
         del bindings[fromattrattrs]
+        if not len(bindings):
+            del self._bindings[fromattr]
+
+        if not len(self._bindings):
+            self._bindingparent = None
 
     def _resolveboundobjectandattr(self, path):
         nextobj = self
         splitpath = path.split(ValueBinder.PS)
-        nextattr = splitpath[0]
-        for nextattr in splitpath[:-1]:
+        for nextattr in splitpath[0:-1]:
+            # print("Next attribute: {nextattr}".format(**locals()))
+
             if len(nextattr) == 0:
                 nextattr = "_bindingparent"
-            if hasattr(nextobj, nextattr):
-                nextobj = getattr(nextobj, nextattr)
-                continue
 
-            return None, ""
+            if not hasattr(nextobj, nextattr):
+                # This we're missing an object in the path, so need to return
+                # None.
+                nextobj = None
+                nextattr = None
+                break
 
+            nextobj = getattr(nextobj, nextattr)
+
+        else:
+            nextattr = splitpath[-1]
         return nextobj, nextattr
