@@ -76,6 +76,21 @@ class TestProtocol(unittest.TestCase):
         self.assertEqual(a.b.y, 5)
         a.b.y = 6
         self.assertEqual(a.x, 6)
+        a.unbind("b.y")
+        a.b.y = 7
+        self.assertEqual(a.x, 6)
+        self.assertEqual(a.b.y, 7)
+        self.assertEqual(len(a._bindings), 0)
+        self.assertEqual(len(a.b._bindings), 0)
+
+        a.b.c = c
+        a.bind("b.x", "b.c.x")
+        b.x = 7
+        self.assertEqual(a.b.x, 7)
+        self.assertEqual(c.x, 7)
+        self.assertRaises(sip._util.NoSuchBinding, lambda: a.unbind("b"))
+        self.assertRaises(sip._util.BindingAlreadyExists,
+                          lambda: a.bind("b.x", "b.c.d.x"))
 
 
 if __name__ == "__main__":

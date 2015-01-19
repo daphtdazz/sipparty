@@ -91,6 +91,18 @@ class Enum(set):
         raise AttributeError(nn)
 
 
+class BindingException(Exception):
+    """Base class for all binding specific errors."""
+
+
+class NoSuchBinding(BindingException):
+    """No such binding error: raised when we attempt to """
+
+
+class BindingAlreadyExists(BindingException):
+    """This binding already exists."""
+
+
 class ValueBinder(object):
     """This mixin class provides a way to bind values to one another."""
 
@@ -138,10 +150,13 @@ class ValueBinder(object):
 
         # May need to unbind in the other direction.
         fromattr, _, fromattrattrs = frompath.partition(ValueBinder.PS)
-        assert fromattr in self._bindings
+        if fromattr not in self._bindings:
+            raise(NoSuchBinding(frompath))
 
         bindings = self._bindings[fromattr]
-        assert fromattrattrs in bindings
+        if fromattrattrs not in bindings:
+            raise(NoSuchBinding(frompath))
+
         bindingdict = bindings[fromattrattrs]
 
         topath = bindingdict[ValueBinder.KeyTargetPath]
@@ -209,7 +224,9 @@ class ValueBinder(object):
 
         # The attribute path of the attribute we're trying to bind should not
         # already be bound.
-        assert attrsattr not in attrbindings
+        if attrsattr in attrbindings:
+            raise(BindingAlreadyExists(frompath))
+
         attrbindings[attrsattr] = {
             ValueBinder.KeyTargetPath: topath,
             ValueBinder.KeyTransformer: transformer}
