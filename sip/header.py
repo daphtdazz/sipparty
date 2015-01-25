@@ -73,6 +73,14 @@ class ToHeader(Header):
             self.value = prot.DNameURI()
 
 
+class FromHeader(Header):
+    """A From: header"""
+
+    def generatevalues(self):
+        if not hasattr(self, "value"):
+            self.value = prot.DNameURI()
+
+
 class Call_IdHeader(Header):
     """Call ID header."""
 

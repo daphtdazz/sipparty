@@ -28,9 +28,10 @@ class TestProtocol(unittest.TestCase):
 
         invite = sip.Message.invite()
         invite.startline.uri = sip.prot.URI(aor=bobAOR)
+        invite.fromheader.value.uri = sip.prot.URI(aor=aliceAOR)
         self.assertTrue(re.match(
             "INVITE sip:bob@baltimore.com SIP/2.0\r\n"
-            "From: \r\n"
+            "From: sip:alice@atlanta.com\r\n"
             "To: sip:bob@baltimore.com\r\n"
             "Via: \r\n"
             # 6 random hex digits followed by a date/timestamp
