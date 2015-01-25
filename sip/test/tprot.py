@@ -24,16 +24,14 @@ class TestProtocol(unittest.TestCase):
         self.assertEqual(
             str(inviteRequest), "INVITE bob@baltimore.com SIP/2.0")
 
-        import pdb
-        #pdb.set_trace()
         self.assertRaises(AttributeError, lambda: sip.Message.notareg)
 
         invite = sip.Message.invite()
-        invite.startline.aor = bobAOR
+        invite.startline.uri = sip.prot.URI(aor=bobAOR)
         self.assertTrue(re.match(
-            "INVITE bob@baltimore.com SIP/2.0\r\n"
+            "INVITE sip:bob@baltimore.com SIP/2.0\r\n"
             "From: \r\n"
-            "To: \r\n"
+            "To: sip:bob@baltimore.com\r\n"
             "Via: \r\n"
             # 6 random hex digits followed by a date/timestamp
             "Call-ID: [\da-f]{6}-\d{14}\r\n"
@@ -41,8 +39,7 @@ class TestProtocol(unittest.TestCase):
             "Max-Forwards: \r\n",
             str(invite)), str(invite))
 
-        self.assertEqual(str(invite.toheader),
-                         "To: ")
+        self.assertEqual(str(invite.toheader), "To: sip:bob@baltimore.com")
         self.assertEqual(
             str(invite.call_idheader), str(getattr(invite, "Call-IDHeader")))
         self.assertRaises(AttributeError, lambda: invite.notaheader)

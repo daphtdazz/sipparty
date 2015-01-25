@@ -112,16 +112,11 @@ class ValueBinder(object):
     KeyTargetPath = "targetpath"
     KeyTransformer = "transformer"
 
-    def __init__(self, *args, **kwargs):
-        for reqdattr in (("_bindings", {}), ("_bindingparent", None),
-                         ("_settingattr", False)):
-            if not reqdattr[0] in self.__dict__:
-                self.__dict__[reqdattr[0]] = reqdattr[1]
-        super(ValueBinder, self).__init__(*args, **kwargs)
-
     def bind(self, frompath, topath, transformer=None):
         """E.g. vb.bind("a.b", "..c") would bind my attribute a's attribute b
         to my parent's parent's attribute c."""
+
+        self._ensurevbness()
 
         # print("Bindings before bind: {self._bindings}".format(**locals()))
 
@@ -174,7 +169,8 @@ class ValueBinder(object):
 
         # Protect against recursion. This might occur when one property of
         # ourself is bound to another.
-        if attr in self._bindings and not self._settingattr:
+        if (hasattr(self, "_bindings") and attr in self._bindings and
+                not self._settingattr):
             self._settingattr = True
             try:
                 attrbindings = self._bindings[attr]
@@ -216,6 +212,8 @@ class ValueBinder(object):
         """Binds the attribute at frompath to the attribute at topath, so a
         change to frompath causes a change to topath, but not vice-versa."""
 
+        self._ensurevbness()
+
         attr, _, attrsattr = frompath.partition(ValueBinder.PS)
         if attr not in self._bindings:
             self._bindings[attr] = {}
@@ -243,7 +241,14 @@ class ValueBinder(object):
         # print("Bindings after onewaybind: {self._bindings}".format(
         #     **locals()))
 
+    def _ensurevbness(self):
+        for reqdattr in (("_bindings", {}), ("_bindingparent", None),
+                         ("_settingattr", False)):
+            if not reqdattr[0] in self.__dict__:
+                self.__dict__[reqdattr[0]] = reqdattr[1]
+
     def _unbindoneway(self, frompath):
+
         fromattr, _, fromattrattrs = frompath.partition(ValueBinder.PS)
         assert fromattr in self._bindings
 

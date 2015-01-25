@@ -5,7 +5,7 @@ from request import Request
 from header import Header
 
 
-class Message(object):
+class Message(_util.ValueBinder):
     """Generic message class. Use `Request` or `Response` rather than using
     this directly.
     """
@@ -42,6 +42,8 @@ class Message(object):
                  autoheader=True):
         """Initialize a `Message`."""
 
+        super(Message, self).__init__()
+
         if startline is None:
             try:
                 startline = getattr(Request, self.type)()
@@ -53,6 +55,8 @@ class Message(object):
 
         if autoheader:
             self.autofillheaders()
+
+        self._establishbindings()
 
     def __str__(self):
 
@@ -90,6 +94,11 @@ class Message(object):
                 "{self.__class__.__name__!r} object has no attribute "
                 "{attr!r}".format(**locals()))
 
+    def _establishbindings(self):
+
+        for binding in self.bindings:
+            self.bind(binding[0], binding[1])
+
     def autofillheaders(self):
         for hdr in self.startline.mandatoryheaders:
             if hdr not in [_hdr.type for _hdr in self.headers]:
@@ -99,4 +108,4 @@ class Message(object):
 class InviteMessage(Message):
     """An INVITE."""
 
-    bindings = ["startline.aor", ""]
+    bindings = [("startline.uri", "toheader.value.uri")]

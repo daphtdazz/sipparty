@@ -32,10 +32,46 @@ class ProtocolValueError(ProtocolError):
 class AOR(object):
     """A AOR object."""
 
-    def __init__(self, username, host):
-
-        for prop in ("username", "host"):
+    def __init__(self, username, host, port=None):
+        for prop in ("username", "host", "port"):
             setattr(self, prop, locals()[prop])
 
     def __str__(self):
         return "{username}@{host}".format(**self.__dict__)
+
+
+class URI(_util.ValueBinder):
+    """A URI object."""
+
+    def __init__(self, scheme=defaults.scheme, aor=None):
+        for prop in dict(locals()):
+            if prop == "self":
+                continue
+            setattr(self, prop, locals()[prop])
+
+    def __str__(self):
+        return "{scheme}:{aor}".format(**self.__dict__)
+
+
+class DNameURI(_util.ValueBinder):
+    """A display name plus a uri value object"""
+
+    def __init__(self, dname=None, uri=None):
+        super(DNameURI, self).__init__()
+
+        if uri is None:
+            uri = URI()
+
+        for prop in dict(locals()):
+            if prop == "self":
+                continue
+            setattr(self, prop, locals()[prop])
+
+    def __str__(self):
+        if self.dname and self.uri:
+            return("\"{self.dname}\" <{self.uri}>".format(**locals()))
+
+        if self.uri:
+            return(str(self.uri))
+
+        return ""

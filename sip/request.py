@@ -3,7 +3,7 @@ import _util
 from header import Header
 
 
-class Request(object):
+class Request(_util.ValueBinder):
     """Enumeration class generator"""
 
     types = _util.Enum(
@@ -29,10 +29,11 @@ class Request(object):
     __metaclass__ = _util.attributesubclassgen
 
     def __str__(self):
-        return "{type} {aor} {protocol}".format(**self.__dict__)
+        return "{type} {uri} {protocol}".format(**self.__dict__)
 
-    def __init__(self, aor=None, protocol=defaults.sipprotocol):
-        for prop in ("aor", "protocol"):
+    def __init__(self, uri=None, protocol=defaults.sipprotocol):
+        super(Request, self).__init__()
+        for prop in ("uri", "protocol"):
             setattr(self, prop, locals()[prop])
         self.type = self.type
 

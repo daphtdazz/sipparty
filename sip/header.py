@@ -1,9 +1,10 @@
 import datetime
 import random
 import _util
+import prot
 
 
-class Header(object):
+class Header(_util.ValueBinder):
     """A SIP header."""
 
     types = _util.Enum(
@@ -23,15 +24,40 @@ class Header(object):
     # access, so Header.accept creates an accept header etc.
     __metaclass__ = _util.attributesubclassgen
 
-    def __init__(self, values=[]):
+    def __init__(self, values=None):
         """Initialize a header line.
         """
-        for prop in ("values",):
+        super(Header, self).__init__()
+
+        if values is None:
+            values = list()
+
+        for prop in dict(locals()):
+            if prop == "self":
+                continue
             setattr(self, prop, locals()[prop])
+
+        self.generatevalues()
 
     def __str__(self):
         self.generatevalues()
-        return "{0}: {1}".format(self.type, ",".join(self.values))
+        return "{0}: {1}".format(
+            self.type, ",".join([str(v) for v in self.values]))
+
+    @property
+    def value(self):
+        if len(self.values) == 0:
+            raise AttributeError(
+                "{self.__class__.__name__!r} has no attribute 'value'".format(
+                    **locals()))
+        return self.values[0]
+
+    @value.setter
+    def value(self, val):
+        if len(self.values) == 0:
+            self.values.append(val)
+        else:
+            self.values[0] = val
 
     def generatevalues(self):
         """Subclasses should implement this to generate values dynamically (if
@@ -41,6 +67,10 @@ class Header(object):
 
 class ToHeader(Header):
     """A To: header"""
+
+    def generatevalues(self):
+        if not hasattr(self, "value"):
+            self.value = prot.DNameURI()
 
 
 class Call_IdHeader(Header):
@@ -62,10 +92,12 @@ class Call_IdHeader(Header):
 
         return "{keyval:06x}-{keydate}".format(**locals())
 
-    def __init__(self, values=[]):
-        Header.__init__(self, values)
+    def __init__(self, values=None):
         self.host = None
         self.key = None
+        if values is None:
+            values = list()
+        Header.__init__(self, values)
 
     def generatevalues(self):
         if not self.values or not self.values[0]:
