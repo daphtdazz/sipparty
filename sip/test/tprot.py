@@ -18,23 +18,24 @@ class TestProtocol(unittest.TestCase):
         self.assertEqual(str(aliceAOR), "alice@atlanta.com")
         bobAOR = sip.prot.AOR("bob", "baltimore.com")
 
-        self.assertRaises(AttributeError, lambda: sip.prot.Request.notareq)
+        self.assertRaises(AttributeError, lambda: sip.Request.notareq)
 
-        inviteRequest = sip.prot.Request.invite(bobAOR)
+        inviteRequest = sip.Request.invite(bobAOR)
         self.assertEqual(
             str(inviteRequest), "INVITE bob@baltimore.com SIP/2.0")
 
         import pdb
         #pdb.set_trace()
-        self.assertRaises(AttributeError, lambda: sip.prot.Message.notareg)
+        self.assertRaises(AttributeError, lambda: sip.Message.notareg)
 
-        invite = sip.prot.Message.invite()
+        invite = sip.Message.invite()
         invite.startline.aor = bobAOR
         self.assertTrue(re.match(
             "INVITE bob@baltimore.com SIP/2.0\r\n"
             "From: \r\n"
             "To: \r\n"
             "Via: \r\n"
+            # 6 random hex digits followed by a date/timestamp
             "Call-ID: [\da-f]{6}-\d{14}\r\n"
             "CSeq: \r\n"
             "Max-Forwards: \r\n",
