@@ -40,6 +40,13 @@ class TestProtocol(unittest.TestCase):
             "CSeq: \r\n"
             "Max-Forwards: \r\n",
             str(invite)), str(invite))
+
+        self.assertEqual(str(invite.toheader),
+                         "To: ")
+        self.assertEqual(
+            str(invite.call_idheader), str(getattr(invite, "Call-IDHeader")))
+        self.assertRaises(AttributeError, lambda: invite.notaheader)
+
         return
 
         caller = sip.Party()
