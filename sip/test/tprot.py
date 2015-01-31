@@ -60,14 +60,14 @@ class TestProtocol(unittest.TestCase):
         self.assertTrue(isinstance(tohdr, sip.prot.ToHeader))
         self.assertEqual(str(tohdr), "To: dmp@greenparksoftware.com")
 
-        #invite = sip.prot.Request(reqLine
+        # invite = sip.prot.Request(reqLine
 
     def testBindings(self):
         VB = sip._util.ValueBinder
 
         a, b, c = [VB() for ii in range(3)]
 
-        a.bind("x", "y")
+        a.bind("x", "y", bothways=True)
         a.x = 1
         self.assertEqual(a.y, 1)
         a.y = 2
@@ -76,13 +76,13 @@ class TestProtocol(unittest.TestCase):
         a.y = 3
         self.assertEqual(a.x, 2)
 
-        a.bind("x", "b.y")
+        a.bind("x", "b.y", bothways=True)
         a.b = b
         a.x = 5
         self.assertEqual(a.b.y, 5)
         a.b.y = 6
         self.assertEqual(a.x, 6)
-        a.unbind("b.y")
+        a.unbind("x")
         a.b.y = 7
         self.assertEqual(a.x, 6)
         self.assertEqual(a.b.y, 7)

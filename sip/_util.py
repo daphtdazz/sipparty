@@ -111,61 +111,53 @@ class ValueBinder(object):
 
     KeyTargetPath = "targetpath"
     KeyTransformer = "transformer"
+    KeyDirections = "bothdirections"  # Only present on the root binding.
 
-    def bind(self, frompath, topath, transformer=None):
-        """E.g. vb.bind("a.b", "..c") would bind my attribute a's attribute b
-        to my parent's parent's attribute c."""
+    def bind(self, frompath, topath, transformer=None, bothways=False):
+        """Bind one attribute path to another, and optionally bind back the
+        other way too.
+        E.g.
+        self.bind("a.b", "c")
+        Means bind "a.b" to "c", such that if "a.b" changes, set "c" to be
+        "a.b". To implement this, add the binding "a.b" to "c" to our
+        dictionary and recurse down the "frompath", using:
+        self._onewaybind("a.b", "c")
 
-        self._ensurevbness()
-
-        # print("Bindings before bind: {self._bindings}".format(**locals()))
-
-        # Bind from to to.
+        If bothways is set, do the opposite too and mark in the binding that we
+        did:
+        self._onewaybind("c", "a.b")
+        """
         self._bindoneway(frompath, topath, None, transformer)
-
-        # If the first element of topath is not empty, then this means we are
-        # the bottom object in the binding path, so we need to bind up to the
-        # topath too.  This should generally be the case.  Any other situation
-        # and we wouldn't have enough information to bind the reverse direction
-        # because it would involving attempting to find a child that we don't
-        # know the name of.  E.g. we can bind 'a.b' to '.c' (i.e. our parent's
-        # 'c' attribute, but we can't bind the parent's 'c' to our 'a.b'
-        # because we don't know our name in the parent's attribute dictionary,
-        # so can't work out the full path for the parent: '<us??>.a.b'
-
-        toattr, _, toattrsattr = topath.partition(ValueBinder.PS)
-        if toattr:
-            self._bindoneway(topath, frompath, None, transformer)
+        if bothways:
+            fromattr, _, fromattrattrs = frompath.partition(ValueBinder.PS)
+            attrbindings = self._bindings[fromattr]
+            bindingdict = attrbindings[fromattrattrs]
+            bindingdict[ValueBinder.KeyDirections] = True
+            assert transformer is None
+            self._bindoneway(topath, frompath, None, None)
 
     def unbind(self, frompath):
         """Unbind an attribute path."""
-
-        # print("Bindings before unbind({frompath}): {self._bindings}".format(
-        #    **locals()))
 
         # May need to unbind in the other direction.
         fromattr, _, fromattrattrs = frompath.partition(ValueBinder.PS)
         if fromattr not in self._bindings:
             raise(NoSuchBinding(frompath))
 
-        bindings = self._bindings[fromattr]
-        if fromattrattrs not in bindings:
+        attrbindings = self._bindings[fromattr]
+        if fromattrattrs not in attrbindings:
             raise(NoSuchBinding(frompath))
 
-        bindingdict = bindings[fromattrattrs]
-
-        topath = bindingdict[ValueBinder.KeyTargetPath]
-        toattr, _, toattrattrs = frompath.partition(ValueBinder.PS)
-        if len(toattr) and hasattr(self, toattr):
-            # To attr not the parent and we have it, so unbind it.
+        bindingdict = attrbindings[fromattrattrs]
+        bothways = (ValueBinder.KeyDirections in bindingdict and
+                    bindingdict[ValueBinder.KeyDirections])
+        if bothways:
+            topath = bindingdict[ValueBinder.KeyTargetPath]
             self._unbindoneway(topath)
 
         self._unbindoneway(frompath)
 
-        # print("Bindings after unbind: {self._bindings}".format(**locals()))
-
     def __setattr__(self, attr, val):
-        # print("VB setattr({attr}: {val})".format(**locals()))
 
         # Protect against recursion. This might occur when one property of
         # ourself is bound to another.
@@ -184,8 +176,15 @@ class ValueBinder(object):
                             bindingdict[ValueBinder.KeyTargetPath])
                         if target is not None:
                             # TODO: implement transformers.
-                            setattr(target, targetattr, val)
+                            tf = bindingdict[ValueBinder.KeyTransformer]
+                            if tf:
+                                tval = tf(val)
+                            else:
+                                tval = val
+
+                            setattr(target, targetattr, tval)
                         continue
+
                     # Handle indirectly bound attributes.
                     else:
                         if hasattr(self, attr):
@@ -210,8 +209,14 @@ class ValueBinder(object):
 
     def _bindoneway(self, frompath, topath, parent, transformer):
         """Binds the attribute at frompath to the attribute at topath, so a
-        change to frompath causes a change to topath, but not vice-versa."""
-
+        change to frompath causes a change to topath, but not vice-versa.
+        E.g.
+        self._bindoneway("a.b", "c")
+        Adds an entry in the binding dictionary for "a.b" to "c", then if we
+        have an attribute "a", recurses, binding "a"'s "b" to its parent (us)'s
+        "c":
+        self.a._bindoneway("b", ".c")
+        """
         self._ensurevbness()
 
         attr, _, attrsattr = frompath.partition(ValueBinder.PS)
@@ -238,8 +243,8 @@ class ValueBinder(object):
             child._bindoneway(attrsattr, ValueBinder.PS + topath, self,
                               transformer)
 
-        # print("Bindings after onewaybind: {self._bindings}".format(
-        #     **locals()))
+        print("Bindings after onewaybind: {self._bindings}".format(
+            **locals()))
 
     def _ensurevbness(self):
         for reqdattr in (("_bindings", {}), ("_bindingparent", None),
@@ -250,10 +255,13 @@ class ValueBinder(object):
     def _unbindoneway(self, frompath):
 
         fromattr, _, fromattrattrs = frompath.partition(ValueBinder.PS)
-        assert fromattr in self._bindings
+        if fromattr not in self._bindings:
+            raise(NoSuchBinding(frompath))
 
         bindings = self._bindings[fromattr]
-        assert fromattrattrs in bindings
+        if fromattrattrs not in bindings:
+            raise(NoSuchBinding(frompath))
+
         bindingdict = bindings[fromattrattrs]
 
         if len(fromattrattrs) and hasattr(self, fromattr):
@@ -265,6 +273,9 @@ class ValueBinder(object):
 
         if not len(self._bindings):
             self._bindingparent = None
+
+        print("Bindings after onewayUNbind: {self._bindings}".format(
+            **locals()))
 
     def _resolveboundobjectandattr(self, path):
         nextobj = self
