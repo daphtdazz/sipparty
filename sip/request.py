@@ -15,6 +15,8 @@ class Request(vb.ValueBinder):
     # checking.
     __metaclass__ = _util.attributesubclassgen
 
+    type = _util.ClassType("Request")
+
     def __str__(self):
         return "{self.type} {self.uri} {self.protocol}".format(self=self)
 
@@ -22,9 +24,3 @@ class Request(vb.ValueBinder):
         super(Request, self).__init__()
         for prop in ("uri", "protocol"):
             setattr(self, prop, locals()[prop])
-
-    @property
-    def type(self):
-        class_name = self.__class__.__name__
-        type = class_name.replace("Request", "")
-        return type

@@ -44,21 +44,6 @@ class Header(vb.ValueBinder):
         return "{0}: {1}".format(
             self.type, ",".join([str(v) for v in self.values]))
 
-    @property
-    def value(self):
-        if len(self.values) == 0:
-            raise AttributeError(
-                "{self.__class__.__name__!r} has no attribute 'value'".format(
-                    **locals()))
-        return self.values[0]
-
-    @value.setter
-    def value(self, val):
-        if len(self.values) == 0:
-            self.values.append(val)
-        else:
-            self.values[0] = val
-
 
 class FieldDelegateHeader(Header):
     """The FieldDelegateHeader delegates the work to a field class. Useful

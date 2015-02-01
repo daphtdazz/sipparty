@@ -114,7 +114,7 @@ class Value(object):
 
         return instance.values[0]
 
-    def __set__(self, instance, owner, val):
+    def __set__(self, instance, val):
         if instance is None:
             raise AttributeError(
                 "{0!r} does not have attribute 'value'".format(owner.__name__))
