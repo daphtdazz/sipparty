@@ -120,3 +120,22 @@ class Value(object):
                 "{0!r} does not have attribute 'value'".format(owner.__name__))
 
         instance.values.insert(0, val)
+
+
+def CCPropsFor(props):
+
+    class CumulativeClassProperties(type):
+        def __init__(cls, name, bases, dict):
+            """Initializes the class dictionary, so that all the properties in
+            props are accumulated with all the inherited properties in the
+            base classes.
+            """
+            for cprop in props:
+                if cprop in dict:
+                    for base in bases:
+                        if hasattr(base, cprop):
+                            inh_cprops = getattr(base, cprop)
+                            dict[cprop].extend(inh_cprops)
+            super(CumulativeClassProperties, cls).__init__(name, bases, dict)
+
+    return CumulativeClassProperties

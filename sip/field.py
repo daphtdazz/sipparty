@@ -10,8 +10,11 @@ import pdb
 
 class Field(vb.ValueBinder):
 
+    __metaclass__ = _util.CCPropsFor("delegateattributes")
+
     # For headers that delegate properties, these are the properties to
-    # delegate. To be overridden in subclasses.
+    # delegate. Note that these are cumulative, so subclasses declaring their
+    # own delegateattributes get added to these.
     delegateattributes = ["parameters"]
 
     def __init__(self, value=None):
@@ -58,8 +61,7 @@ class ViaField(Field):
 
 class CSeqField(Field):
 
-    delegateattributes = (
-        Field.delegateattributes + ["number", "reqtype"])
+    delegateattributes = ["number", "reqtype"]
 
     @classmethod
     def GenerateNewNumber(cls):
@@ -79,3 +81,15 @@ class CSeqField(Field):
     @property
     def value(self):
         return "{self.number} {self.reqtype}".format(self=self)
+
+
+class Max_ForwardsField(Field):
+    delegateattributes = ["number"]
+
+    def __init__(self, number=defaults.max_forwards):
+        super(Max_ForwardsField, self).__init__()
+        self.number = number
+
+    @property
+    def value(self):
+        return "{self.number}".format(self=self)

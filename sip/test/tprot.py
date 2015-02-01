@@ -38,7 +38,7 @@ class TestProtocol(unittest.TestCase):
             "Via: SIP/2.0/UDP;{1}\r\n"
             "Call-ID: {0}\r\n"
             "CSeq: {2} INVITE\r\n"
-            "Max-Forwards: \r\n".format(
+            "Max-Forwards: 70\r\n".format(
                 TestProtocol.call_id_pattern, TestProtocol.branch_pattern,
                 TestProtocol.cseq_num_pattern),
             str(invite)), str(invite))
@@ -56,7 +56,7 @@ class TestProtocol(unittest.TestCase):
             # 6 random hex digits followed by a date/timestamp
             "Call-ID: {0}\r\n"
             "CSeq: {2} INVITE\r\n"
-            "Max-Forwards: \r\n".format(
+            "Max-Forwards: 70\r\n".format(
                 TestProtocol.call_id_pattern, TestProtocol.branch_pattern,
                 TestProtocol.cseq_num_pattern),
             str(invite)), str(invite))

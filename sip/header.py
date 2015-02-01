@@ -86,7 +86,7 @@ class FromHeader(FieldDelegateHeader):
 
 
 class ViaHeader(FieldDelegateHeader):
-    """The Via: Header, possibly THE most important header."""
+    """The Via: Header."""
     FieldDelegateClass = field.ViaField
 
 
@@ -132,3 +132,7 @@ class Call_IdHeader(Header):
 
 class CseqHeader(FieldDelegateHeader):
     FieldDelegateClass = field.CSeqField
+
+
+class Max_ForwardsHeader(FieldDelegateHeader):
+    FieldDelegateClass = field.Max_ForwardsField
