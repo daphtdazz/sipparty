@@ -1,13 +1,14 @@
 import pdb
 import re
 import _util
+import vb
 import prot
 import param
 from request import Request
 from header import Header
 
 
-class Message(_util.ValueBinder):
+class Message(vb.ValueBinder):
     """Generic message class. Use `Request` or `Response` rather than using
     this directly.
     """

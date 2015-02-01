@@ -1,9 +1,10 @@
 import defaults
 import _util
+import vb
 from header import Header
 
 
-class Request(_util.ValueBinder):
+class Request(vb.ValueBinder):
     """Enumeration class generator"""
 
     types = _util.Enum(

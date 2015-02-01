@@ -75,7 +75,7 @@ class TestProtocol(unittest.TestCase):
         # invite = sip.prot.Request(reqLine
 
     def testBindings(self):
-        VB = sip._util.ValueBinder
+        VB = sip.vb.ValueBinder
 
         a, b, c, d, D = [VB() for ii in range(5)]
 
@@ -115,8 +115,8 @@ class TestProtocol(unittest.TestCase):
         b.x = 7
         self.assertEqual(a.b.x, 7)
         self.assertEqual(c.x, 7)
-        self.assertRaises(sip._util.NoSuchBinding, lambda: a.unbind("b"))
-        self.assertRaises(sip._util.BindingAlreadyExists,
+        self.assertRaises(sip.vb.NoSuchBinding, lambda: a.unbind("b"))
+        self.assertRaises(sip.vb.BindingAlreadyExists,
                           lambda: a.bind("b.x", "b.c.d.x"))
         a.unbind("b.x")
 

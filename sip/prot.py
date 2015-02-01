@@ -3,6 +3,7 @@ import collections
 import random
 import datetime
 import _util
+import vb
 import defaults
 import pdb
 
@@ -29,7 +30,7 @@ class ProtocolValueError(ProtocolError):
     pass
 
 
-class Host(_util.ValueBinder):
+class Host(vb.ValueBinder):
 
     def __init__(self, host=None, port=None):
         for prop in dict(locals()):
@@ -54,7 +55,7 @@ class Host(_util.ValueBinder):
         return ""
 
 
-class AOR(_util.ValueBinder):
+class AOR(vb.ValueBinder):
     """A AOR object."""
 
     def __init__(self, username=None, host=None, port=None):
@@ -74,7 +75,7 @@ class AOR(_util.ValueBinder):
         return ""
 
 
-class URI(_util.ValueBinder):
+class URI(vb.ValueBinder):
     """A URI object."""
 
     def __init__(self, scheme=defaults.scheme, aor=None):
@@ -91,7 +92,7 @@ class URI(_util.ValueBinder):
         return "{scheme}:{aor}".format(**self.__dict__)
 
 
-class DNameURI(_util.ValueBinder):
+class DNameURI(vb.ValueBinder):
     """A display name plus a uri value object"""
 
     delegateattributes = ["dname", "uri"]

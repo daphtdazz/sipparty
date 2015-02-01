@@ -3,10 +3,12 @@ import sys
 import pdb
 import sip._util
 
+
 class AA(object):
     def __getattribute__(self, attr):
         print("AA getattribute")
         return getattr(super(AA, self), attr)
+
 
 class A(AA):
     objs = []
@@ -30,7 +32,7 @@ class A(AA):
         return getattr(super(A, self), attr)
 
 
-class B(sip._util.ValueBinder, object):
+class B(sip.vb.ValueBinder, object):
 
     def __init__(self):
         super(B, self).__init__()

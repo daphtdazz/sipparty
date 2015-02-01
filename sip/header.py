@@ -1,12 +1,13 @@
 import datetime
 import random
 import _util
+import vb
 import prot
 import field
 import pdb
 
 
-class Header(_util.ValueBinder):
+class Header(vb.ValueBinder):
     """A SIP header."""
 
     types = _util.Enum(
