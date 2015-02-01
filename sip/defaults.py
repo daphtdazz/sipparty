@@ -2,8 +2,9 @@
 """
 
 
-__all__ = ("port", "sipprotocol")
+__all__ = ("port", "sipprotocol", "scheme")
 
 port = 5060
 sipprotocol = "SIP/2.0"
+transport = "UDP"
 scheme = "sip"

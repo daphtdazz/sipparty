@@ -1,6 +1,8 @@
+import pdb
 import re
 import _util
 import prot
+import param
 from request import Request
 from header import Header
 
@@ -55,7 +57,6 @@ class Message(_util.ValueBinder):
 
         if autoheader:
             self.autofillheaders()
-
         self._establishbindings()
 
     def __str__(self):
@@ -97,7 +98,11 @@ class Message(_util.ValueBinder):
     def _establishbindings(self):
 
         for binding in self.bindings:
-            self.bind(binding[0], binding[1])
+            if len(binding) > 2:
+                transformer = binding[2]
+            else:
+                transformer = None
+            self.bind(binding[0], binding[1], transformer)
 
     def autofillheaders(self):
         for hdr in self.startline.mandatoryheaders:
@@ -108,4 +113,8 @@ class Message(_util.ValueBinder):
 class InviteMessage(Message):
     """An INVITE."""
 
-    bindings = [("startline.uri", "toheader.value.uri")]
+    bindings = [
+        ("startline.uri", "toheader.value.uri"),
+        ("startline.protocol", "viaheader.protocol"),
+        ("startline", "viaheader.branch", param.RequestToBranchTransformer),
+        ("fromheader.uri.aor.host", "viaheader.host")]

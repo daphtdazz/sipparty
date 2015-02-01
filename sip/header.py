@@ -2,6 +2,8 @@ import datetime
 import random
 import _util
 import prot
+import field
+import pdb
 
 
 class Header(_util.ValueBinder):
@@ -32,17 +34,17 @@ class Header(_util.ValueBinder):
         if values is None:
             values = list()
 
-        for prop in dict(locals()):
-            if prop == "self":
-                continue
-            setattr(self, prop, locals()[prop])
-
-        self.generatevalues()
+        self.__dict__["values"] = values
 
     def __str__(self):
-        self.generatevalues()
         return "{0}: {1}".format(
             self.type, ",".join([str(v) for v in self.values]))
+
+    @property
+    def type(self):
+        class_name = self.__class__.__name__
+        type = class_name.replace("Header", "")
+        return type
 
     @property
     def value(self):
@@ -59,26 +61,50 @@ class Header(_util.ValueBinder):
         else:
             self.values[0] = val
 
-    def generatevalues(self):
-        """Subclasses should implement this to generate values dynamically (if
-        possible)"""
-        pass
+
+class FieldDelegateHeader(Header):
+    """The FieldDelegateHeader delegates the work to a field class. Useful
+    where the correct values are complex."""
+
+    def __init__(self, *args, **kwargs):
+        super(FieldDelegateHeader, self).__init__(*args, **kwargs)
+        if not hasattr(self, "value"):
+            self.value = self.FieldDelegateClass()
+
+    def __setattr__(self, attr, val):
+        if hasattr(self, "value"):
+            myval = self.value
+            if myval:
+                dattrs = myval.delegateattributes
+                if attr in dattrs:
+                    setattr(myval, attr, val)
+                    return
+
+        super(FieldDelegateHeader, self).__setattr__(attr, val)
+        return
+
+    def __getattr__(self, attr):
+        if attr != "value" and hasattr(self, "value"):
+            myval = self.value
+            dattrs = myval.delegateattributes
+            if attr in dattrs:
+                return getattr(myval, attr)
+        return super(FieldDelegateHeader, self).__getattr__(attr)
 
 
-class ToHeader(Header):
+class ToHeader(FieldDelegateHeader):
     """A To: header"""
-
-    def generatevalues(self):
-        if not hasattr(self, "value"):
-            self.value = prot.DNameURI()
+    FieldDelegateClass = prot.DNameURI
 
 
-class FromHeader(Header):
+class FromHeader(FieldDelegateHeader):
     """A From: header"""
+    FieldDelegateClass = prot.DNameURI
 
-    def generatevalues(self):
-        if not hasattr(self, "value"):
-            self.value = prot.DNameURI()
+
+class ViaHeader(FieldDelegateHeader):
+    """The Via: Header, possibly THE most important header."""
+    FieldDelegateClass = field.ViaField
 
 
 class Call_IdHeader(Header):
@@ -100,23 +126,22 @@ class Call_IdHeader(Header):
 
         return "{keyval:06x}-{keydate}".format(**locals())
 
-    def __init__(self, values=None):
+    def __init__(self, *args, **kwargs):
+        Header.__init__(self, *args, **kwargs)
         self.host = None
         self.key = None
-        if values is None:
-            values = list()
-        Header.__init__(self, values)
 
-    def generatevalues(self):
-        if not self.values or not self.values[0]:
-            if self.key:
-                key = self.key
-            else:
-                key = self.__class__.GenerateKey()
+    @property
+    def value(self):
+        if self.key is None:
+            self.key = Call_IdHeader.GenerateKey()
 
-            if self.host:
-                genval = "{key}@{self.host}".format(**locals())
-            else:
-                genval = "{key}".format(**locals())
+        if self.host:
+            val = "{self.key}@{self.host}".format(self=self)
+        else:
+            val = "{self.key}".format(self=self)
+        return val
 
-            self.values = [genval]
+    @property
+    def values(self):
+        return [self.value]

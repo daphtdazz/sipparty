@@ -12,6 +12,8 @@ import sip
 
 class TestProtocol(unittest.TestCase):
 
+    call_id_pattern = "[\da-f]{6}-\d{14}"
+
     def testGeneral(self):
 
         aliceAOR = sip.prot.AOR("alice", "atlanta.com")
@@ -27,20 +29,27 @@ class TestProtocol(unittest.TestCase):
         self.assertRaises(AttributeError, lambda: sip.Message.notareg)
 
         invite = sip.Message.invite()
+        self.assertTrue(re.match(
+            "INVITE None SIP/2.0\r\n"
+            "From: sip:\r\n"
+            "To: \r\n"
+            "Via: SIP/2.0/UDP\r\n"
+            "Call-ID: {0}\r\n"
+            "CSeq: \r\n"
+            "Max-Forwards: \r\n".format(TestProtocol.call_id_pattern),
+            str(invite)), repr(str(invite)))
         invite.startline.uri = sip.prot.URI(aor=bobAOR)
-        invite.startline = invite.startline
-        invite.fromheader.value.uri.aor.username = "alice"
-        pdb.set_trace()
-        invite.fromheader.value.uri.aor.host = "atlanta.com"
+        invite.fromheader.uri.aor.username = "alice"
+        invite.fromheader.uri.aor.host = "atlanta.com"
         self.assertTrue(re.match(
             "INVITE sip:bob@baltimore.com SIP/2.0\r\n"
             "From: sip:alice@atlanta.com\r\n"
             "To: sip:bob@baltimore.com\r\n"
             "Via: SIP/2.0/UDP atlanta.com\r\n"
             # 6 random hex digits followed by a date/timestamp
-            "Call-ID: [\da-f]{6}-\d{14}\r\n"
+            "Call-ID: {0}\r\n"
             "CSeq: \r\n"
-            "Max-Forwards: \r\n",
+            "Max-Forwards: \r\n".format(TestProtocol.call_id_pattern),
             str(invite)), str(invite))
 
         self.assertEqual(str(invite.toheader), "To: sip:bob@baltimore.com")

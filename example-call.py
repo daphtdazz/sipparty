@@ -3,13 +3,31 @@ import sys
 import pdb
 import sip._util
 
+class AA(object):
+    def __getattribute__(self, attr):
+        print("AA getattribute")
+        return getattr(super(AA, self), attr)
 
-class A(sip._util.ValueBinder, object):
+class A(AA):
     objs = []
 
     def __init__(self):
         super(A, self).__init__()
         self.a = 1
+
+    def __contains__(self, attr):
+        print("A contains: " + attr)
+        if attr == "special":
+            return True
+
+        return False
+
+    def __getattr__(self, attr):
+        print("A.__getattr__: {attr}".format(**locals()))
+        if attr == "special":
+            return "special"
+
+        return getattr(super(A, self), attr)
 
 
 class B(sip._util.ValueBinder, object):
@@ -18,18 +36,17 @@ class B(sip._util.ValueBinder, object):
         super(B, self).__init__()
         self.b = None
 
-
+print "get an A"
 a = A()
-b = B()
 
-a.bind("a", "b")
+if hasattr(a, "special"):
+    print "has special!"
 
-a.a = 1
-print a.b
-a.a = 2
-print a.b
-a.b = 3
-print a.a
+if getattr(a, "notspecial"):
+    print "has not special!"
+else:
+    print "has not notspecial"
+
 
 sys.exit(0)
 
