@@ -28,12 +28,15 @@ class TestProtocol(unittest.TestCase):
 
         invite = sip.Message.invite()
         invite.startline.uri = sip.prot.URI(aor=bobAOR)
-        invite.fromheader.value.uri = sip.prot.URI(aor=aliceAOR)
+        invite.startline = invite.startline
+        invite.fromheader.value.uri.aor.username = "alice"
+        pdb.set_trace()
+        invite.fromheader.value.uri.aor.host = "atlanta.com"
         self.assertTrue(re.match(
             "INVITE sip:bob@baltimore.com SIP/2.0\r\n"
             "From: sip:alice@atlanta.com\r\n"
             "To: sip:bob@baltimore.com\r\n"
-            "Via: \r\n"
+            "Via: SIP/2.0/UDP atlanta.com\r\n"
             # 6 random hex digits followed by a date/timestamp
             "Call-ID: [\da-f]{6}-\d{14}\r\n"
             "CSeq: \r\n"
@@ -65,29 +68,38 @@ class TestProtocol(unittest.TestCase):
     def testBindings(self):
         VB = sip._util.ValueBinder
 
-        a, b, c = [VB() for ii in range(3)]
+        a, b, c, d, D = [VB() for ii in range(5)]
 
-        a.bind("x", "y", bothways=True)
+        a.bind("x", "y")
         a.x = 1
         self.assertEqual(a.y, 1)
         a.y = 2
+        self.assertEqual(a.x, 1)
+        a.bind("y", "x")
         self.assertEqual(a.x, 2)
         a.unbind("x")
+        a.x = 4
+        self.assertEqual(a.y, 2)
         a.y = 3
-        self.assertEqual(a.x, 2)
+        self.assertEqual(a.x, 3)
+        a.unbind("y")
 
-        a.bind("x", "b.y", bothways=True)
+        a.bind("x", "b.y")
         a.b = b
         a.x = 5
         self.assertEqual(a.b.y, 5)
         a.b.y = 6
-        self.assertEqual(a.x, 6)
+        self.assertEqual(a.x, 5)
         a.unbind("x")
-        a.b.y = 7
-        self.assertEqual(a.x, 6)
-        self.assertEqual(a.b.y, 7)
-        self.assertEqual(len(a._bindings), 0)
-        self.assertEqual(len(a.b._bindings), 0)
+        a.x = 7
+        self.assertEqual(a.x, 7)
+        self.assertEqual(a.b.y, 6)
+
+        # Do some naughty internal checks.
+        self.assertEqual(len(a._vb_forwardbindings), 0)
+        self.assertEqual(len(a._vb_backwardbindings), 0)
+        self.assertEqual(len(a.b._vb_forwardbindings), 0)
+        self.assertEqual(len(a.b._vb_backwardbindings), 0)
 
         a.b.c = c
         a.bind("b.x", "b.c.x")
@@ -97,7 +109,17 @@ class TestProtocol(unittest.TestCase):
         self.assertRaises(sip._util.NoSuchBinding, lambda: a.unbind("b"))
         self.assertRaises(sip._util.BindingAlreadyExists,
                           lambda: a.bind("b.x", "b.c.d.x"))
+        a.unbind("b.x")
 
+        del b.x
+        a.b.c.x = 7
+        a.bind("b.c.x", "d.x")
+        a.d = d
+        self.assertEqual(a.d.x, 7)
+        # Bind the other way to check we don't do a silly loop.
+        a.bind("d.x", "b.c.x")
+        a.d = D
+        self.assertEqual(a.d.x, 7)
 
 if __name__ == "__main__":
     sys.exit(unittest.main())
