@@ -19,12 +19,6 @@ class ValueBinder(object):
     KeyTargetPath = "targetpath"
     KeyTransformer = "transformer"
 
-    def _vb_bindingsForDirection(self, direction):
-        return getattr(self, "_vb_%sbindings" % direction)
-
-    def _vb_bindingActionForDirection(self, direction):
-        return getattr(self, "_vb_bind%s" % direction)
-
     def __init__(self, *args, **kwargs):
 
         for reqdattr in (
@@ -36,6 +30,82 @@ class ValueBinder(object):
             self.__dict__[reqdattr[0]] = reqdattr[1]
 
         super(ValueBinder, self).__init__(*args, **kwargs)
+
+    def bind(self, frompath, topath, transformer=None):
+        """When any item on frompath or topath changes, set topath to frompath.
+        E.g.
+        self.a = a
+        a = a
+        a.b = b
+        a.b.c = 6
+        self.bind("a.b.c", "d.e")
+        self.d = d
+        >> self.d.e = 6
+        del a.b
+        g.c = 5
+        a.b = g
+        >> a.d.e = 5
+        """
+        self._vb_bindforward(frompath, topath, self, transformer)
+        self._vb_bindbackward(topath, frompath, self, None)
+
+    def unbind(self, frompath):
+        """Unbind a binding, back and forward."""
+        _, _, _, _, bdict = self._vb_bindingdicts(frompath, "forward")
+        topath = bdict[self.KeyTargetPath]
+        self._vb_unbinddirection(frompath, "forward")
+        self._vb_unbinddirection(topath, "backward")
+
+    def __setattr__(self, attr, val):
+
+        if hasattr(self, attr):
+            existing_val = getattr(self, attr)
+        else:
+            existing_val = None
+
+        for direction in ("forward", "backward"):
+            try:
+                _, _, _, bdicts, _ = self._vb_bindingdicts(attr, direction,
+                                                           all=True)
+            except NoSuchBinding:
+                # This attribute is not bound in this direction.
+                continue
+
+            for fromattrattrs, bdict in bdicts.iteritems():
+                if len(fromattrattrs) == 0:
+                    # This is a direct binding.
+                    #
+                    # If this is backwards then there's nothing to do, because
+                    # we are being overridden.
+                    #
+                    # If forward, then push the change to the target.
+                    if direction == "forward":
+                        # Push the change, only if it is a change to avoid
+                        # recursion.
+                        if val is not existing_val:
+                            self._vb_push_value_to_target(
+                                val, bdict[ValueBinder.KeyTargetPath])
+                    continue
+
+                # This is an indirect binding, so need to update the first
+                # item's binding.
+                if existing_val is not None:
+                    existing_val._vb_unbinddirection(fromattrattrs, direction)
+
+                val._vb_binddirection(
+                    fromattrattrs,
+                    ValueBinder.PS + bdict[ValueBinder.KeyTargetPath],
+                    self,
+                    bdict[ValueBinder.KeyTransformer],
+                    direction)
+
+        super(ValueBinder, self).__setattr__(attr, val)
+
+    def _vb_bindingsForDirection(self, direction):
+        return getattr(self, "_vb_%sbindings" % direction)
+
+    def _vb_bindingActionForDirection(self, direction):
+        return getattr(self, "_vb_bind%s" % direction)
 
     def _vb_bindingdicts(self, path, direction, create=False, all=False):
         bindings = self._vb_bindingsForDirection(direction)
@@ -63,33 +133,15 @@ class ValueBinder(object):
         return bindings, attr, attrattrs, attrdict, attrdict[attrattrs]
 
     def _vb_push_value_to_target(self, value, topath):
-        target, toattr = self._resolveboundobjectandattr(topath)
+        target, toattr = self._vb_resolveboundobjectandattr(topath)
         if target is not None:
             setattr(target, toattr, value)
 
     def _vb_pull_value_to_self(self, myattr, topath):
-        target, toattr = self._resolveboundobjectandattr(topath)
+        target, toattr = self._vb_resolveboundobjectandattr(topath)
         if target is not None and hasattr(target, toattr):
             val = getattr(target, toattr)
             setattr(self, myattr, val)
-
-    def bind(self, frompath, topath, transformer=None):
-        """When any item on frompath or topath changes, set topath to frompath.
-        E.g.
-        self.a = a
-        a = a
-        a.b = b
-        a.b.c = 6
-        self.bind("a.b.c", "d.e")
-        self.d = d
-        >> self.d.e = 6
-        del a.b
-        g.c = 5
-        a.b = g
-        >> a.d.e = 5
-        """
-        self._vb_bindforward(frompath, topath, self, transformer)
-        self._vb_bindbackward(topath, frompath, self, None)
 
     def _vb_binddirection(self, frompath, topath, parent, transformer,
                           direction):
@@ -158,13 +210,6 @@ class ValueBinder(object):
             # Direct binding. See if we can pull the value.
             self._vb_pull_value_to_self(fromattr, topath)
 
-    def unbind(self, frompath):
-        """Unbind a binding, back and forward."""
-        _, _, _, _, bdict = self._vb_bindingdicts(frompath, "forward")
-        topath = bdict[self.KeyTargetPath]
-        self._vb_unbinddirection(frompath, "forward")
-        self._vb_unbinddirection(topath, "backward")
-
     def _vb_unbinddirection(self, frompath, direction):
         bindings, fromattr, fromattrattrs, attrbindings, _ = (
             self._vb_bindingdicts(frompath, direction, create=False))
@@ -177,52 +222,7 @@ class ValueBinder(object):
         if len(attrbindings) == 0:
             del bindings[fromattr]
 
-    def __setattr__(self, attr, val):
-
-        if hasattr(self, attr):
-            existing_val = getattr(self, attr)
-        else:
-            existing_val = None
-
-        for direction in ("forward", "backward"):
-            try:
-                _, _, _, bdicts, _ = self._vb_bindingdicts(attr, direction,
-                                                           all=True)
-            except NoSuchBinding:
-                # This attribute is not bound in this direction.
-                continue
-
-            for fromattrattrs, bdict in bdicts.iteritems():
-                if len(fromattrattrs) == 0:
-                    # This is a direct binding.
-                    #
-                    # If this is backwards then there's nothing to do, because
-                    # we are being overridden.
-                    #
-                    # If forward, then push the change to the target.
-                    if direction == "forward":
-                        # Push the change, only if it is a change to avoid
-                        # recursion.
-                        if val is not existing_val:
-                            self._vb_push_value_to_target(
-                                val, bdict[ValueBinder.KeyTargetPath])
-                    continue
-
-                # This is an indirect binding, so need to update the first
-                # item's binding.
-                if existing_val is not None:
-                    existing_val._vb_unbinddirection(fromattrattrs, direction)
-
-                val._vb_binddirection(
-                    fromattrattrs,
-                    ValueBinder.PS + bdict[ValueBinder.KeyTargetPath],
-                    self,
-                    bdict[ValueBinder.KeyTransformer],
-                    direction)
-
-        super(ValueBinder, self).__setattr__(attr, val)
-
-    def _resolveboundobjectandattr(self, path):
+    def _vb_resolveboundobjectandattr(self, path):
         nextobj = self
         splitpath = path.split(ValueBinder.PS)
         for nextattr in splitpath[0:-1]:
