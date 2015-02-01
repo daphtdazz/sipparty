@@ -1,6 +1,7 @@
 """Utility functions for py-sip.
 """
 import pdb
+import vb
 
 
 class attributetomethodgenerator(type):
@@ -89,3 +90,33 @@ class Enum(set):
         if nn in self:
             return nn
         raise AttributeError(nn)
+
+
+class ClassType(object):
+
+    def __init__(self, class_append):
+        self.class_append = class_append
+
+    def __get__(self, instance, owner):
+        if instance is None:
+            return ""
+
+        class_name = instance.__class__.__name__
+        return getattr(instance.types, class_name.replace(
+            self.class_append, ""))
+
+
+class Value(object):
+    def __get__(self, instance, owner):
+        if instance is None:
+            raise AttributeError(
+                "{0!r} does not have attribute 'value'".format(owner.__name__))
+
+        return instance.values[0]
+
+    def __set__(self, instance, owner, val):
+        if instance is None:
+            raise AttributeError(
+                "{0!r} does not have attribute 'value'".format(owner.__name__))
+
+        instance.values.insert(0, val)

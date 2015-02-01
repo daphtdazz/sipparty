@@ -50,7 +50,7 @@ class ValueBinder(object):
         self._vb_bindbackward(topath, frompath, self, None)
 
     def unbind(self, frompath):
-        """Unbind a binding, back and forward."""
+        """Unbind a binding."""
         _, _, _, _, bdict = self._vb_bindingdicts(frompath, "forward")
         topath = bdict[self.KeyTargetPath]
         self._vb_unbinddirection(frompath, "forward")

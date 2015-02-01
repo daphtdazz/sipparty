@@ -11,29 +11,30 @@ class Field(vb.ValueBinder):
 
     # For headers that delegate properties, these are the properties to
     # delegate. To be overridden in subclasses.
-    delegateattributes = []
+    delegateattributes = ["parameters"]
 
     def __init__(self, value=None, parms=None):
         super(Field, self).__init__()
-        self.params = {}
+        self.parameters = param.Parameters()
         if value is not None:
             self.value = value
 
-    def __setattr__(self, attr, val):
-        if attr in param.Param.types:
-            self.params[attr] = val
-        super(Field, self).__setattr__(attr, val)
-
     def __str__(self):
         rs = "{self.value}".format(**locals())
-        rslist = [rs] + [str(val) for val in self.params.itervalues()]
+        rslist = [rs] + [str(val) for val in self.parameters.itervalues()]
         rs = ";".join(rslist)
         return rs
+
+    def __setattr__(self, attr, val):
+        if attr in param.Param.types:
+            return setattr(self.parameters, attr, val)
+        super(Field, self).__setattr__(attr, val)
 
 
 class ViaField(Field):
 
-    delegateattributes = ["protocol", "transport", "host"]
+    delegateattributes = (
+        Field.delegateattributes + ["protocol", "transport", "host"])
 
     def __init__(self, host=None, protocol=defaults.sipprotocol,
                  transport=defaults.transport, parms=[]):

@@ -27,6 +27,9 @@ class Header(vb.ValueBinder):
     # access, so Header.accept creates an accept header etc.
     __metaclass__ = _util.attributesubclassgen
 
+    type = _util.ClassType("Header")
+    value = _util.Value()
+
     def __init__(self, values=None):
         """Initialize a header line.
         """
@@ -40,12 +43,6 @@ class Header(vb.ValueBinder):
     def __str__(self):
         return "{0}: {1}".format(
             self.type, ",".join([str(v) for v in self.values]))
-
-    @property
-    def type(self):
-        class_name = self.__class__.__name__
-        type = class_name.replace("Header", "")
-        return type
 
     @property
     def value(self):

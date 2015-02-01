@@ -4,6 +4,7 @@ import _util
 import vb
 import prot
 import param
+from param import Param
 from request import Request
 from header import Header
 
@@ -14,6 +15,23 @@ class Message(vb.ValueBinder):
     """
 
     types = Request.types
+
+    mandatoryheaders = (
+        Header.types.From,  Header.types.To, Header.types.Via,
+        Header.types.call_id, Header.types.cseq, Header.types.max_forwards)
+    shouldheaders = ()  # Should be sent but parties must cope without.
+    conditionalheaders = ()
+    optionalheaders = (
+        Header.types.authorization, Header.types.content_disposition,
+        Header.types.content_encoding, Header.types.content_language,
+        Header.types.content_type)
+    streamheaders = (  # Required to be sent with stream-based protocols.
+        Header.types.content_length,)
+    bodyheaders = None  # Required with non-empty bodies.
+    naheaders = None  # By default the complement of the union of the others.
+
+    mandatoryparameters = {}
+
     __metaclass__ = _util.attributesubclassgen
 
     bindings = []
@@ -106,9 +124,16 @@ class Message(vb.ValueBinder):
             self.bind(binding[0], binding[1], transformer)
 
     def autofillheaders(self):
-        for hdr in self.startline.mandatoryheaders:
+        for hdr in self.mandatoryheaders:
             if hdr not in [_hdr.type for _hdr in self.headers]:
                 self.headers.append(getattr(Header, hdr)())
+
+        for mheader_name, mparams in self.mandatoryparameters.iteritems():
+            mheader = getattr(self, mheader_name + "Header")
+            for param_name in mparams:
+                setattr(
+                    mheader.value.parameters, param_name,
+                    getattr(Param, param_name)())
 
 
 class InviteMessage(Message):
@@ -116,6 +141,10 @@ class InviteMessage(Message):
 
     bindings = [
         ("startline.uri", "toheader.value.uri"),
-        ("startline.protocol", "viaheader.protocol"),
-        ("startline", "viaheader.branch", param.RequestToBranchTransformer),
-        ("fromheader.uri.aor.host", "viaheader.host")]
+        ("startline.protocol", "viaheader.value.protocol"),
+        ("startline", "viaheader.value.parameters.branch.startline"),
+        ("fromheader.value.uri.aor.host", "viaheader.value.host")]
+
+    mandatoryparameters = {
+        Header.types.Via: [Param.types.branch]
+    }
