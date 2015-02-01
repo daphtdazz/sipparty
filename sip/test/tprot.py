@@ -14,6 +14,7 @@ class TestProtocol(unittest.TestCase):
 
     call_id_pattern = "[\da-f]{6}-\d{14}"
     branch_pattern = "branch=z9hG4bK[\da-f]{1,}"
+    cseq_num_pattern = "\d{1,10}"
 
     def testGeneral(self):
 
@@ -36,9 +37,10 @@ class TestProtocol(unittest.TestCase):
             "To: \r\n"
             "Via: SIP/2.0/UDP;{1}\r\n"
             "Call-ID: {0}\r\n"
-            "CSeq: \r\n"
+            "CSeq: {2} INVITE\r\n"
             "Max-Forwards: \r\n".format(
-                TestProtocol.call_id_pattern, TestProtocol.branch_pattern),
+                TestProtocol.call_id_pattern, TestProtocol.branch_pattern,
+                TestProtocol.cseq_num_pattern),
             str(invite)), str(invite))
         old_branch = str(invite.viaheader.parameters.branch)
         invite.startline.uri = sip.prot.URI(aor=bobAOR)
@@ -53,9 +55,10 @@ class TestProtocol(unittest.TestCase):
             "Via: SIP/2.0/UDP atlanta.com;{1}\r\n"
             # 6 random hex digits followed by a date/timestamp
             "Call-ID: {0}\r\n"
-            "CSeq: \r\n"
+            "CSeq: {2} INVITE\r\n"
             "Max-Forwards: \r\n".format(
-                TestProtocol.call_id_pattern, TestProtocol.branch_pattern),
+                TestProtocol.call_id_pattern, TestProtocol.branch_pattern,
+                TestProtocol.cseq_num_pattern),
             str(invite)), str(invite))
 
         self.assertEqual(str(invite.toheader), "To: sip:bob@baltimore.com")

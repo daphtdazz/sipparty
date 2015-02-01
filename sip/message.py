@@ -143,7 +143,8 @@ class InviteMessage(Message):
         ("startline.uri", "toheader.value.uri"),
         ("startline.protocol", "viaheader.value.protocol"),
         ("startline", "viaheader.value.parameters.branch.startline"),
-        ("fromheader.value.uri.aor.host", "viaheader.value.host")]
+        ("fromheader.value.uri.aor.host", "viaheader.value.host"),
+        ("startline.type", "cseqheader.value.reqtype")]
 
     mandatoryparameters = {
         Header.types.Via: [Param.types.branch]

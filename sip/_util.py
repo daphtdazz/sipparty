@@ -108,7 +108,7 @@ class ClassType(object):
 
 class Value(object):
     def __get__(self, instance, owner):
-        if instance is None:
+        if instance is None or len(instance.values) == 0:
             raise AttributeError(
                 "{0!r} does not have attribute 'value'".format(owner.__name__))
 

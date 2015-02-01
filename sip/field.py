@@ -1,5 +1,6 @@
 """Complex fields in SIP messages.
 """
+import random
 import _util
 import vb
 import defaults
@@ -13,7 +14,7 @@ class Field(vb.ValueBinder):
     # delegate. To be overridden in subclasses.
     delegateattributes = ["parameters"]
 
-    def __init__(self, value=None, parms=None):
+    def __init__(self, value=None):
         super(Field, self).__init__()
         self.parameters = param.Parameters()
         if value is not None:
@@ -37,8 +38,8 @@ class ViaField(Field):
         Field.delegateattributes + ["protocol", "transport", "host"])
 
     def __init__(self, host=None, protocol=defaults.sipprotocol,
-                 transport=defaults.transport, parms=[]):
-        super(ViaField, self).__init__(parms=parms)
+                 transport=defaults.transport):
+        super(ViaField, self).__init__()
         self.protocol = protocol
         self.transport = transport
         self.host = None
@@ -53,3 +54,28 @@ class ViaField(Field):
             rv = "{prottrans} {self.host}".format(**locals())
 
         return rv
+
+
+class CSeqField(Field):
+
+    delegateattributes = (
+        Field.delegateattributes + ["number", "reqtype"])
+
+    @classmethod
+    def GenerateNewNumber(cls):
+        return random.randint(0, 2**31 - 1)
+
+    def __init__(self, number=None, reqtype=None):
+        super(CSeqField, self).__init__()
+        self._number = number
+        self.reqtype = reqtype
+
+    @property
+    def number(self):
+        if self._number is None:
+            self._number = CSeqField.GenerateNewNumber()
+        return self._number
+
+    @property
+    def value(self):
+        return "{self.number} {self.reqtype}".format(self=self)

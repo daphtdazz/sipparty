@@ -128,3 +128,7 @@ class Call_IdHeader(Header):
     @property
     def values(self):
         return [self.value]
+
+
+class CseqHeader(FieldDelegateHeader):
+    FieldDelegateClass = field.CSeqField
