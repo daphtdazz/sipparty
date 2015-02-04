@@ -1,4 +1,5 @@
 import defaults
+import components
 import _util
 import vb
 from header import Header
@@ -22,5 +23,8 @@ class Request(vb.ValueBinder):
 
     def __init__(self, uri=None, protocol=defaults.sipprotocol):
         super(Request, self).__init__()
+        if uri is None:
+            uri = components.URI()
+
         for prop in ("uri", "protocol"):
             setattr(self, prop, locals()[prop])

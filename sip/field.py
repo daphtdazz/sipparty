@@ -3,6 +3,7 @@
 import random
 import _util
 import vb
+import components
 import defaults
 import param
 import pdb
@@ -10,7 +11,7 @@ import pdb
 
 class Field(vb.ValueBinder):
 
-    __metaclass__ = _util.CCPropsFor("delegateattributes")
+    __metaclass__ = _util.CCPropsFor(("delegateattributes",))
 
     # For headers that delegate properties, these are the properties to
     # delegate. Note that these are cumulative, so subclasses declaring their
@@ -32,13 +33,25 @@ class Field(vb.ValueBinder):
     def __setattr__(self, attr, val):
         if attr in param.Param.types:
             return setattr(self.parameters, attr, val)
+        if attr != "value" and hasattr(self, "value"):
+            delval = self.value
+            if (hasattr(delval, "delegateattributes") and
+                    attr in delval.delegateattributes):
+                return setattr(delval, attr, val)
+
         super(Field, self).__setattr__(attr, val)
+
+
+class PartyIDField(Field):
+    delegateattributes = components.DNameURI.delegateattributes
+
+    def __init__(self):
+        super(PartyIDField, self).__init__(components.DNameURI())
 
 
 class ViaField(Field):
 
-    delegateattributes = (
-        Field.delegateattributes + ["protocol", "transport", "host"])
+    delegateattributes = ["protocol", "transport", "host"]
 
     def __init__(self, host=None, protocol=defaults.sipprotocol,
                  transport=defaults.transport):

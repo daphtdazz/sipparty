@@ -102,10 +102,20 @@ class ValueBinder(object):
         super(ValueBinder, self).__setattr__(attr, val)
 
     def _vb_bindingsForDirection(self, direction):
-        return getattr(self, "_vb_%sbindings" % direction)
+        try:
+            return getattr(self, "_vb_%sbindings" % direction)
+        except AttributeError as exc:
+            raise AttributeError(
+                str(exc) +
+                "\nAre you sure you called super().__init__() for this class?")
 
     def _vb_bindingActionForDirection(self, direction):
-        return getattr(self, "_vb_bind%s" % direction)
+        try:
+            return getattr(self, "_vb_bind%s" % direction)
+        except AttributeError as exc:
+            raise AttributeError(
+                str(exc) +
+                "\nAre you sure you called super().__init__() for this class?")
 
     def _vb_bindingdicts(self, path, direction, create=False, all=False):
         bindings = self._vb_bindingsForDirection(direction)
@@ -122,7 +132,9 @@ class ValueBinder(object):
         # Resolve the attrdict.
         if create:
             if attrattrs in attrdict:
-                raise(BindingAlreadyExists(path))
+                raise(BindingAlreadyExists(
+                    "{0!r} is in {2!r} binding dict {1!r}".format(
+                        path, bindings, direction)))
             attrdict[attrattrs] = {}
 
         if attrattrs not in attrdict:

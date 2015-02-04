@@ -12,15 +12,16 @@ import sip
 
 class TestProtocol(unittest.TestCase):
 
+    tag_pattern = "tag=[\da-f]{8}"
     call_id_pattern = "[\da-f]{6}-\d{14}"
     branch_pattern = "branch=z9hG4bK[\da-f]{1,}"
     cseq_num_pattern = "\d{1,10}"
 
     def testGeneral(self):
 
-        aliceAOR = sip.prot.AOR("alice", "atlanta.com")
+        aliceAOR = sip.components.AOR("alice", "atlanta.com")
         self.assertEqual(str(aliceAOR), "alice@atlanta.com")
-        bobAOR = sip.prot.AOR("bob", "baltimore.com")
+        bobAOR = sip.components.AOR("bob", "baltimore.com")
 
         self.assertRaises(AttributeError, lambda: sip.Request.notareq)
 
@@ -32,25 +33,25 @@ class TestProtocol(unittest.TestCase):
 
         invite = sip.Message.invite()
         self.assertTrue(re.match(
-            "INVITE None SIP/2.0\r\n"
-            "From: sip:\r\n"
-            "To: \r\n"
+            "INVITE sip: SIP/2.0\r\n"
+            "From: sip:;{3}\r\n"
+            "To: sip:\r\n"
             "Via: SIP/2.0/UDP;{1}\r\n"
             "Call-ID: {0}\r\n"
             "CSeq: {2} INVITE\r\n"
             "Max-Forwards: 70\r\n".format(
                 TestProtocol.call_id_pattern, TestProtocol.branch_pattern,
-                TestProtocol.cseq_num_pattern),
+                TestProtocol.cseq_num_pattern, TestProtocol.tag_pattern),
             str(invite)), str(invite))
         old_branch = str(invite.viaheader.parameters.branch)
-        invite.startline.uri = sip.prot.URI(aor=bobAOR)
+        invite.startline.uri = sip.components.URI(aor=bobAOR)
         new_branch = str(invite.viaheader.parameters.branch)
         self.assertNotEqual(old_branch, new_branch)
-        invite.fromheader.uri.aor.username = "alice"
-        invite.fromheader.uri.aor.host = "atlanta.com"
+        invite.fromheader.value.value.uri.aor.username = "alice"
+        invite.fromheader.value.value.uri.aor.host = "atlanta.com"
         self.assertTrue(re.match(
             "INVITE sip:bob@baltimore.com SIP/2.0\r\n"
-            "From: sip:alice@atlanta.com\r\n"
+            "From: sip:alice@atlanta.com;{3}\r\n"
             "To: sip:bob@baltimore.com\r\n"
             "Via: SIP/2.0/UDP atlanta.com;{1}\r\n"
             # 6 random hex digits followed by a date/timestamp
@@ -58,8 +59,8 @@ class TestProtocol(unittest.TestCase):
             "CSeq: {2} INVITE\r\n"
             "Max-Forwards: 70\r\n".format(
                 TestProtocol.call_id_pattern, TestProtocol.branch_pattern,
-                TestProtocol.cseq_num_pattern),
-            str(invite)), str(invite))
+                TestProtocol.cseq_num_pattern, TestProtocol.tag_pattern),
+            str(invite)), repr(str(invite)))
 
         self.assertEqual(str(invite.toheader), "To: sip:bob@baltimore.com")
         self.assertEqual(
@@ -68,20 +69,19 @@ class TestProtocol(unittest.TestCase):
 
         return
 
+    def testCall(self):
+
         caller = sip.Party()
         callee = sip.Party()
 
-        invite = caller.build(sip.prot.requesttype.invite)
-
-        self.assertEqual(invite, "")
+        caller.invite(callee)
+        callee.respond(200)
         return
 
-        tohdr = sip.prot.HeaderForName("To", reqLine)
-        return
-        self.assertTrue(isinstance(tohdr, sip.prot.ToHeader))
-        self.assertEqual(str(tohdr), "To: dmp@greenparksoftware.com")
+        caller.bye(callee)
+        callee.respond(200)
 
-        # invite = sip.prot.Request(reqLine
+        return
 
     def testBindings(self):
         VB = sip.vb.ValueBinder
@@ -138,29 +138,6 @@ class TestProtocol(unittest.TestCase):
         a.bind("d.x", "b.c.x")
         a.d = D
         self.assertEqual(a.d.x, 7)
-
-    def del_testAttrDict(self):
-
-        ad = sip._util.AttributeDict()
-        ad.anattr = 2
-        self.assertEqual(ad.anattr, 2)
-        self.assertEqual(ad["anattr"], 2)
-
-        ada = sip._util.AttributeDict()
-        adb = sip._util.AttributeDict()
-
-        ad.a = ada
-        ad.b = adb
-        ad.bind("a.x", "b.y")
-        pdb.set_trace()
-        ad.a.x = 2
-        self.assertEqual(ad.b.y, 2)
-        adb = sip._util.AttributeDict()
-        self.assertRaises(AttributeError, lambda: adb.y)
-        ad.b = adb
-        self.assertEqual(ad.b.y, 2)
-        self.assertEqual(adb.y, 2)
-        ad.unbind("a.x")
 
 if __name__ == "__main__":
     sys.exit(unittest.main())

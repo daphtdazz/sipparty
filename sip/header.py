@@ -3,6 +3,7 @@ import random
 import _util
 import vb
 import prot
+import components
 import field
 import pdb
 
@@ -72,17 +73,22 @@ class FieldDelegateHeader(Header):
             dattrs = myval.delegateattributes
             if attr in dattrs:
                 return getattr(myval, attr)
-        return super(FieldDelegateHeader, self).__getattr__(attr)
+        try:
+            return super(FieldDelegateHeader, self).__getattr__(attr)
+        except AttributeError:
+            raise AttributeError(
+                "{self.__class__.__name__!r} object has no attribute "
+                "{attr!r}".format(**locals()))
 
 
 class ToHeader(FieldDelegateHeader):
     """A To: header"""
-    FieldDelegateClass = prot.DNameURI
+    FieldDelegateClass = field.PartyIDField
 
 
 class FromHeader(FieldDelegateHeader):
     """A From: header"""
-    FieldDelegateClass = prot.DNameURI
+    FieldDelegateClass = field.PartyIDField
 
 
 class ViaHeader(FieldDelegateHeader):
@@ -98,7 +104,7 @@ class Call_IdHeader(Header):
         """Generate a random alphanumeric key.
 
         Returns a string composed of 6 random hexadecimal characters, followed
-        by a hypen, followed by a timestamp of form YYYYMMDDHHMMSS.
+        by a hyphen, followed by a timestamp of form YYYYMMDDHHMMSS.
         """
         keyval = random.randint(0, 2**24 - 1)
 

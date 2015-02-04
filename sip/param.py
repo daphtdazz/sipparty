@@ -17,12 +17,11 @@ class Parameters(vb.ValueBinder, dict):
 
 class Param(vb.ValueBinder):
 
-    types = _util.Enum(("branch",), normalize=lambda x: x.lower())
+    types = _util.Enum(("branch", "tag",), normalize=lambda x: x.lower())
 
     __metaclass__ = _util.attributesubclassgen
 
     name = _util.ClassType("Param")
-    value = _util.Value()
 
     def __init__(self, value=None):
         super(Param, self).__init__()
@@ -31,17 +30,9 @@ class Param(vb.ValueBinder):
             self.value = value
 
     def __str__(self):
+        if not hasattr(self, "value") and hasattr(self, "newvalue"):
+            self.value = self.newvalue()
         return "{self.name}={self.value}".format(self=self)
-
-
-def RequestToBranchTransformer(request):
-
-    str_to_has = "{0}-{1}".format(str(request), BranchParam.BranchNumber)
-    BranchParam.BranchNumber += 1
-    the_hash = hash(str_to_has)
-    if the_hash < 0:
-        the_hash = - the_hash
-    return "{0}{1:x}".format(BranchParam.BranchMagicCookie, the_hash)
 
 
 class BranchParam(Param):
@@ -49,19 +40,32 @@ class BranchParam(Param):
     BranchNumber = random.randint(1, 10000)
     BranchMagicCookie = "z9hG4bK"
 
-    def __init__(self):
+    def __init__(self, startline=None, branch_num=None):
         super(BranchParam, self).__init__()
-        self.startline = None
+        self.startline = startline
+        if branch_num is None:
+            branch_num = BranchParam.BranchNumber
+            BranchParam.BranchNumber += 1
+        self.branch_num = branch_num
 
     @property
     def value(self):
-        if len(self.values) > 0:
-            return self.values[0]
+        str_to_hash = "{0}-{1}".format(str(self.startline), self.branch_num)
+        the_hash = hash(str_to_hash)
+        if the_hash < 0:
+            the_hash = - the_hash
+        return "{0}{1:x}".format(BranchParam.BranchMagicCookie, the_hash)
 
-        if self.startline is not None:
-            return RequestToBranchTransformer(self.startline)
-        return ""
 
-    @value.setter
-    def value(self, val):
-        self.values.insert(0, val)
+class TagParam(Param):
+
+    def __init__(self, tagtype=None):
+        # tagtype could be used to help ensure that the From: and To: tags are
+        # different all the time.
+        super(TagParam, self).__init__()
+        self.tagtype = tagtype
+
+    def newvalue(self):
+        # RFC 3261 asks for 32 bits of randomness. Expect random is good
+        # enough.
+        return "{0:04x}".format(random.randint(0, 2**32 - 1))

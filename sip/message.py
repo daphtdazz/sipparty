@@ -3,10 +3,15 @@ import re
 import _util
 import vb
 import prot
+import components
 import param
 from param import Param
 from request import Request
 from header import Header
+
+
+def Parse(string):
+    pass
 
 
 class Message(vb.ValueBinder):
@@ -59,7 +64,7 @@ class Message(vb.ValueBinder):
     def isresponse(cls):
         return cls.__name__.find("Response") != -1
 
-    def __init__(self, startline=None, headers=[], bodies=[],
+    def __init__(self, startline=None, headers=None, bodies=None,
                  autoheader=True):
         """Initialize a `Message`."""
 
@@ -70,9 +75,13 @@ class Message(vb.ValueBinder):
                 startline = getattr(Request, self.type)()
             except Exception:
                 raise
+        self.startline = startline
 
-        for prop in ("startline", "headers", "bodies"):
-            setattr(self, prop, locals()[prop])
+        for field in ("headers", "bodies"):
+            if locals()[field] is None:
+                setattr(self, field, [])
+            else:
+                setattr(self, field, locals()[field])
 
         if autoheader:
             self.autofillheaders()
@@ -115,7 +124,6 @@ class Message(vb.ValueBinder):
                 "{attr!r}".format(**locals()))
 
     def _establishbindings(self):
-
         for binding in self.bindings:
             if len(binding) > 2:
                 transformer = binding[2]
@@ -143,9 +151,10 @@ class InviteMessage(Message):
         ("startline.uri", "toheader.value.uri"),
         ("startline.protocol", "viaheader.value.protocol"),
         ("startline", "viaheader.value.parameters.branch.startline"),
-        ("fromheader.value.uri.aor.host", "viaheader.value.host"),
+        ("fromheader.value.value.uri.aor.host", "viaheader.value.host"),
         ("startline.type", "cseqheader.value.reqtype")]
 
     mandatoryparameters = {
+        Header.types.From: [Param.types.tag],
         Header.types.Via: [Param.types.branch]
     }
