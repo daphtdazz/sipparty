@@ -102,6 +102,28 @@ class TestProtocol(unittest.TestCase):
         new_inv = sip.message.Message.Parse(invite_str)
         self.assertEqualMessages(invite, new_inv)
 
+        new_inv.addHeader(sip.Header.via())
+        new_inv.viaheader.host.host = "arkansas.com"
+
+        new_inv.startline.uri.aor.username = "bill"
+
+        self.assertTrue(re.match(
+            "INVITE sip:bill@biloxi.com SIP/2.0\r\n"
+            "From: sip:alice@atlanta.com;{3}\r\n"
+            # Note that the To: URI hasn't changed because when the parse
+            # happens a new uri gets created for each, and there's no link
+            # between them.
+            "To: sip:bob@biloxi.com\r\n"
+            "Via: SIP/2.0/UDP arkansas.com\r\n"
+            "Via: SIP/2.0/UDP atlanta.com;{1}\r\n"
+            # 6 random hex digits followed by a date/timestamp
+            "Call-ID: {0}\r\n"
+            "CSeq: {2} INVITE\r\n"
+            "Max-Forwards: 70\r\n".format(
+                TestProtocol.call_id_pattern, TestProtocol.branch_pattern,
+                TestProtocol.cseq_num_pattern, TestProtocol.tag_pattern),
+            str(new_inv)), repr(str(new_inv)))
+
     def testCall(self):
 
         caller = sip.Party()

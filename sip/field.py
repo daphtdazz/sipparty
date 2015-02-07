@@ -120,7 +120,6 @@ class ViaField(Field):
             rv = "{prottrans} {hoststr}".format(**locals())
         else:
             rv = "{prottrans}".format(**locals())
-        log.debug("ViaField generated value %s", rv)
         return rv
 
     def __setattr__(self, attr, val):

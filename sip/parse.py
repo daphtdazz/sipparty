@@ -8,6 +8,7 @@ import logging
 import pdb
 
 log = logging.getLogger(__name__)
+log.level = logging.ERROR
 
 
 class ParseError(Exception):

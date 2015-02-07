@@ -176,7 +176,15 @@ class Message(vb.ValueBinder):
             self.bind(binding[0], binding[1], transformer)
 
     def addHeader(self, hdr):
-        self.headers.append(hdr)
+        new_headers = []
+        for oh in self.headers:
+            if hdr is not None and hdr.type == oh.type:
+                new_headers.append(hdr)
+                hdr = None
+            new_headers.append(oh)
+        if hdr is not None:
+            new_headers.append(hdr)
+        self.headers = new_headers
 
     def autofillheaders(self):
         for hdr in self.mandatoryheaders:

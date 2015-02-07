@@ -87,12 +87,13 @@ class BranchParam(Param):
         the_hash = hash(str_to_hash)
         if the_hash < 0:
             the_hash = - the_hash
-        return "{0}{1:x}".format(prot.BranchMagicCookie, the_hash)
+        nv = "{0}{1:x}".format(prot.BranchMagicCookie, the_hash)
+        log.debug("New %r value %r", self.__class__.__name__, nv)
+        return nv
     value = _util.GenerateIfNotSet("value")
 
     def __setattr__(self, attr, val):
         if attr in ("startline", "branch_num"):
-            log.debug("Resetting 'BranchParam' value")
             if hasattr(self, "value"):
                 del self.value
         super(BranchParam, self).__setattr__(attr, val)

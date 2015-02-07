@@ -5,6 +5,7 @@ Copyright David Park 2015
 import logging
 
 log = logging.getLogger(__name__)
+log.level = logging.ERROR
 
 
 class BindingException(Exception):
