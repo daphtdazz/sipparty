@@ -1,5 +1,6 @@
 import pdb
 import re
+import logging
 import _util
 import vb
 import prot
@@ -9,9 +10,7 @@ from param import Param
 from request import Request
 from header import Header
 
-
-def Parse(string):
-    pass
+log = logging.getLogger(__name__)
 
 
 class Message(vb.ValueBinder):
@@ -48,6 +47,48 @@ class Message(vb.ValueBinder):
         flags=re.IGNORECASE)
 
     @classmethod
+    def Parse(cls, string):
+
+        # This could be optimised using a generator taking slices of the
+        # string: stackoverflow.com/questions/3054604/iterate-over-the-lines-
+        # of-a-string
+        lines = string.split(prot.EOL)
+
+        # Restitch lines if any start with SP (space) or HT (horizontal tab).
+        joined_lines = []
+        curr_lines = []
+        for line in lines:
+            if len(line) > 0 and line[0] in (' ', '\t'):
+                curr_lines.append(line.lstrip())
+                continue
+            if len(curr_lines) > 0:
+                joined_lines.append("".join(curr_lines))
+                del curr_lines[:]
+            curr_lines.append(line)
+        else:
+            if len(curr_lines) > 0:
+                joined_lines.append("".join(curr_lines))
+
+        lines = joined_lines
+        log.debug("Sectioned lines: {0!r}".format(lines))
+        startline = lines.pop(0)
+
+        # Fix the startline and build the message.
+        requestline = Request.Parse(startline)
+        message = getattr(Message, requestline.type)(
+            startline=requestline, autofillheaders=False)
+        log.debug("Message is of type %r", message.type)
+
+        for line, ln in zip(lines, range(1, len(lines) + 1)):
+            if len(line) == 0:
+                break
+            message.addHeader(Header.Parse(line))
+        body_lines = lines[ln:]
+        log.debug("Body lines %r", body_lines)
+
+        return message
+
+    @classmethod
     def requestname(cls):
         if not cls.isrequest():
             raise AttributeError(
@@ -65,7 +106,7 @@ class Message(vb.ValueBinder):
         return cls.__name__.find("Response") != -1
 
     def __init__(self, startline=None, headers=None, bodies=None,
-                 autoheader=True):
+                 autofillheaders=True):
         """Initialize a `Message`."""
 
         super(Message, self).__init__()
@@ -83,11 +124,14 @@ class Message(vb.ValueBinder):
             else:
                 setattr(self, field, locals()[field])
 
-        if autoheader:
+        if autofillheaders:
             self.autofillheaders()
         self._establishbindings()
 
     def __str__(self):
+
+        log.debug(
+            "%d headers, %d bodies.", len(self.headers), len(self.bodies))
 
         components = [self.startline]
         components.extend(self.headers)
@@ -131,10 +175,13 @@ class Message(vb.ValueBinder):
                 transformer = None
             self.bind(binding[0], binding[1], transformer)
 
+    def addHeader(self, hdr):
+        self.headers.append(hdr)
+
     def autofillheaders(self):
         for hdr in self.mandatoryheaders:
             if hdr not in [_hdr.type for _hdr in self.headers]:
-                self.headers.append(getattr(Header, hdr)())
+                self.addHeader(getattr(Header, hdr)())
 
         for mheader_name, mparams in self.mandatoryparameters.iteritems():
             mheader = getattr(self, mheader_name + "Header")
@@ -151,7 +198,7 @@ class InviteMessage(Message):
         ("startline.uri", "toheader.value.uri"),
         ("startline.protocol", "viaheader.value.protocol"),
         ("startline", "viaheader.value.parameters.branch.startline"),
-        ("fromheader.value.value.uri.aor.host", "viaheader.value.host"),
+        ("fromheader.value.value.uri.aor.host", "viaheader.value.host.host"),
         ("startline.type", "cseqheader.value.reqtype")]
 
     mandatoryparameters = {

@@ -1,8 +1,13 @@
 import sys
 import os
 import re
+import logging
 import unittest
 import pdb
+
+# Get the root logger.
+logging.basicConfig()
+log = logging.getLogger()
 
 # Hack so we can always import the code we're testing.
 sys.path.append(os.path.join(os.pardir, os.pardir))
@@ -16,6 +21,13 @@ class TestProtocol(unittest.TestCase):
     call_id_pattern = "[\da-f]{6}-\d{14}"
     branch_pattern = "branch=z9hG4bK[\da-f]{1,}"
     cseq_num_pattern = "\d{1,10}"
+
+    def assertEqualMessages(self, msga, msgb):
+        stra = str(msga)
+        strb = str(msgb)
+        self.assertEqual(
+            stra, strb, "\n{0!r}\nvs\n{1!r}\n---OR---\n{0}\nvs\n{1}"
+            "".format(stra, strb))
 
     def testGeneral(self):
 
@@ -42,9 +54,18 @@ class TestProtocol(unittest.TestCase):
             "Max-Forwards: 70\r\n".format(
                 TestProtocol.call_id_pattern, TestProtocol.branch_pattern,
                 TestProtocol.cseq_num_pattern, TestProtocol.tag_pattern),
-            str(invite)), str(invite))
+            str(invite)), "%r\n--OR--\n%s" % (str(invite), invite))
         old_branch = str(invite.viaheader.parameters.branch)
         invite.startline.uri = sip.components.URI(aor=bobAOR)
+
+        # Ideally just changing the URI should be enough to regenerate the
+        # branch parameter, as it should be live.  However the branch parameter
+        # will only notice if invite.startline changes, not if the object
+        # at invite.startline changes, as it deliberately doesn't recalculate
+        # its value automatically.
+        sline = invite.startline
+        invite.startline = None
+        invite.startline = sline
         new_branch = str(invite.viaheader.parameters.branch)
         self.assertNotEqual(old_branch, new_branch)
         invite.fromheader.value.value.uri.aor.username = "alice"
@@ -68,6 +89,18 @@ class TestProtocol(unittest.TestCase):
         self.assertRaises(AttributeError, lambda: invite.notaheader)
 
         return
+
+    def testParse(self):
+        invite = sip.Message.invite()
+        invite.startline.uri.aor.username = "bob"
+        invite.startline.uri.aor.host = "biloxi.com"
+        invite.fromheader.value.value.uri.aor.username = "alice"
+        invite.fromheader.value.value.uri.aor.host = "atlanta.com"
+        invite_str = str(invite)
+        log.debug("Invite to stringify and parse: %r", str(invite))
+
+        new_inv = sip.message.Message.Parse(invite_str)
+        self.assertEqualMessages(invite, new_inv)
 
     def testCall(self):
 

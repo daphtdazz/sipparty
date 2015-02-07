@@ -1,3 +1,12 @@
+"""vb.py
+
+Copyright David Park 2015
+"""
+import logging
+
+log = logging.getLogger(__name__)
+
+
 class BindingException(Exception):
     """Base class for all binding specific errors."""
 
@@ -82,9 +91,12 @@ class ValueBinder(object):
                     if direction == "forward":
                         # Push the change, only if it is a change to avoid
                         # recursion.
+                        topath = bdict[ValueBinder.KeyTargetPath]
                         if val is not existing_val:
-                            self._vb_push_value_to_target(
-                                val, bdict[ValueBinder.KeyTargetPath])
+                            log.debug(
+                                "Push %s.%s to %s", attr, fromattrattrs,
+                                topath)
+                            self._vb_push_value_to_target(val, topath)
                     continue
 
                 # This is an indirect binding, so need to update the first
@@ -92,14 +104,20 @@ class ValueBinder(object):
                 if existing_val is not None:
                     existing_val._vb_unbinddirection(fromattrattrs, direction)
 
-                val._vb_binddirection(
-                    fromattrattrs,
-                    ValueBinder.PS + bdict[ValueBinder.KeyTargetPath],
-                    self,
-                    bdict[ValueBinder.KeyTransformer],
-                    direction)
+                if val is not None:
+                    val._vb_binddirection(
+                        fromattrattrs,
+                        ValueBinder.PS + bdict[ValueBinder.KeyTargetPath],
+                        self,
+                        bdict[ValueBinder.KeyTransformer],
+                        direction)
 
-        super(ValueBinder, self).__setattr__(attr, val)
+        try:
+            super(ValueBinder, self).__setattr__(attr, val)
+        except AttributeError as exc:
+            raise AttributeError(
+                "Can't set {attr!r} on {self.__class__.__name__!r} instance: "
+                "{exc}".format(**locals()))
 
     def _vb_bindingsForDirection(self, direction):
         try:
@@ -147,7 +165,10 @@ class ValueBinder(object):
     def _vb_push_value_to_target(self, value, topath):
         target, toattr = self._vb_resolveboundobjectandattr(topath)
         if target is not None:
+            log.debug("Pushing %r to %s", value, topath)
             setattr(target, toattr, value)
+        else:
+            log.debug("Target not available to push %s", topath)
 
     def _vb_pull_value_to_self(self, myattr, topath):
         target, toattr = self._vb_resolveboundobjectandattr(topath)
@@ -183,7 +204,15 @@ class ValueBinder(object):
             # self.bindforward("a.b", "c")
             # >> self.a.bindforward("b", ".c")
             if hasattr(self, fromattr):
-                getattr(self, fromattr)._vb_bindforward(
+                subobj = getattr(self, fromattr)
+                if not hasattr(subobj, "_vb_bindforward"):
+                    raise TypeError(
+                        "Attribute {fromattr!r} of "
+                        "{self.__class__.__name__!r} does not support "
+                        "bindings. It "
+                        "has type {subobj.__class__.__name__!r}."
+                        "".format(**locals()))
+                subobj._vb_bindforward(
                     fromattrattrs, ValueBinder.PS + topath, self, transformer)
         else:
             # This is a direct binding. If we already have a value for it, set
@@ -216,8 +245,11 @@ class ValueBinder(object):
             # self.bindbackward("a.b", ".c")
             # >> self.a.bindbackward("b", "..c")
             if hasattr(self, fromattr):
-                getattr(self, fromattr)._vb_bindbackward(
-                    fromattrattrs, ValueBinder.PS + topath, self, transformer)
+                val = getattr(self, fromattr)
+                if val is not None:
+                    val._vb_bindbackward(
+                        fromattrattrs, ValueBinder.PS + topath, self,
+                        transformer)
         else:
             # Direct binding. See if we can pull the value.
             self._vb_pull_value_to_self(fromattr, topath)

@@ -4,15 +4,24 @@
 # they must always be declared before defaults is.
 # import defaults
 import vb
+from parse import Parser
 
 
-class Host(vb.ValueBinder):
+class Host(Parser, vb.ValueBinder):
+
+    parseinfo = {
+        Parser.Pattern:
+            "([^:]+|[[][:a-fA-F\d]+[]])"
+            "(:(\d)+)?$",
+        Parser.Mappings:
+            [("host",),
+             ("port",)],
+    }
 
     def __init__(self, host=None, port=None):
-        for prop in dict(locals()):
-            if prop == "self":
-                continue
-            setattr(self, prop, locals()[prop])
+        super(Host, self).__init__()
+        self.host = host
+        self.port = port
 
     def __str__(self):
 
@@ -26,13 +35,23 @@ class Host(vb.ValueBinder):
             return "{host}:{port}".format(**locals())
 
         if self.host:
-            return "{host}"
+            return "{host}".format(**locals())
 
         return ""
 
 
-class AOR(vb.ValueBinder):
+class AOR(Parser, vb.ValueBinder):
     """A AOR object."""
+
+    parseinfo = {
+        Parser.Pattern:
+            "(.*)"
+            "@"
+            "(.*)$",
+        Parser.Mappings:
+            [("username",),
+             ("host", Host)],
+    }
 
     def __init__(self, username=None, host=None, port=None):
         super(AOR, self).__init__()
@@ -51,8 +70,18 @@ class AOR(vb.ValueBinder):
         return ""
 
 
-class URI(vb.ValueBinder):
+class URI(Parser, vb.ValueBinder):
     """A URI object."""
+
+    parseinfo = {
+        Parser.Pattern:
+            "(sip|sips)"
+            ":"
+            "(.*)$",
+        Parser.Mappings:
+            [("scheme",),
+             ("aor", AOR)],
+    }
 
     def __init__(self, scheme=None, aor=None):
         super(URI, self).__init__()
@@ -71,10 +100,33 @@ class URI(vb.ValueBinder):
         return "{scheme}:{aor}".format(**self.__dict__)
 
 
-class DNameURI(vb.ValueBinder):
+class DNameURI(Parser, vb.ValueBinder):
     """A display name plus a uri value object"""
 
     delegateattributes = ["dname", "uri"]
+
+    dname_mapping = ("dname", None, lambda x: x.strip())
+    uri_mapping = ("uri", URI)
+    parseinfo = {
+        Parser.Pattern:
+            "("  # Either we want...
+            "([^<]+)"  # something which is not in angle brackets (disp. name)
+            "<([^>]+)>|"  # followed by a uri that is in <> OR...
+            "("
+            "(\w.*)\s+|"  # optionally at least one non-space for the disp
+            "\s*"  # or just spaces
+            ")"
+            "([^\s]+)"  # at least one thing that isn't a space for the uri
+            "\s*"  # followed by arbitrary space
+            ")$",
+        Parser.Mappings:
+            [None,
+             dname_mapping,
+             uri_mapping,
+             None,
+             dname_mapping,
+             uri_mapping]
+    }
 
     def __init__(self, dname=None, uri=None):
         super(DNameURI, self).__init__()
@@ -93,8 +145,5 @@ class DNameURI(vb.ValueBinder):
             return(str(self.uri))
 
         return ""
-
-    def generate(self):
-        pass
 
 import defaults

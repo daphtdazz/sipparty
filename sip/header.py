@@ -1,14 +1,19 @@
 import datetime
 import random
+import re
+import logging
 import _util
 import vb
+from parse import Parser
 import prot
 import components
 import field
 import pdb
 
+log = logging.getLogger(__name__)
 
-class Header(vb.ValueBinder):
+
+class Header(Parser, vb.ValueBinder):
     """A SIP header."""
 
     types = _util.Enum(
@@ -30,6 +35,38 @@ class Header(vb.ValueBinder):
 
     type = _util.ClassType("Header")
     value = _util.Value()
+
+    parseinfo = {
+        Parser.Pattern:
+            "^\s*([^:\s]*)\s*:"  # The type.
+            "\s*"
+            "([^,]+)$"  # Everything else to be parsed in parsecust().
+            "".format("|".join(types)),
+        Parser.Constructor:
+            (1, lambda type: getattr(Header, type)())
+    }
+
+    def parsecust(self, string, mo):
+
+        data = mo.group(2)
+        values = data.split(",")
+        log.debug("Header values: %r", values)
+
+        if not hasattr(self, "FieldDelegateClass"):
+            try:
+                self.values = values
+            except AttributeError:
+                log.debug(
+                    "Can't set 'values' on instance of %r.", self.__class__)
+            return
+
+        fdc = self.FieldDelegateClass
+        if hasattr(fdc, "Parse"):
+            create = lambda x: fdc.Parse(x)
+        else:
+            create = lambda x: fdc(x)
+
+        self.values = [create(val) for val in values]
 
     def __init__(self, values=None):
         """Initialize a header line.
@@ -122,6 +159,10 @@ class Call_IdHeader(Header):
 
     @property
     def value(self):
+        values = self.__dict__["values"]
+        if values:
+            return values[0]
+
         if self.key is None:
             self.key = Call_IdHeader.GenerateKey()
 
@@ -133,7 +174,15 @@ class Call_IdHeader(Header):
 
     @property
     def values(self):
-        return [self.value]
+        values = self.__dict__["values"]
+        if not values:
+            values = [self.value]
+            self.values = values
+        return values
+
+    @values.setter
+    def values(self, values):
+        self.__dict__["values"] = values
 
 
 class CseqHeader(FieldDelegateHeader):

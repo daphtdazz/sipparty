@@ -1,9 +1,18 @@
 import random
+import logging
 import _util
 import vb
+import prot
+from parse import Parser
+
+log = logging.getLogger(__name__)
 
 
-class Parameters(vb.ValueBinder, dict):
+class Parameters(Parser, vb.ValueBinder, dict):
+
+    parseinfo = {
+        Parser.Pattern: "^(.*)$"
+    }
 
     def __init__(self):
         super(Parameters, self).__init__()
@@ -14,12 +23,33 @@ class Parameters(vb.ValueBinder, dict):
         if attr in Param.types:
             self[attr] = val
 
+    def parsecust(self, string, mo):
 
-class Param(vb.ValueBinder):
+        parms = string.lstrip(";").split(";")
+        log.debug("Parameters: %r", parms)
+
+        for parm in parms:
+            newp = Param.Parse(parm)
+            self[newp.name] = newp
+
+
+class Param(Parser, vb.ValueBinder):
 
     types = _util.Enum(("branch", "tag",), normalize=lambda x: x.lower())
 
     __metaclass__ = _util.attributesubclassgen
+
+    parseinfo = {
+        Parser.Pattern:
+            "\s*([^\s=]+)"
+            "\s*=\s*"
+            "(.+)",
+        Parser.Constructor:
+            (1, lambda x: getattr(Param, x)()),
+        Parser.Mappings:
+            [None,
+             ("value",)]
+    }
 
     name = _util.ClassType("Param")
 
@@ -38,7 +68,6 @@ class Param(vb.ValueBinder):
 class BranchParam(Param):
 
     BranchNumber = random.randint(1, 10000)
-    BranchMagicCookie = "z9hG4bK"
 
     def __init__(self, startline=None, branch_num=None):
         super(BranchParam, self).__init__()
@@ -48,13 +77,25 @@ class BranchParam(Param):
             BranchParam.BranchNumber += 1
         self.branch_num = branch_num
 
-    @property
-    def value(self):
+    def generate_value(self):
+        if not hasattr(self, "startline") or not hasattr(self, "branch_num"):
+            raise AttributeError(
+                "{self.__class__.__name__!r} needs attributes 'startline' and "
+                "'branch_num' to autogenerate 'value'."
+                "".format(**locals()))
         str_to_hash = "{0}-{1}".format(str(self.startline), self.branch_num)
         the_hash = hash(str_to_hash)
         if the_hash < 0:
             the_hash = - the_hash
-        return "{0}{1:x}".format(BranchParam.BranchMagicCookie, the_hash)
+        return "{0}{1:x}".format(prot.BranchMagicCookie, the_hash)
+    value = _util.GenerateIfNotSet("value")
+
+    def __setattr__(self, attr, val):
+        if attr in ("startline", "branch_num"):
+            log.debug("Resetting 'BranchParam' value")
+            if hasattr(self, "value"):
+                del self.value
+        super(BranchParam, self).__setattr__(attr, val)
 
 
 class TagParam(Param):
@@ -65,7 +106,8 @@ class TagParam(Param):
         super(TagParam, self).__init__()
         self.tagtype = tagtype
 
-    def newvalue(self):
+    def generate_value(self):
         # RFC 3261 asks for 32 bits of randomness. Expect random is good
         # enough.
-        return "{0:04x}".format(random.randint(0, 2**32 - 1))
+        return "{0:08x}".format(random.randint(0, 2**32 - 1))
+    value = _util.GenerateIfNotSet("value")
