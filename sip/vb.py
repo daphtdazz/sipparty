@@ -13,11 +13,13 @@ class BindingException(Exception):
 
 
 class NoSuchBinding(BindingException):
-    """No such binding error: raised when we attempt to """
+    """No such binding error: raised when we attempt to unbind a binding
+    that doesn't exist."""
 
 
 class BindingAlreadyExists(BindingException):
-    """This binding already exists."""
+    """This binding already exists: raised when attempting to bind an
+    attribute that is already bound."""
 
 
 class ValueBinder(object):
@@ -271,7 +273,6 @@ class ValueBinder(object):
         nextobj = self
         splitpath = path.split(ValueBinder.PS)
         for nextattr in splitpath[0:-1]:
-            # print("Next attribute: {nextattr}".format(**locals()))
 
             if len(nextattr) == 0:
                 nextattr = "_vb_bindingparent"

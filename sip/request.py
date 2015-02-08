@@ -37,7 +37,7 @@ class Request(parse.Parser, vb.ValueBinder):
         parse.Parser.Pattern:
             "({0})"
             " "
-            "([^ ]*|<[^>]*>)"  # The display name and uri.
+            "([^ ]*|<[^>]*>)"  # The uri.
             " "
             "([\w\d./]+)$"  # The protocol
             "".format("|".join(types)),

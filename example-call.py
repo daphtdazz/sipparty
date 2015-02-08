@@ -1,42 +1,31 @@
-import sip
+# import sip
 import sys
 import pdb
-import sip._util
+
+
+class Meta1(type):
+
+    def __new__(cls, name, bases, dict):
+
+        dict["meta1attr"] = 3
+        dict["meta2attr"] = 3
+        return super(Meta1, cls).__new__(cls, name, bases, dict)
+
+
+class Meta2(type):
+
+    def __new__(cls, name, bases, dict):
+
+        dict["meta2attr"] = 5
+        dict["meta1attr"] = 5
+        return super(Meta2, cls).__new__(cls, name, bases, dict)
 
 
 class A(object):
-    attr = 1234
 
+    class _AMC(Meta2, Meta1):
+        pass
+    __metaclass__ = _AMC
 
-class B(A):
-    attr = 4321
-
-    @classmethod
-    def getattr(cls):
-        return super(cls, None).attr
-
-print(B.getattr())
-
-sys.exit(0)
-
-# Not yet implemented
-caller = sip.Party()
-callee = sip.Party()
-
-callee.listen()
-
-caller.register()
-
-callee.receiveRegister()
-callee.respond(200)
-
-caller.receiveResponse(200)
-
-caller.invite()
-callee.respond(100)
-callee.respond(180)
-caller.receiveResponse(100)
-caller.receiveResponse(180)
-
-callee.bye()
-caller.respond(200)
+print(A.meta1attr)
+print(A.meta2attr)

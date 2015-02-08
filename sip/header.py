@@ -41,7 +41,10 @@ class Header(Parser, vb.ValueBinder):
             "^\s*([^:\s]*)\s*:"  # The type.
             "\s*"
             "([^,]+)$"  # Everything else to be parsed in parsecust().
-            "".format("|".join(types)),
+            "".format("|".join([
+                _util.attributesubclassgen.NormalizeGeneratingAttributeName(
+                    type)
+                for type in types])),
         Parser.Constructor:
             (1, lambda type: getattr(Header, type)())
     }

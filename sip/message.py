@@ -6,8 +6,10 @@ import vb
 import prot
 import components
 import param
+import transform
 from param import Param
 from request import Request
+import response
 from header import Header
 
 log = logging.getLogger(__name__)
@@ -43,7 +45,10 @@ class Message(vb.ValueBinder):
     reqattrre = re.compile(
         "({0})request".format("|".join(types)), flags=re.IGNORECASE)
     headerattrre = re.compile(
-        "({0})header".format("|".join(Header.types).replace("-", "[_-]")),
+        "({0})Header".format("|".join([
+            _util.attributesubclassgen.NormalizeGeneratingAttributeName(
+                type)
+            for type in Header.types]).replace("-", "[_-]")),
         flags=re.IGNORECASE)
 
     @classmethod
@@ -167,6 +172,32 @@ class Message(vb.ValueBinder):
                 "{self.__class__.__name__!r} object has no attribute "
                 "{attr!r}".format(**locals()))
 
+    def __setattr__(self, attr, val):
+        """If we're setting a header then figure out which and set it
+        appropriately.
+        """
+
+        hmo = self.headerattrre.match(attr)
+        if hmo is not None:
+            htype = (
+                _util.attributesubclassgen
+                .NormalizeGeneratingAttributeName(attr.replace("Header", '')))
+            log.debug("Set the %r of type %r", attr, htype)
+            index = -1
+            for hdr, index in zip(self.headers, range(len(self.headers))):
+                if hdr.type == htype:
+                    log.debug("  Found existing one.")
+                    self.headers[index] = val
+                    break
+            else:
+                log.debug("Didn't find existing one")
+                self.headers.append(val)
+                index += 1
+
+            return
+
+        super(Message, self).__setattr__(attr, val)
+
     def _establishbindings(self):
         for binding in self.bindings:
             if len(binding) > 2:
@@ -198,16 +229,50 @@ class Message(vb.ValueBinder):
                     mheader.value.parameters, param_name,
                     getattr(Param, param_name)())
 
+    def applyTransform(self, targetmsg, tform):
+        copylist = tform[transform.KeyActCopy]
+
+        for copy_tuple in copylist:
+            frmattr = copy_tuple[0]
+            if len(copy_tuple) > 1:
+                toattr = copy_tuple[1]
+            else:
+                toattr = frmattr
+            log.debug("Copy %r to %r", frmattr, toattr)
+
+            nextobj = self
+            for fm in frmattr.split("."):
+                nextobj = getattr(nextobj, fm)
+            from_attribute = nextobj
+
+            nextobj = targetmsg
+            tocomponents = toattr.split(".")
+            for to in tocomponents[:-1]:
+                nextobj = getattr(nextobj, to)
+            to_target = nextobj
+
+            setattr(to_target, tocomponents[-1], from_attribute)
+
+
+class Response(Message):
+    # Override metaclass of message as we don't want to attempt to generate
+    # subclasses from our type, which we don't have.
+    __metaclass__ = type
+
+    def __init__(self, code):
+        sl = response.Response(code)
+        super(Response, self).__init__(sl, autofillheaders=False)
+
 
 class InviteMessage(Message):
     """An INVITE."""
 
     bindings = [
-        ("startline.uri", "toheader.value.uri"),
-        ("startline.protocol", "viaheader.value.protocol"),
-        ("startline", "viaheader.value.parameters.branch.startline"),
-        ("fromheader.value.value.uri.aor.host", "viaheader.value.host.host"),
-        ("startline.type", "cseqheader.value.reqtype")]
+        ("startline.uri", "ToHeader.value.uri"),
+        ("startline.protocol", "ViaHeader.value.protocol"),
+        ("startline", "ViaHeader.value.parameters.branch.startline"),
+        ("FromHeader.value.value.uri.aor.host", "ViaHeader.value.host.host"),
+        ("startline.type", "CseqHeader.value.reqtype")]
 
     mandatoryparameters = {
         Header.types.From: [Param.types.tag],

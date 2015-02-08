@@ -3,15 +3,18 @@
 Implements the `Party` object.
 """
 import socket
-
+import logging
+import copy
 import prot
 import components
 import defaults
-from message import Message
-import copy
+from message import (Message, Response)
+import transform
 import pdb
 
 __all__ = ('Party',)
+
+log = logging.getLogger(__name__)
 
 
 class BadNetwork(Exception):
@@ -69,7 +72,7 @@ class PortManager(object):
         ssocket = socket.socket(family, socktype)
 
         def port_generator():
-            yield 5060
+            yield 5060  # Always try 5060 first.
             for ii in range(15060, 16060):
                 yield ii
 
@@ -151,7 +154,7 @@ class Party(object):
     def register(self):
         """Register the party with a server."""
 
-    def invite(self, callee):
+    def _sendinvite(self, callee):
         """Start a call."""
         invite = Message.invite()
         invite.startline.uri.aor = copy.deepcopy(callee.aor)
@@ -171,11 +174,27 @@ class Party(object):
             assert 0
         else:
             data, addr = sock.recvfrom(4096)
-        return data
 
-    def respond(self, code):
+        msg = Message.Parse(data)
+        log.debug("Received message %s", msg)
+        return msg
+
+    def _respond(self, code):
         """Send a SIP response code."""
         msg = self.receiveMessage()
+
+        if msg.isresponse():
+            raise prot.ProtocolError("Cannot respond to a response.")
+
+        try:
+            tform = transform.request[msg.type][code]
+        except KeyError:
+            log.error("No transformation for %d from %s", code, msg.type)
+
+        rsp = Response(code)
+        log.debug("Initial response:%r", str(rsp))
+        msg.applyTransform(rsp, tform)
+        log.debug("Proto-response: %s", rsp)
 
     # Receiving methods.
     def receive_response(self, code):

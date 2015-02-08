@@ -6,7 +6,7 @@ import unittest
 import pdb
 
 # Get the root logger.
-logging.basicConfig()
+logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger()
 
 # Hack so we can always import the code we're testing.
@@ -59,10 +59,10 @@ class TestProtocol(unittest.TestCase):
         invite.startline.uri = sip.components.URI(aor=bobAOR)
 
         # Ideally just changing the URI should be enough to regenerate the
-        # branch parameter, as it should be live.  However the branch parameter
-        # will only notice if invite.startline changes, not if the object
-        # at invite.startline changes, as it deliberately doesn't recalculate
-        # its value automatically.
+        # branch parameter, as it should be live.  However the branch
+        # parameter will only notice if invite.startline changes, not if the
+        # object at invite.startline changes, as it deliberately doesn't
+        # recalculate its value automatically.
         sline = invite.startline
         invite.startline = None
         invite.startline = sline
@@ -85,8 +85,24 @@ class TestProtocol(unittest.TestCase):
 
         self.assertEqual(str(invite.toheader), "To: sip:bob@baltimore.com")
         self.assertEqual(
-            str(invite.call_idheader), str(getattr(invite, "Call-IDHeader")))
+            str(invite.call_idheader), str(getattr(invite, "Call_IdHeader")))
         self.assertRaises(AttributeError, lambda: invite.notaheader)
+
+        resp = sip.message.Response(200)
+        invite.applyTransform(resp, sip.transform.request[invite.type][200])
+
+        self.assertTrue(re.match(
+            "SIP/2.0 200 OK\r\n"
+            "From: sip:alice@atlanta.com;{3}\r\n"
+            # !!! We need to get a To: in here.
+            # "To: sip:bob@baltimore.com\r\n"
+            "Via: SIP/2.0/UDP atlanta.com;{1}\r\n"
+            # 6 random hex digits followed by a date/timestamp
+            "Call-ID: {0}\r\n"
+            "CSeq: {2} INVITE\r\n".format(
+                TestProtocol.call_id_pattern, TestProtocol.branch_pattern,
+                TestProtocol.cseq_num_pattern, TestProtocol.tag_pattern),
+            str(resp)), str(resp))
 
         return
 
@@ -129,8 +145,8 @@ class TestProtocol(unittest.TestCase):
         caller = sip.Party()
         callee = sip.Party()
 
-        caller.invite(callee)
-        callee.respond(200)
+        caller._sendinvite(callee)
+        callee._respond(200)
         return
 
         caller.bye(callee)

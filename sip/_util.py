@@ -33,6 +33,10 @@ class attributesubclassgen(type):
     >>> inst is an instance of Subclass.
     """
 
+    @classmethod
+    def NormalizeGeneratingAttributeName(clscls, name):
+        return name.title().replace("-", "_")
+
     def __init__(cls, name, bases, dict):
         """__init__ for classes is called after the bases and dict have been
         set up, so no need to re-set up here."""
@@ -50,7 +54,8 @@ class attributesubclassgen(type):
                     **locals()))
 
         name = getattr(cls.__dict__["types"], name)
-        subclassguess = name.title().replace("-", "_") + cls._supername
+        subclassguess = (
+            cls.NormalizeGeneratingAttributeName(name) + cls._supername)
         try:
             mod = __import__(cls.__module__)
             for modname in cls.__module__.split(".")[1:]:
