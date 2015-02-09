@@ -232,6 +232,15 @@ class Message(vb.ValueBinder):
     def applyTransform(self, targetmsg, tform):
         copylist = tform[transform.KeyActCopy]
 
+        def setattratpath(obj, path, val):
+            nextobj = obj
+            tocomponents = path.split(".")
+            for to in tocomponents[:-1]:
+                nextobj = getattr(nextobj, to)
+            to_target = nextobj
+
+            setattr(to_target, tocomponents[-1], val)
+
         for copy_tuple in copylist:
             frmattr = copy_tuple[0]
             if len(copy_tuple) > 1:
@@ -245,13 +254,14 @@ class Message(vb.ValueBinder):
                 nextobj = getattr(nextobj, fm)
             from_attribute = nextobj
 
-            nextobj = targetmsg
-            tocomponents = toattr.split(".")
-            for to in tocomponents[:-1]:
-                nextobj = getattr(nextobj, to)
-            to_target = nextobj
+            setattratpath(targetmsg, toattr, from_attribute)
 
-            setattr(to_target, tocomponents[-1], from_attribute)
+        addlist = tform.get(transform.KeyActAdd, [])
+        for add_tuple in addlist:
+            tpath = add_tuple[0]
+            new_obj = add_tuple[1]()
+            log.debug("Adding %r at path %r", new_obj, tpath)
+            setattratpath(targetmsg, tpath, new_obj)
 
 
 class Response(Message):

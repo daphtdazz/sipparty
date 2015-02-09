@@ -94,8 +94,7 @@ class TestProtocol(unittest.TestCase):
         self.assertTrue(re.match(
             "SIP/2.0 200 OK\r\n"
             "From: sip:alice@atlanta.com;{3}\r\n"
-            # !!! We need to get a To: in here.
-            # "To: sip:bob@baltimore.com\r\n"
+            "To: sip:bob@baltimore.com;{3}\r\n"
             "Via: SIP/2.0/UDP atlanta.com;{1}\r\n"
             # 6 random hex digits followed by a date/timestamp
             "Call-ID: {0}\r\n"
