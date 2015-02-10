@@ -23,13 +23,6 @@ import vb
 log = logging.getLogger(__name__)
 
 
-class attributetomethodgenerator(type):
-    """Metaclass that catches unknown class attributes and calls a class method
-    to generate an object for them."""
-    def __getattr__(cls, name):
-        return cls.generateobjectfromname(name)
-
-
 class attributesubclassgen(type):
     """This is used as a metaclass to give automatic subclass creation from
     attribute access.

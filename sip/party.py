@@ -53,14 +53,14 @@ def SockTypeName(socktype):
 
 class PortManager(object):
 
-    _singleton = None
+    _pm_singleton = None
 
     def __new__(cls, *args, **kwargs):
-        if PortManager._singleton is None:
-            PortManager._singleton = super(PortManager, cls).__new__(
+        if PortManager._pm_singleton is None:
+            PortManager._pm_singleton = super(PortManager, cls).__new__(
                 cls, *args, **kwargs)
 
-        return PortManager._singleton
+        return PortManager._pm_singleton
 
     def find_port_and_bind(self, host=None, family=0, socktype=0,
                            address=None):
@@ -185,7 +185,7 @@ class Party(object):
             sock = self.passive_socket
 
         if sock.type == socket.SOCK_STREAM:
-            assert 0
+            assert 0, "Stream sockets not yet supported."
         else:
             data, addr = sock.recvfrom(4096)
 
