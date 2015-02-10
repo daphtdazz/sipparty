@@ -130,7 +130,7 @@ class TestProtocol(unittest.TestCase):
         invite.fromheader.value.value.uri.aor.username = "alice"
         invite.fromheader.value.value.uri.aor.host = "atlanta.com"
         invite_str = str(invite)
-        log.debug("Invite to stringify and parse: %r", str(invite))
+        log.debug("Invite to stringify and parse: %r", invite_str)
 
         new_inv = sip.message.Message.Parse(invite_str)
         self.assertEqualMessages(invite, new_inv)
