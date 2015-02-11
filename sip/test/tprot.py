@@ -237,13 +237,35 @@ class TestProtocol(unittest.TestCase):
             "o=asdf\r\n"
             "s=fadsf\r\n"
             "t=asdf\r\n"
+            "a=attr1\r\n"
+            "a=attr2\r\n"
         )
 
         sdp = sip.sdp.Body.Parse(sdpdata)
-        self.assertEqual(sdp.version, 0)
         self.assertEqual(str(sdp), sdpdata)
+        # self.assertEqual(sdp.version, 0)
 
+    def testEnum(self):
+        en = sip._util.Enum(("cat", "dog", "aardvark", "mouse"))
 
+        aniter = en.__iter__()
+        self.assertEqual(aniter.next(), "cat")
+        self.assertEqual(aniter.next(), "dog")
+        self.assertEqual(aniter.next(), "aardvark")
+        self.assertEqual(aniter.next(), "mouse")
+        self.assertRaises(StopIteration, lambda: aniter.next())
+
+        self.assertEqual(en[0], "cat")
+        self.assertEqual(en[1], "dog")
+        self.assertEqual(en[2], "aardvark")
+        self.assertEqual(en[3], "mouse")
+
+        self.assertEqual(en.index("cat"), 0)
+        self.assertEqual(en.index("dog"), 1)
+        self.assertEqual(en.index("aardvark"), 2)
+        self.assertEqual(en.index("mouse"), 3)
+
+        self.assertEqual(en[1:3], ["dog", "aardvark"])
 
 
 if __name__ == "__main__":

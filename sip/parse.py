@@ -22,7 +22,7 @@ import logging
 import pdb
 
 log = logging.getLogger(__name__)
-log.level = logging.ERROR
+log.level = logging.DEBUG
 
 
 class ParseError(Exception):
@@ -163,7 +163,7 @@ class Parser(object):
         pre = pi[Parser.RE]
         mo = pre.match(string)
         if mo is None:
-            cls.ParseFail(string)
+            cls.ParseFail(string, "Pattern was %r" % pi[Parser.Pattern])
 
         return mo
 
@@ -174,27 +174,52 @@ class Parser(object):
         from some text. If it fails to parse the text it should raise a
         ParseError.
         """
-        log.debug("%r Parse %s", cls.__name__, string)
-
-        mo = cls.SimpleParse(string)
         pi = cls.parseinfo
-        if Parser.Constructor in pi:
-            constructor_tuple = pi[Parser.Constructor]
-            log.debug("Using constructor %r", constructor_tuple)
-            constructor_gp = constructor_tuple[0]
-            constructor_func = constructor_tuple[1]
-            constructor_data = mo.group(constructor_gp)
-            obj = constructor_func(constructor_data)
-            if obj is None:
-                cls.ParseFail(
-                    string, "Could not construct the object from the data.")
-        else:
-            log.debug("No constructor: new version of class %r", cls.__name__)
-            obj = cls()
 
-        log.debug("Parse %r", obj)
-        obj.parse(string, mo)
-        return obj
+        if Parser.Repeats in pi and pi[Parser.Repeats]:
+            log.debug("Repeating parser for class %s", cls.__name__)
+            result = []
+            repeats = True
+        else:
+            log.debug("Non-repeating parser for class %s", cls.__name__)
+            repeats = False
+
+        while len(string) > 0:
+            log.debug("Parse remaining data %r", string)
+            mo = cls.SimpleParse(string)
+
+            if Parser.Constructor in pi:
+                constructor_tuple = pi[Parser.Constructor]
+                log.debug("Using constructor %r", constructor_tuple)
+                constructor_gp = constructor_tuple[0]
+                constructor_func = constructor_tuple[1]
+                constructor_data = mo.group(constructor_gp)
+                obj = constructor_func(constructor_data)
+                if obj is None:
+                    cls.ParseFail(
+                        string,
+                        "Could not construct the object from the data.")
+            else:
+                log.debug("No constructor: new version of class %r",
+                          cls.__name__)
+                obj = cls()
+
+            log.debug("Parse %r", obj)
+            obj.parse(string, mo)
+
+            if not repeats:
+                log.debug("Not a repeater; finished.")
+                result = obj
+                break
+
+            result.append(obj)
+            assert mo is not None, (
+                "A repeating parser failed a match that didn't cause an "
+                "exception.")
+            string = string[len(mo.group(0)):]
+
+        log.debug("Parse result %r", result)
+        return result
 
     def parse(self, string, mo=None):
         log.debug("%r parse %s", self, string)

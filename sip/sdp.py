@@ -29,6 +29,49 @@ class SDPNoSuchDescription(Exception):
     pass
 
 
+class Line(Parser):
+    types = _util.Enum((
+        "v", "o", "s", "i", "u", "e", "p", "c", "b", "t", "z", "k", "a", "m"))
+    longtypes = _util.Enum((
+        "version",
+        "owner",
+        "sessionname",
+        "info",
+        "uri",
+        "email",
+        "phone",
+        "connectioninfo",
+        "bandwidthinfo",
+        "time",
+        "timezone",
+        "encryptionkey",
+        "attributes",
+        "media"
+    ))
+    __metaclass__ = _util.attributesubclassgen
+
+    descvalpattern = (
+        "([^{eol}]+)[{eol}]+".format(eol=prot.EOL)
+    )
+    parseinfo = {
+        Parser.Pattern:
+            # Each valpat has a single group in it, which covers the value of
+            # the line.
+            "({types})={valpat}[{eol}]+"
+            "".format(types="|".join(types), valpat=descvalpattern,
+                      eol=prot.EOL),
+        Parser.Constructor:
+            (1, lambda t: getattr(Line, t)()),
+        Parser.Mappings:
+            [None,  # The type.
+             ("value",)],
+        Parser.Repeats: True
+    }
+
+    def __str__(self):
+        return "{self.type}={self.value}".format(self=self)
+
+
 class Body(Parser, vb.ValueBinder):
     """SDP is a thankfully tightly defined protocol, allowing this parser to
     be much more explicit. The main point is that there are 3 sections:
@@ -45,129 +88,44 @@ class Body(Parser, vb.ValueBinder):
     making the initial assumption that in SIP there will only be one.
     """
 
-    longnamestuple = (
-        "version",
-        "owner",
-        "sessionname",
-        "info",
-        "uri",
-        "email",
-        "phone",
-        "connectioninfo",
-        "bandwidthinfo",
-        "time",
-        "timezone",
-        "encryptionkey",
-        "attributes",
-        "media")
-    longnamesenum = _util.Enum(longnamestuple, normalize=lambda x: x.lower())
-    shortnamestuple = (
-        "v", "o", "s", "i", "u", "e", "p", "c", "b", "t", "z", "k", "a", "m")
-    shortnamesenum = _util.Enum(
-        shortnamestuple, normalize=lambda x: x.lower())
-
-    shorttolongmap = dict(zip(shortnamestuple, longnamestuple))
-    longtoshortmap = dict(zip(longnamestuple, shortnamestuple))
-
-    def ConvertShortToLongDesc(cls, shortdesc):
-        if shortdesc in cls.longnamesenum:
-            return cls.longnames.normalize(shortdesc)
-
-        if shortdesc not in cls.shortnamesenum:
-            raise SDPNoSuchDescription(
-                "No such description: {0}".format(shortdesc))
-
-        return cls.shorttolongmap[cls.shortnamesenum.normalize(shortdesc)]
-
-    def ConvertLongToShortDesc(cls, longdesc):
-        if longdesc in cls.shortnamesenum:
-            return cls.longnamesenum.normalize(longdesc)
-
-        if longdesc not in cls.longnamesenum:
-            raise SDPNoSuchDescription(
-                "No such description: {0}".format(longdesc))
-
-        return cls.longtoshortmap[cls.longnamesenum.normalize(longdesc)]
-
-    descvalpattern = (
-        "([^{eol}]+)[{eol}]+".format(eol=prot.EOL)
-    )
-
-    tdescpattern = (
-        "t={valpat}"
-        "((r={valpat})*)"  # May be one or more repeats.
-        "".format(valpat=descvalpattern)
-    )
-    mdescpattern = (
-        "m={valpat}"
-        "(i={valpat})?"
-        "(c={valpat})?"
-        "(b={valpat})?"
-        "(k={valpat})?"
-        "((a={valpat})*)"
-        "".format(valpat=descvalpattern)
-    )
-
     parseinfo = {
         Parser.Pattern:
-            # Each valpat has a single group in it, which covers the value of
-            # the line.
-            "v={valpat}"
-            "o={valpat}"
-            "s={valpat}"
-            "(i={valpat})?"  # Optional info line.
-            "(u={valpat})?"
-            "(e={valpat})?"
-            "(p={valpat})?"
-            "(c={valpat})?"
-            "(b={valpat})?"
-            "(({td})+)"  # There may be one or more time descriptions.
-            "(z={valpat})?"  # Timezone
-            "(k={valpat})?"  # Encryption key
-            "((a={valpat})*)"  # Zero or more attributes.
-            "(({md})*)"  # Zero or more media descriptions.
-            "".format(
-                valpat=descvalpattern, td=tdescpattern, md=mdescpattern),
+            "(([^{eol}]+[{eol}]{{,2}})+)"
+            "".format(eol=prot.EOL),
         Parser.Mappings:
-            [("version", int),
-             ("owner",),
-             ("sessionname",),
-             None, ("info",),
-             None, ("uri",),
-             None, ("email",),
-             None, ("phone",),
-             None, ("connectioninfo",),
-             None, ("bandwidthinfo",),
-             None, None, ("times",), None, None, None,
-             ("timezone",),
-             ("encryptionkey",),
-             ("attributes",), None, None,
-             ("medias",)]
+            [("lines", Line)]
     }
+
+    ZeroOrOne = "?"
+    ZeroPlus = "*"
+    OnePlus = "+"
+    validorder = (
+        # Defines the order of SDP, and how many of each type there can be.
+        # Note that for the time and media lines, there are subsidiary fields
+        # which may follow, and the number of times they may follow are
+        # denoted by the next flag in the tuple.
+        ("v", 1),
+        ("o", 1),
+        ("s", 1),
+        ("i", ZeroOrOne),  # Info line.
+        ("u", ZeroOrOne),
+        ("e", ZeroOrOne),
+        ("p", ZeroOrOne),
+        ("c", ZeroOrOne),
+        ("b", ZeroOrOne),
+        ("z", ZeroOrOne),  # Timezone
+        ("k", ZeroOrOne),  # Encryption key
+        ("a", ZeroPlus),  # Zero or more attributes.
+        ("tr", 1, ZeroPlus),  # Time descriptions followed by repeats.
+        # Zero or more media descriptions, and they may have attributes.
+        ("micbka", ZeroPlus, ZeroOrOne, ZeroOrOne, ZeroOrOne, ZeroOrOne,
+         ZeroPlus)
+    )
 
     def __str__(self):
 
         all_lines = []
-        for reqdsess in ("version", "owner", "sessionname"):
-            all_lines.append(
-                "{0}={1}".format(
-                    self.ConvertLongToShortDesc(reqdsess),
-                    str(getattr(self, reqdsess))))
-
-        for perhaps_sess in ("info", "uri"):
-            if hasattr(self, perhaps_sess):
-                all_lines.append(
-                    "{0}={1}".format(
-                        self.ConvertLongToShortDesc(perhaps_sess),
-                        str(getattr(self, perhaps_sess))))
-
-        all_lines.append("{0}={1}".format(
-            self.ConvertLongToShortDesc("time"), str(self.times)))
-        all_lines.append("")
+        for line in self.lines:
+            all_lines.append(str(line))
+        all_lines.append("")  # Always need an extra newline.
         return prot.EOL.join(all_lines)
-
-
-class SDPLine(object):
-    types = _util.Enum(
-        ("v", "o", "s", "i", "u", "e", "p", "c", "b", "z", "k", "a", "m"),
-        normalize=lambda x: x.lower())

@@ -104,12 +104,15 @@ def sipheader(key):
 
 
 class Enum(set):
-    """Thank you http://stackoverflow.com/questions/36932/
-    how-can-i-represent-an-enum-in-python"""
+    """This enum is orderd, and indexes of objects can be looked up, as well
+    as having attributes and having set behaviour and optional normalization.
+    It composes with a list to implement the listy bits.
+    """
 
     def __init__(self, vals, normalize=None):
         self.normalize = normalize
         super(self.__class__, self).__init__(vals)
+        self._en_list = list(vals)
 
     def __contains__(self, val):
         if self.normalize:
@@ -126,6 +129,15 @@ class Enum(set):
         if nn in self:
             return nn
         raise AttributeError(nn)
+
+    def __iter__(self):
+        return self._en_list.__iter__()
+
+    def __getitem__(self, index):
+        return self._en_list.__getitem__(index)
+
+    def index(self, item):
+        return self._en_list.index(item)
 
 
 class ClassType(object):
