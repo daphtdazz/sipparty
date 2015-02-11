@@ -121,6 +121,8 @@ class TestProtocol(unittest.TestCase):
                 TestProtocol.cseq_num_pattern, TestProtocol.tag_pattern),
             str(resp)), str(resp))
 
+        sdp = sip.sdp
+
         return
 
     def testParse(self):
@@ -226,6 +228,23 @@ class TestProtocol(unittest.TestCase):
         a.bind("d.x", "b.c.x")
         a.d = D
         self.assertEqual(a.d.x, 7)
+
+    def testSDP(self):
+
+        # Minimal and currently ungodly SDP.
+        sdpdata = (
+            "v=0\r\n"
+            "o=asdf\r\n"
+            "s=fadsf\r\n"
+            "t=asdf\r\n"
+        )
+
+        sdp = sip.sdp.Body.Parse(sdpdata)
+        self.assertEqual(sdp.version, 0)
+        self.assertEqual(str(sdp), sdpdata)
+
+
+
 
 if __name__ == "__main__":
     sys.exit(unittest.main())
