@@ -15,9 +15,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
+import re
 
 log = logging.getLogger(__name__)
-log.level = logging.ERROR
+log.level = logging.DEBUG
 
 
 class BindingException(Exception):
@@ -47,7 +48,7 @@ class ValueBinder(object):
 
         for reqdattr in (
                 ("_vb_forwardbindings", {}), ("_vb_backwardbindings", {}),
-                ("_vb_bindingparent", None)):
+                ("_vb_bindingparent", None), ("_vb_proxies", {})):
             # Have to set this on dict to avoid recursing, as __setattr__
             # requires these to have already been set.  Also means we need to
             # do this before calling super, in case super sets any attrs.
@@ -70,8 +71,9 @@ class ValueBinder(object):
         a.b = g
         >> a.d.e = 5
         """
-        self._vb_bindforward(frompath, topath, self, transformer)
-        self._vb_bindbackward(topath, frompath, self, None)
+        self._vb_binddirection(frompath, topath, self, transformer, 'forward')
+        self._vb_binddirection(topath, frompath, self, transformer,
+                               'backward')
 
     def unbind(self, frompath):
         """Unbind a binding."""
@@ -134,6 +136,12 @@ class ValueBinder(object):
                 "Can't set {attr!r} on {self.__class__.__name__!r} instance: "
                 "{exc}".format(**locals()))
 
+    @classmethod
+    def _ProxyRE(cls):
+        if not hasattr(cls, "_vb_proxy_re"):
+            cls._vb_proxy_re = re.compile(cls.vb_proxy_pattern)
+        return cls._vb_proxy_re
+
     def _vb_bindingsForDirection(self, direction):
         try:
             return getattr(self, "_vb_%sbindings" % direction)
@@ -193,25 +201,30 @@ class ValueBinder(object):
 
     def _vb_binddirection(self, frompath, topath, parent, transformer,
                           direction):
-        action = self._vb_bindingActionForDirection(direction)
-        action(frompath, topath, parent, transformer)
-
-    def _vb_bindforward(self, frompath, topath, parent, transformer):
-        """Bind so any change in frompath causes topath to be updated from
-        frompath (if possible).
-        E.g.
-        self._vb_bindforward("a.b", "c.d")
-        self.a.b = 6
-        """
         # Make the attribute binding dictionary if it doesn't already exist.
         _, fromattr, fromattrattrs, _, bdict = self._vb_bindingdicts(
-            frompath, "forward", create=True)
+            frompath, direction, create=True)
         bdict[ValueBinder.KeyTargetPath] = topath
         bdict[ValueBinder.KeyTransformer] = transformer
 
         currparent = self._vb_bindingparent
         assert currparent is None or currparent is parent
         self._vb_bindingparent = parent
+
+        # At this point, if the fromattr is matches, delegate to the proxy.
+        if hasattr(self, "vb_proxy_pattern"):
+            # !!! DMP: need to get rid of the proxy object, not helping.
+            # Instead just need to maintain a dictionary of attributes that
+            # affect different attributes.
+            regex = self._ProxyRE()
+            if regex.match(fromattr):
+                log.debug(
+                    "%r instance proxy attribute %r being bound %s.",
+                    self.__class__.__name__, fromattr, direction)
+                if fromattr not in self._vb_proxies:
+                    self._vb_proxies[fromattr] = VBProxy(self)
+                return self._vb_proxies[fromattr]._vb_binddirection(
+                    frompath, topath, parent, transformer, direction)
 
         if fromattrattrs:
             # This is an indirect binding, so recurse if possible.
@@ -220,54 +233,21 @@ class ValueBinder(object):
             # >> self.a.bindforward("b", ".c")
             if hasattr(self, fromattr):
                 subobj = getattr(self, fromattr)
-                if not hasattr(subobj, "_vb_bindforward"):
-                    raise TypeError(
-                        "Attribute {fromattr!r} of "
-                        "{self.__class__.__name__!r} does not support "
-                        "bindings. It "
-                        "has type {subobj.__class__.__name__!r}."
-                        "".format(**locals()))
-                subobj._vb_bindforward(
-                    fromattrattrs, ValueBinder.PS + topath, self, transformer)
+                if subobj is not None:
+                    subobj._vb_binddirection(
+                        fromattrattrs, ValueBinder.PS + topath, self,
+                        transformer, direction)
         else:
             # This is a direct binding. If we already have a value for it, set
             # the target. E.g.
             # self.bindforward("c", ".a")
             # >> self._vb_parent.a = self.c
-            if hasattr(self, fromattr):
-                val = getattr(self, fromattr)
-                self._vb_push_value_to_target(val, topath)
-
-    def _vb_bindbackward(self, frompath, topath, parent, transformer):
-        """Bind so any change in frompath causes frompath to be updated from
-        topath (if possible).
-        E.g.
-
-        """
-        # Get the binding dictionary, creating it if doesn't exist.
-        _, fromattr, fromattrattrs, _, bdict = self._vb_bindingdicts(
-            frompath, "backward", create=True)
-        bdict[ValueBinder.KeyTargetPath] = topath
-        bdict[ValueBinder.KeyTransformer] = transformer
-
-        currparent = self._vb_bindingparent
-        assert currparent is None or currparent is parent
-        self._vb_bindingparent = parent
-
-        if fromattrattrs:
-            # Indirect binding, so recurse if we have the attribute.
-            # E.g.
-            # self.bindbackward("a.b", ".c")
-            # >> self.a.bindbackward("b", "..c")
-            if hasattr(self, fromattr):
-                val = getattr(self, fromattr)
-                if val is not None:
-                    val._vb_bindbackward(
-                        fromattrattrs, ValueBinder.PS + topath, self,
-                        transformer)
-        else:
-            # Direct binding. See if we can pull the value.
-            self._vb_pull_value_to_self(fromattr, topath)
+            if direction == 'forward':
+                if hasattr(self, fromattr):
+                    val = getattr(self, fromattr)
+                    self._vb_push_value_to_target(val, topath)
+            else:
+                self._vb_pull_value_to_self(fromattr, topath)
 
     def _vb_unbinddirection(self, frompath, direction):
         bindings, fromattr, fromattrattrs, attrbindings, _ = (
@@ -301,3 +281,15 @@ class ValueBinder(object):
         else:
             nextattr = splitpath[-1]
         return nextobj, nextattr
+
+
+class VBProxy(ValueBinder):
+
+    def __init__(self, owner):
+        super(VBProxy, self).__init__()
+        self._vbp_owner = owner
+
+
+
+
+

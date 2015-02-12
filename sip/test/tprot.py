@@ -229,6 +229,75 @@ class TestProtocol(unittest.TestCase):
         a.d = D
         self.assertEqual(a.d.x, 7)
 
+    def testProxyBindings(self):
+        # Proxy bindings are for when a binding path skips items.
+        # So say you have an object graph (class in brackets):
+        #
+        #     a (A)
+        # +---+---+
+        # |       :
+        # b (B)   :
+        # |       :
+        # +-->c<--+
+        #
+        # a has attribute "c", but this is delegated through "b", i.e. when
+        # a.c is assigned to, this is passed through to b.c, and when getting
+        # a.c, "a" just returns b.c.
+        #
+        # It would be nice to be able to bind to a.c. However, if we do this
+        # then because b is out of the loop, if we modify b, neither a nor c
+        # will think that the binding has changed, because b wasn't in the
+        # binding path.
+        #
+        # So we introduce a proxy binding:
+        #
+        #     a (A)
+        # +---+---+
+        # |       :
+        # b (B) Proxy
+        # |       :
+        # +-->c<--+
+        #
+        # "A" contains templates for what should be made into proxy bindings.
+        # These are tuples containing a regex pattern of attributes that
+        # should be proxified, and the name of the attribute that needs to be
+        # updated. So here "A" has the simple template:
+        #
+        #     vbproxies = [
+        #         ("c", "b")
+        #     ]
+        #
+        # If attributes matching the regex "c" are bound to, a proxy
+        # binding is created, and the object is added to a list of items
+        # affected by changes to "b". Thus if "b" changes, then its list
+        # of affected proxy objects are updated.
+
+        class A(sip.vb.ValueBinder):
+            vb_proxy_pattern = "c"
+            def __getattr__(self, attr):
+                if attr == 'c':
+                    return getattr(self.b, 'c')
+                return getattr(super(A, self), attr)
+
+            def __setattr__(self, attr, val):
+                if attr == 'c':
+                    return setattr(self.b, attr, val)
+                return super(A, self).__setattr__(attr, val)
+
+        a = A()
+        b = sip.vb.ValueBinder()
+        a.b = b
+        b.c = 2
+        self.assertEqual(a.c, 2)
+        a.bind("c", "d")
+        self.assertEqual(a.d, 2)
+
+        # But now we change b, and d should be changed.
+        bb = sip.vb.ValueBinder()
+        bb.c = 5
+        a.b = bb
+        self.assertEqual(a.d, 5)
+
     def testSDP(self):
 
         # Minimal and currently ungodly SDP.
@@ -243,7 +312,7 @@ class TestProtocol(unittest.TestCase):
 
         sdp = sip.sdp.Body.Parse(sdpdata)
         self.assertEqual(str(sdp), sdpdata)
-        # self.assertEqual(sdp.version, 0)
+        self.assertEqual(sdp.version, 0)
 
     def testEnum(self):
         en = sip._util.Enum(("cat", "dog", "aardvark", "mouse"))
