@@ -44,17 +44,37 @@ class ValueBinder(object):
     KeyTargetPath = "targetpath"
     KeyTransformer = "transformer"
 
+    VB_Forward = 'forward'
+    VB_Backward = 'backward'
+    VB_Directions = (VB_Forward, VB_Backward)
+
     def __init__(self, *args, **kwargs):
 
         for reqdattr in (
                 ("_vb_forwardbindings", {}), ("_vb_backwardbindings", {}),
-                ("_vb_bindingparent", None), ("_vb_proxies", {})):
+                ("_vb_bindingparent", None),
+                ("_vb_leader_res", None),
+                ("_vb_followers", None),
+                ("_vb_delegate_attributes", {})):
             # Have to set this on dict to avoid recursing, as __setattr__
             # requires these to have already been set.  Also means we need to
             # do this before calling super, in case super sets any attrs.
             self.__dict__[reqdattr[0]] = reqdattr[1]
 
         super(ValueBinder, self).__init__(*args, **kwargs)
+
+        if hasattr(self, "vb_dependencies"):
+            log.debug("%r has VB dependencies", self.__class__.__name__)
+            deps = self.vb_dependencies
+            deleattrmap = self._vb_delegate_attributes
+            for dele, deleattrs in deps:
+                for deleattr in deleattrs:
+                    if deleattr in deleattrmap:
+                        raise ValueError(
+                            "Delegate attribute %r declared twice" % deleattr)
+                    log.debug("Attr %r is delegated through %r", deleattr,
+                              dele)
+                    deleattrmap[deleattr] = dele
 
     def bind(self, frompath, topath, transformer=None):
         """When any item on frompath or topath changes, set topath to frompath.
@@ -71,63 +91,46 @@ class ValueBinder(object):
         a.b = g
         >> a.d.e = 5
         """
-        self._vb_binddirection(frompath, topath, self, transformer, 'forward')
-        self._vb_binddirection(topath, frompath, self, transformer,
-                               'backward')
+        log.debug("Bind %r to %r", frompath, topath)
+        self._vb_binddirection(
+            frompath, topath, self, transformer, self.VB_Forward)
+        self._vb_binddirection(
+            topath, frompath, self, transformer, self.VB_Backward)
 
     def unbind(self, frompath):
-        """Unbind a binding."""
-        _, _, _, _, bdict = self._vb_bindingdicts(frompath, "forward")
+        """Unbind a binding. Raises NoSuchBinding() if the binding does not
+        exist."""
+        log.debug("Unbind %r", frompath)
+        _, _, _, _, bdict = self._vb_bindingdicts(frompath, self.VB_Forward)
         topath = bdict[self.KeyTargetPath]
-        self._vb_unbinddirection(frompath, "forward")
-        self._vb_unbinddirection(topath, "backward")
+        self._vb_unbinddirection(frompath, self.VB_Forward)
+        self._vb_unbinddirection(topath, self.VB_Backward)
+
+    def __getattr__(self, attr):
+        """If the attribute is a delegated attribute, gets the attribute from
+        the delegate, else calls super."""
+        if attr in self._vb_delegate_attributes:
+            return getattr(getattr(self, self._vb_delegate_attributes[attr]),
+                           attr)
+
+        if hasattr(super(ValueBinder, self), "__getattr__"):
+            return super(ValueBinder, self).__getattr__(attr)
+
+        raise AttributeError("%r instance has no attribute %r" %
+                             (self.__class__, attr))
 
     def __setattr__(self, attr, val):
+        """
+        Call super (so we don't do the rest if super fails).
 
-        if hasattr(self, attr):
-            existing_val = getattr(self, attr)
-        else:
-            existing_val = None
+        Unbind existing value.
 
-        for direction in ("forward", "backward"):
-            try:
-                _, _, _, bdicts, _ = self._vb_bindingdicts(attr, direction,
-                                                           all=True)
-            except NoSuchBinding:
-                # This attribute is not bound in this direction.
-                continue
+        Bind to attr if in a binding path.
 
-            for fromattrattrs, bdict in bdicts.iteritems():
-                if len(fromattrattrs) == 0:
-                    # This is a direct binding.
-                    #
-                    # If this is backwards then there's nothing to do, because
-                    # we are being overridden.
-                    #
-                    # If forward, then push the change to the target.
-                    if direction == "forward":
-                        # Push the change, only if it is a change to avoid
-                        # recursion.
-                        topath = bdict[ValueBinder.KeyTargetPath]
-                        if val is not existing_val:
-                            log.debug(
-                                "Push %s.%s to %s", attr, fromattrattrs,
-                                topath)
-                            self._vb_push_value_to_target(val, topath)
-                    continue
+        Propagate bindings.
+        """
 
-                # This is an indirect binding, so need to update the first
-                # item's binding.
-                if existing_val is not None:
-                    existing_val._vb_unbinddirection(fromattrattrs, direction)
-
-                if val is not None:
-                    val._vb_binddirection(
-                        fromattrattrs,
-                        ValueBinder.PS + bdict[ValueBinder.KeyTargetPath],
-                        self,
-                        bdict[ValueBinder.KeyTransformer],
-                        direction)
+        log.debug("Setattr %r", attr)
 
         try:
             super(ValueBinder, self).__setattr__(attr, val)
@@ -136,11 +139,96 @@ class ValueBinder(object):
                 "Can't set {attr!r} on {self.__class__.__name__!r} instance: "
                 "{exc}".format(**locals()))
 
+        # If this is a delegated attribute, pass through.
+        if attr in self._vb_delegate_attributes:
+            deleattr = getattr(self, self._vb_delegate_attributes[attr])
+            log.debug("Passthrough delegate attr %r to %r", attr, deleattr)
+            return setattr(deleattr, attr, val)
+
+        if attr not in set(("_vb_bindingparent", )) and hasattr(self, attr):
+            existing_val = getattr(self, attr)
+            if hasattr(existing_val, "_vb_unbind_all_parent"):
+                existing_val._vb_unbind_all_parent()
+        else:
+            existing_val = None
+
+        if hasattr(val, "_vb_binddirection"):
+            for direction in self.VB_Directions:
+                _, _, _, bs, _ = self._vb_bindingdicts(attr, direction,
+                                                       all=True)
+                for subpath, bdict in bs.iteritems():
+                    if len(subpath) == 0:
+                        continue
+                    topath = bdict[self.KeyTargetPath]
+                    subtopath = self.VB_PrependParent(topath)
+                    tf = bdict[self.KeyTransformer]
+                    log.debug("%r bind new value %r to %r", direction,
+                              subpath, subtopath)
+                    val._vb_binddirection(subpath, subtopath, self, tf,
+                                          direction)
+
+        # If this attribute is forward bound, push the value out.
+        _, _, _, fbds, _ = self._vb_bindingdicts(attr, self.VB_Forward,
+                                                 all=True)
+
+        for fromattrattrs, bdict in fbds.iteritems():
+            if len(fromattrattrs) == 0:
+                topath = bdict[ValueBinder.KeyTargetPath]
+                log.debug("Push %s.%s to %s", attr, fromattrattrs,
+                          topath)
+                self._vb_push_value_to_target(val, topath)
+
     @classmethod
-    def _ProxyRE(cls):
-        if not hasattr(cls, "_vb_proxy_re"):
-            cls._vb_proxy_re = re.compile(cls.vb_proxy_pattern)
-        return cls._vb_proxy_re
+    def VB_SplitPath(cls, path):
+        return path.split(cls.PS)
+
+    @classmethod
+    def VB_PartitionPath(cls, path):
+        first, sep, rest = path.partition(cls.PS)
+        return first, rest
+
+    @classmethod
+    def VB_JoinPath(cls, path):
+        return cls.PS.join(path)
+
+    @classmethod
+    def VB_PrependParent(cls, path):
+        lp = [path]
+        lp.insert(0, '')
+        return cls.VB_JoinPath(lp)
+
+    def _vb_unbind_all_parent(self):
+        for direction in self.VB_Directions:
+            abds = self._vb_bindingsForDirection(direction)
+            log.debug("unbind any parent bindings in %d %r bindings",
+                      len(abds), direction)
+            for attr in dict(abds):
+                _, _, _, bs, _ = self._vb_bindingdicts(
+                    attr, direction, all=True)
+                log.debug("  %d bindings through %r", len(bs), attr)
+                for subpath, bdict in dict(bs).iteritems():
+                    topath = bdict[self.KeyTargetPath]
+                    toattr, _ = self.VB_PartitionPath(topath)
+                    log.debug("  binding %r %r -> %r", attr, subpath,
+                              toattr)
+                    if len(toattr) == 0:
+                        log.debug("Unbind parent binding.")
+                        path = self.VB_JoinPath((attr, subpath))
+                        self._vb_unbinddirection(path, direction)
+
+    def _vb_resolveFromPath(self, path):
+        """Returns the actual binding path, rather than one that might be
+        through a dependency.
+
+        So if a.c resolves to a.b.c, then:
+        a._vb_resolveFromPath("c")
+        >>> "b.c"
+        """
+        attr, _ = self.VB_PartitionPath(path)
+        if attr not in self._vb_delegate_attributes:
+            return path
+
+        return self.VB_JoinPath((self._vb_delegate_attributes[attr], path))
 
     def _vb_bindingsForDirection(self, direction):
         try:
@@ -148,23 +236,39 @@ class ValueBinder(object):
         except AttributeError as exc:
             raise AttributeError(
                 str(exc) +
-                "\nAre you sure you called super().__init__() for this class?")
-
-    def _vb_bindingActionForDirection(self, direction):
-        try:
-            return getattr(self, "_vb_bind%s" % direction)
-        except AttributeError as exc:
-            raise AttributeError(
-                str(exc) +
-                "\nAre you sure you called super().__init__() for this class?")
+                " Are you sure you called super().__init__() for this class?")
 
     def _vb_bindingdicts(self, path, direction, create=False, all=False):
-        bindings = self._vb_bindingsForDirection(direction)
+        """Returns the binding information for a path and direction, if there
+        is any. If there isn't raises NoSuchBinding() unless create is
+        specified.
 
-        attr, _, attrattrs = path.partition(ValueBinder.PS)
+        bindings, attr, attrattrs, attrdict, topath = self._vb_bindingdicts(
+            path, direction)
+
+        bindings - the dictionary of bindings for the direction, keyed by
+        attribute.
+        attr - the first item of path: key into bindings.
+        attrattrs - the remainder of path, the subpath that is bound: key into
+        attrdict
+        attrdict - dictionary of all the subpaths of attr that are bound.
+        Keyed by subpath (of which attrattrs is one if not "all" requested).
+        topath - the binding dictionary (keys are KeyTargetPath and
+        KeyTransformer). None if the binding doesn't exist, empty dictionary
+        if create was specified and the binding didn't previously exist.
+
+        create - create a binding dictionary for the path if it doesn't
+        already exist
+        """
+        bindings = self._vb_bindingsForDirection(direction)
+        attr, attrattrs = self.VB_PartitionPath(path)
+
         if attr not in bindings:
             if not create:
+                if all:
+                    return bindings, attr, attrattrs, {}, None
                 raise(NoSuchBinding(path))
+
             attrdict = {}
             bindings[attr] = attrdict
         else:
@@ -178,22 +282,32 @@ class ValueBinder(object):
                         path, bindings, direction)))
             attrdict[attrattrs] = {}
 
-        if attrattrs not in attrdict:
-            if not all:
-                raise(NoSuchBinding(path))
+        if all:
             return bindings, attr, attrattrs, attrdict, None
+
+        if attrattrs not in attrdict:
+            raise NoSuchBinding(path)
 
         return bindings, attr, attrattrs, attrdict, attrdict[attrattrs]
 
     def _vb_push_value_to_target(self, value, topath):
+        log.debug("Push value to %r", topath)
         target, toattr = self._vb_resolveboundobjectandattr(topath)
         if target is not None:
-            log.debug("Pushing %r to %s", value, topath)
-            setattr(target, toattr, value)
+            if hasattr(target, toattr):
+                old_value = getattr(target, toattr)
+            else:
+                old_value = None
+            if value is not old_value:
+                log.debug("Pushing %r to %s", value, topath)
+                setattr(target, toattr, value)
+            else:
+                log.debug("Target's value already is value!")
         else:
             log.debug("Target not available to push %s", topath)
 
     def _vb_pull_value_to_self(self, myattr, topath):
+        log.debug("Pull value from %r", topath)
         target, toattr = self._vb_resolveboundobjectandattr(topath)
         if target is not None and hasattr(target, toattr):
             val = getattr(target, toattr)
@@ -201,9 +315,16 @@ class ValueBinder(object):
 
     def _vb_binddirection(self, frompath, topath, parent, transformer,
                           direction):
+        """
+        """
+        log.debug("  %r bindings before bind %r",
+                  direction,
+                  self._vb_bindingsForDirection(self.VB_Forward))
+        resolvedpath = self._vb_resolveFromPath(frompath)
+
         # Make the attribute binding dictionary if it doesn't already exist.
         _, fromattr, fromattrattrs, _, bdict = self._vb_bindingdicts(
-            frompath, direction, create=True)
+            resolvedpath, direction, create=True)
         bdict[ValueBinder.KeyTargetPath] = topath
         bdict[ValueBinder.KeyTransformer] = transformer
 
@@ -211,29 +332,18 @@ class ValueBinder(object):
         assert currparent is None or currparent is parent
         self._vb_bindingparent = parent
 
-        # At this point, if the fromattr is matches, delegate to the proxy.
-        if hasattr(self, "vb_proxy_pattern"):
-            # !!! DMP: need to get rid of the proxy object, not helping.
-            # Instead just need to maintain a dictionary of attributes that
-            # affect different attributes.
-            regex = self._ProxyRE()
-            if regex.match(fromattr):
-                log.debug(
-                    "%r instance proxy attribute %r being bound %s.",
-                    self.__class__.__name__, fromattr, direction)
-                if fromattr not in self._vb_proxies:
-                    self._vb_proxies[fromattr] = VBProxy(self)
-                return self._vb_proxies[fromattr]._vb_binddirection(
-                    frompath, topath, parent, transformer, direction)
-
         if fromattrattrs:
             # This is an indirect binding, so recurse if possible.
             # E.g.
             # self.bindforward("a.b", "c")
             # >> self.a.bindforward("b", ".c")
+            log.debug("indirect %r binding %r -> %r", direction, frompath,
+                      topath)
             if hasattr(self, fromattr):
+                log.debug("  has child at %r.", fromattr)
                 subobj = getattr(self, fromattr)
-                if subobj is not None:
+                if hasattr(subobj, "_vb_binddirection"):
+                    log.debug("  child is VB compatible.")
                     subobj._vb_binddirection(
                         fromattrattrs, ValueBinder.PS + topath, self,
                         transformer, direction)
@@ -242,16 +352,35 @@ class ValueBinder(object):
             # the target. E.g.
             # self.bindforward("c", ".a")
             # >> self._vb_parent.a = self.c
-            if direction == 'forward':
+            log.debug("direct %r binding %r -> %r", direction, frompath,
+                      topath)
+            if direction == self.VB_Forward:
                 if hasattr(self, fromattr):
+                    log.debug("  Has child attr %r", fromattr)
                     val = getattr(self, fromattr)
                     self._vb_push_value_to_target(val, topath)
             else:
+                log.debug("Pull value.")
                 self._vb_pull_value_to_self(fromattr, topath)
 
+        log.debug("  %r bindings after bind %r",
+                  direction,
+                  self._vb_bindingsForDirection(self.VB_Forward))
+
     def _vb_unbinddirection(self, frompath, direction):
+        """Unbind a particular path.
+
+        Say "c.d" is bound forward to ".e.f" on b (the parent of b is a).
+
+        b._vb_unbinddirection("c.d", VB_Forward)
+
+        would undo this, and recurse to do:
+        b.c._vb_unbinddirection("d", VB_Forward)
+        """
+        resolvedpath = self._vb_resolveFromPath(frompath)
+
         bindings, fromattr, fromattrattrs, attrbindings, _ = (
-            self._vb_bindingdicts(frompath, direction, create=False))
+            self._vb_bindingdicts(resolvedpath, direction, create=False))
 
         if len(fromattrattrs) > 0 and hasattr(self, fromattr):
             getattr(self, fromattr)._vb_unbinddirection(fromattrattrs,
@@ -262,16 +391,19 @@ class ValueBinder(object):
             del bindings[fromattr]
 
     def _vb_resolveboundobjectandattr(self, path):
+        log.debug("resolve path %r", path)
         nextobj = self
-        splitpath = path.split(ValueBinder.PS)
+        splitpath = self.VB_SplitPath(path)
         for nextattr in splitpath[0:-1]:
 
             if len(nextattr) == 0:
                 nextattr = "_vb_bindingparent"
 
+            log.debug("  try next attribute %r", nextattr)
             if not hasattr(nextobj, nextattr):
                 # This we're missing an object in the path, so need to return
                 # None.
+                log.debug("  missing")
                 nextobj = None
                 nextattr = None
                 break
@@ -281,15 +413,3 @@ class ValueBinder(object):
         else:
             nextattr = splitpath[-1]
         return nextobj, nextattr
-
-
-class VBProxy(ValueBinder):
-
-    def __init__(self, owner):
-        super(VBProxy, self).__init__()
-        self._vbp_owner = owner
-
-
-
-
-
