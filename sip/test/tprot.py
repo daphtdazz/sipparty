@@ -257,6 +257,29 @@ class TestProtocol(unittest.TestCase):
         self.assertEqual(len(b._vb_backwardbindings), 0)
         self.assertEqual(len(b._vb_forwardbindings), 0)
 
+        # Test binding to delegate attributes the other way.
+        a.bind("e", "c")
+        a.e = 7
+        self.assertEqual(a.d, 7)
+        self.assertEqual(bb.c, 7)
+        a.b = b
+        self.assertEqual(b.c, 7)
+        a.e = 9
+        self.assertEqual(bb.c, 7)
+        self.assertEqual(a.d, 9)
+        self.assertEqual(b.c, 9)
+
+        a.unbind("c")
+        a.e = 10
+        self.assertEqual(a.c, 10)
+        self.assertEqual(b.c, 10)
+        self.assertEqual(a.d, 9)
+
+        a.unbind("e")
+        for vb in (a, b, bb):
+            self.assertEqual(len(vb._vb_backwardbindings), 0)
+            self.assertEqual(len(vb._vb_forwardbindings), 0)
+
     def testSDP(self):
 
         # Minimal and currently ungodly SDP.
