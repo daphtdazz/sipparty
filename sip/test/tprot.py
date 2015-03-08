@@ -230,69 +230,11 @@ class TestProtocol(unittest.TestCase):
         self.assertEqual(a.d.x, 7)
 
     def testDependentBindings(self):
-        # Proxy bindings are for when a binding path skips items.
-        # So say you have an object graph (class in brackets):
-        #
-        #     a (A)
-        # +---+---+
-        # |       :
-        # b (B)   :
-        # |       :
-        # +-->c<--+
-        #
-        # a has attribute "c", but this is delegated through "b", i.e. when
-        # a.c is assigned to, this is passed through to b.c, and when getting
-        # a.c, "a" just returns b.c.
-        #
-        # It would be nice to be able to bind to a.c. However, if we do this
-        # then because b is out of the loop, if we modify b, neither a nor c
-        # will think that the binding has changed, because b wasn't in the
-        # binding path.
-        #
-        # So we introduce dependencies:
-        #
-        #    vb_dependencies = [
-        #        ("attribute_pattern", "dependent_attribute_pattern")
-        #    ]
-        #
-        # This tells ValueBinder that if an attribute matching
-        # "attribute_pattern" changes, then we should also update all
-        # attributes matching "dependent_attribute_pattern". To remember the
-        # order think "if this attribute changes then this attribute changes
-        # too".
-        #
-        # So we introduce a proxy binding:
-        #
-        #     a (A)
-        # +---+---+
-        # |       :
-        # b (B) Proxy
-        # |       :
-        # +-->c<--+
-        #
-        # "A" contains templates for what should be made into proxy bindings.
-        # These are tuples containing a regex pattern of attributes that
-        # should be proxified, and the name of the attribute that needs to be
-        # updated. So here "A" has the simple template:
-        #
-        #     vbproxies = [
-        #         ("c", "b")
-        #     ]
-        #
-        # If attributes matching the regex "c" are bound to, a proxy
-        # binding is created, and the object is added to a list of items
-        # affected by changes to "b". Thus if "b" changes, then its list
-        # of affected proxy objects are updated.
 
         class A(sip.vb.ValueBinder):
             vb_dependencies = [
                 ("b", ["c"])
             ]
-
-            def __getattr__(self, attr):
-                if attr == 'c':
-                    return getattr(self.b, 'c')
-                return getattr(super(A, self), attr)
 
             def __setattr__(self, attr, val):
                 if attr == 'c':
@@ -312,6 +254,8 @@ class TestProtocol(unittest.TestCase):
         bb.c = 5
         a.b = bb
         self.assertEqual(a.d, 5)
+        self.assertEqual(len(b._vb_backwardbindings), 0)
+        self.assertEqual(len(b._vb_forwardbindings), 0)
 
     def testSDP(self):
 

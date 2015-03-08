@@ -82,7 +82,7 @@ class Body(Parser, vb.ValueBinder):
 
     For sanity, sdp.Body expands the first two (so sdp.body.version gives you
     the version description), and the medias attribute is a list formed by
-    parsing MediaDesc, which is a repeating pattern.
+    parsing MediaDe2sc, which is a repeating pattern.
 
     The SDP spec says something about multiple session descriptions, but I'm
     making the initial assumption that in SIP there will only be one.

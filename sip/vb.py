@@ -132,6 +132,11 @@ class ValueBinder(object):
 
         log.debug("Setattr %r", attr)
 
+        if attr not in set(("_vb_bindingparent", )) and hasattr(self, attr):
+            existing_val = getattr(self, attr)
+        else:
+            existing_val = None
+
         try:
             super(ValueBinder, self).__setattr__(attr, val)
         except AttributeError as exc:
@@ -145,12 +150,8 @@ class ValueBinder(object):
             log.debug("Passthrough delegate attr %r to %r", attr, deleattr)
             return setattr(deleattr, attr, val)
 
-        if attr not in set(("_vb_bindingparent", )) and hasattr(self, attr):
-            existing_val = getattr(self, attr)
-            if hasattr(existing_val, "_vb_unbind_all_parent"):
-                existing_val._vb_unbind_all_parent()
-        else:
-            existing_val = None
+        if hasattr(existing_val, "_vb_unbindAllParent"):
+            existing_val._vb_unbindAllParent()
 
         if hasattr(val, "_vb_binddirection"):
             for direction in self.VB_Directions:
@@ -197,11 +198,11 @@ class ValueBinder(object):
         lp.insert(0, '')
         return cls.VB_JoinPath(lp)
 
-    def _vb_unbind_all_parent(self):
+    def _vb_unbindAllParent(self):
         for direction in self.VB_Directions:
             abds = self._vb_bindingsForDirection(direction)
-            log.debug("unbind any parent bindings in %d %r bindings",
-                      len(abds), direction)
+            log.debug("unbind any parent bindings in %d %r bindings (%r)",
+                      len(abds), direction, abds)
             for attr in dict(abds):
                 _, _, _, bs, _ = self._vb_bindingdicts(
                     attr, direction, all=True)
