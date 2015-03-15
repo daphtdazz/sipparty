@@ -56,11 +56,11 @@ class PortManager(object):
     _pm_singleton = None
 
     def __new__(cls, *args, **kwargs):
-        if PortManager._pm_singleton is None:
-            PortManager._pm_singleton = super(PortManager, cls).__new__(
+        if cls._pm_singleton is None:
+            cls._pm_singleton = super(PortManager, cls).__new__(
                 cls, *args, **kwargs)
 
-        return PortManager._pm_singleton
+        return cls._pm_singleton
 
     def find_port_and_bind(self, host=None, family=0, socktype=0,
                            address=None):
@@ -87,7 +87,7 @@ class PortManager(object):
 
         def port_generator():
             yield 5060  # Always try 5060 first.
-            for ii in range(15060, 16060):
+            for ii in range(15060, 0x10000):
                 yield ii
 
         for port in port_generator():
