@@ -112,15 +112,30 @@ class FSM(object):
         assert 0
 
     def hit(self, input):
-        assert 0
+        trans = self._fsm_transitions[self._fsm_state]
+        if input not in trans:
+            raise UnexpectedInput(
+                "Input %r to %r %r (current state %r)." %
+                (input, self.__class__.__name__, self._fsm_name,
+                 self._fsm_state))
+        res = trans[input]
+        log.debug("%r: %r -> %r", self._fsm_state, input, res)
+        self._fsm_state = res[self.KeyNewState]
 
     def checkTimers(self):
         """`checkTimers`
         """
         assert not self._fsm_use_async_timers
 
+    @property
+    def state(self):
+        return self._fsm_state
+
+    def __str__(self):
+        return "\n".join([line for line in self._fsm_strgen()])
+
     def _fsm_strgen(self):
-        yield "Finite State Machine {0!r}:".format(self._fsm_name)
+        yield "{0!r} {1!r}:".format(self.__class__.__name__, self._fsm_name)
         if len(self._fsm_transitions) == 0:
             yield "  (No states or transitions.)"
         for old_state, transitions in self._fsm_transitions.iteritems():
@@ -130,9 +145,6 @@ class FSM(object):
                     input, result[self.KeyNewState])
             yield ""
         yield "Current state: %r" % self._fsm_state
-
-    def __str__(self):
-        return "\n".join([line for line in self._fsm_strgen()])
 
 if __name__ == "__main__":
     import unittest
@@ -144,7 +156,7 @@ if __name__ == "__main__":
             nf = FSM(name="testfsm")
             self.assertEqual(
                 str(nf),
-                "Finite State Machine 'testfsm':\n"
+                "'FSM' 'testfsm':\n"
                 "  (No states or transitions.)\n"
                 "Current state: None")
 
@@ -156,7 +168,7 @@ if __name__ == "__main__":
             nf.addTransition("stopping", "stop_done", "initial")
             self.assertEqual(
                 str(nf),
-                "Finite State Machine 'testfsm':\n"
+                "'FSM' 'testfsm':\n"
                 "  'stopping':\n"
                 "    'stop_done' -> 'initial'\n"
                 "    'stop' -> 'stopping'\n"
@@ -172,5 +184,9 @@ if __name__ == "__main__":
                 "    'start_done' -> 'running'\n"
                 "\n"
                 "Current state: 'initial'")
+
+            nf.hit("start")
+            self.assertEqual(nf.state, "starting")
+            self.assertRaises(UnexpectedInput, lambda: nf.hit("stop"))
 
     unittest.main()
