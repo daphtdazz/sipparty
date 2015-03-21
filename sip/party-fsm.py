@@ -19,10 +19,11 @@ limitations under the License.
 """
 import collections
 import time
+import threading
 import logging
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.INFO)
+log.setLevel(logging.DEBUG)
 
 
 class TimerError(Exception):
@@ -151,6 +152,16 @@ class FSM(object):
 
     NextFSMNum = 1
 
+    def onlyWhenLocked(method):
+        "This is a decorator and should not be called as a method."
+        def maybeGetLock(self, *args, **kwargs):
+            if self._fsm_use_async_timers:
+                with self._fsm_lock:
+                    return method(self, *args, **kwargs)
+            else:
+                return method(self, *args, **kwargs)
+        return maybeGetLock
+
     def __init__(self, name=None, asynchronous_timers=False):
         """name: a name for this FSM for debugging purposes.
         """
@@ -165,9 +176,9 @@ class FSM(object):
         self._fsm_state = None
         self._fsm_timers = {}
         self._fsm_use_async_timers = asynchronous_timers
-
-        # Asynchronous timers are not yet implemented.
-        assert not self._fsm_use_async_timers
+        if asynchronous_timers:
+            self._fsm_thread = threading.Thread()
+            self._fsm_lock = threading.RLock()
 
     def __str__(self):
         return "\n".join([line for line in self._fsm_strgen()])
@@ -234,6 +245,7 @@ class FSM(object):
         newtimer = Timer(name, *args, **kwargs)
         self._fsm_timers[name] = newtimer
 
+    @onlyWhenLocked
     def setState(self, state):
         "Force set the state, perhaps to initialize it."
         if state not in self._fsm_transitions:
@@ -242,6 +254,7 @@ class FSM(object):
                 self._fsm_name, state)
         self._fsm_state = state
 
+    @onlyWhenLocked
     def hit(self, input):
         "Hit the FSM with input `input`."
         trans = self._fsm_transitions[self._fsm_state]
@@ -261,6 +274,7 @@ class FSM(object):
         for st in res[self.KeyStartTimers]:
             st.start()
 
+    @onlyWhenLocked
     def checkTimers(self):
         "Check all the timers that are running."
         assert not self._fsm_use_async_timers
@@ -295,6 +309,8 @@ if __name__ == "__main__":
         def setUp(self):
             self._clock = 0
             Timer.Clock = self.clock
+            self.retry = 0
+            self.cleanup = 0
 
         def testSimple(self):
             nf = FSM(name="testfsm")
@@ -336,7 +352,6 @@ if __name__ == "__main__":
         def testTimer(self):
             nf = FSM(name="TestTimerFSM")
 
-            self.retry = 0
             self.assertRaises(
                 ValueError,
                 lambda: Timer("retry", lambda: self, 1))
@@ -388,7 +403,6 @@ if __name__ == "__main__":
             def gen_timer():
                 while True:
                     yield 5
-            self.cleanup = 0
 
             def cleanup_timer():
                 self.cleanup += 1
@@ -404,5 +418,26 @@ if __name__ == "__main__":
                 cleanup += 1
                 nf.checkTimers()
                 self.assertEqual(self.cleanup, cleanup)
+
+        def testAsyncFSM(self):
+            nf = FSM(name="TestAsyncFSM", asynchronous_timers=True)
+
+            self.retry = 0
+            self.assertRaises(
+                ValueError,
+                lambda: Timer("retry", lambda: self, 1))
+
+            def pop_func():
+                self.retry += 1
+
+            nf.addTimer("retry", pop_func,
+                        [5, 5])
+            nf.addTransition("initial", "start", "starting",
+                             start_timers=["retry"])
+            nf.addTransition("starting", "start", "starting",
+                             start_timers=["retry"])
+            nf.addTransition("starting", "start_done", "running",
+                             stop_timers=["retry"])
+            nf.addTransition("running", "stop", "initial")
 
     unittest.main()
