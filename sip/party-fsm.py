@@ -357,24 +357,45 @@ if __name__ == "__main__":
             self._clock = 5
             nf.checkTimers()
             self.assertEqual(self.retry, 1)
-            self._clock = 10
+            self._clock += 5
             nf.checkTimers()
             self.assertEqual(self.retry, 2)
-            self._clock = 15
+            self._clock += 5
             nf.checkTimers()
             self.assertEqual(self.retry, 2)
 
             # Timers are capable of being restarted, so we should be able to
             # restart.
             nf.hit("start")
-            self._clock = 20
+            self._clock += 5
             nf.checkTimers()
             self.assertEqual(self.retry, 3)
 
             # Transition to running and check the timer is stopped.
             nf.hit("start_done")
-            self._clock = 25
+            self._clock += 5
             nf.checkTimers()
             self.assertEqual(self.retry, 3)
+
+            # Check generator timers work.
+            def gen_timer():
+                while True:
+                    yield 5
+            self.cleanup = 0
+
+            def cleanup_timer():
+                self.cleanup += 1
+
+            nf.addTimer("cleanup", cleanup_timer, gen_timer)
+            nf.addTransition("initial", "cleanup", "clean",
+                             start_timers=["cleanup"])
+            nf.hit("stop")
+            nf.hit("cleanup")
+            cleanup = 0
+            for ii in range(20):
+                self._clock += 5
+                cleanup += 1
+                nf.checkTimers()
+                self.assertEqual(self.cleanup, cleanup)
 
     unittest.main()
