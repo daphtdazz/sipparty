@@ -22,7 +22,7 @@ import time
 import logging
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.DEBUG)
+log.setLevel(logging.INFO)
 
 
 class TimerError(Exception):
@@ -72,13 +72,21 @@ class Timer(object):
         return "Timer(%r, action=%r, retryer=%r)" % (
             self._tmr_name, self._tmr_action, self._tmr_retryer)
 
+    @property
+    def isRunning(self):
+        # If the timer is running. A timer stops automatically after all the
+        # pauses have been tried.
+        return self._tmr_startTime is not None
+
     def start(self):
+        "Start the timer."
         log.debug("Start timer %r.", self._tmr_name)
         self._tmr_startTime = self.Clock()
         self._tmr_currentPauseIter = self._tmr_retryer()
         self._tmr_setNextPopTime()
 
     def stop(self):
+        "Stop the timer."
         self._tmr_startTime = None
         self._tmr_alarmTime = None
         self._tmr_currentPauseIter = None
@@ -101,19 +109,13 @@ class Timer(object):
 
         return res
 
-    def nextPop(self):
-        if self._tmr_alarmTime is None:
-            raise TimerNotRunning(
-                "Can't get next pop as timer %r not running." % (
-                    self._tmr_name))
-
-    @property
-    def isRunning(self):
-        return self._tmr_startTime is not None
-
+    #
+    # INTERNAL METHODS FOLLOW.
+    #
     def _tmr_setNextPopTime(self):
+        "Sets up the next pop time."
         if not self.isRunning:
-            # Not running, so
+            # Not running (perhaps the number of times to retry expired).
             return
 
         try:
@@ -131,18 +133,13 @@ class Timer(object):
                   self._tmr_alarmTime)
 
     def _tmr_pop(self):
+        "Pops this timer, calling the action."
         log.debug("POP")
         if self._tmr_action is not None:
             res = self._tmr_action()
         else:
             res = None
         return res
-
-
-class FSMTimerList(object):
-
-    def addTimer(self, timer):
-        timer.start()
 
 
 class FSM(object):
@@ -172,8 +169,24 @@ class FSM(object):
         # Asynchronous timers are not yet implemented.
         assert not self._fsm_use_async_timers
 
+    def __str__(self):
+        return "\n".join([line for line in self._fsm_strgen()])
+
+    @property
+    def state(self):
+        return self._fsm_state
+
     def addTransition(self, old_state, input, new_state, action=None,
                       start_timers=None, stop_timers=None):
+        """old_state: the state from which to transition.
+        input: the input to trigger this transition.
+        new_state: the state into which to transition
+        action: the action to perform when doing this transition (no args).
+        start_timers: list of timer names to start when doing this transition
+        (must have already been added with addTimer).
+        stop_timers: list of timer names to stop when doing this transition
+        (must have already been added with addTimer).
+        """
         if old_state not in self._fsm_transitions:
             self._fsm_transitions[old_state] = {}
 
@@ -215,12 +228,14 @@ class FSM(object):
         log.debug("%r: %r -> %r", old_state, input, result[self.KeyNewState])
 
     def addTimer(self, name, *args, **kwargs):
-        """Add a timer. Timers must be independent of transitions
-        because they may be stopped or started at any transition."""
+        """Add a timer with name `name`. Timers must be independent of
+        transitions because they may be stopped or started at any transition.
+        """
         newtimer = Timer(name, *args, **kwargs)
         self._fsm_timers[name] = newtimer
 
     def setState(self, state):
+        "Force set the state, perhaps to initialize it."
         if state not in self._fsm_transitions:
             raise ValueError(
                 "FSM %r has no state %r so it cannot be set." %
@@ -228,6 +243,7 @@ class FSM(object):
         self._fsm_state = state
 
     def hit(self, input):
+        "Hit the FSM with input `input`."
         trans = self._fsm_transitions[self._fsm_state]
         if input not in trans:
             raise UnexpectedInput(
@@ -246,20 +262,15 @@ class FSM(object):
             st.start()
 
     def checkTimers(self):
-        """`checkTimers`
-        """
+        "Check all the timers that are running."
         assert not self._fsm_use_async_timers
         for name, timer in self._fsm_timers.iteritems():
             if timer.isRunning:
                 timer.check()
 
-    @property
-    def state(self):
-        return self._fsm_state
-
-    def __str__(self):
-        return "\n".join([line for line in self._fsm_strgen()])
-
+    #
+    # INTERNAL METHODS FOLLOW.
+    #
     def _fsm_strgen(self):
         yield "{0!r} {1!r}:".format(self.__class__.__name__, self._fsm_name)
         if len(self._fsm_transitions) == 0:
@@ -272,12 +283,8 @@ class FSM(object):
             yield ""
         yield "Current state: %r" % self._fsm_state
 
-    def _fsm_startTimer(self, timer):
-        pass
-
 if __name__ == "__main__":
     import unittest
-    import pdb
     logging.basicConfig(level=logging.DEBUG)
 
     class TestFSM(unittest.TestCase):
