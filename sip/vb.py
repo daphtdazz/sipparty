@@ -18,7 +18,7 @@ import logging
 import re
 
 log = logging.getLogger(__name__)
-log.level = logging.DEBUG
+log.setLevel(logging.DEBUG)
 
 
 class BindingException(Exception):

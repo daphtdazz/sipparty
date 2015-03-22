@@ -104,7 +104,7 @@ def sipheader(key):
 
 
 class Enum(set):
-    """This enum is orderd, and indexes of objects can be looked up, as well
+    """This enum is ordered, and indexes of objects can be looked up, as well
     as having attributes and having set behaviour and optional normalization.
     It composes with a list to implement the listy bits.
     """

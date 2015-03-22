@@ -243,6 +243,15 @@ class RetryThread(threading.Thread):
 
 
 class FSM(object):
+    """Primary interface methods:
+    `addTimer` - add a timer that the transitions can control
+    `addTransition` - add a transition
+    `hit` - hit with an input. Pass args and kwargs for the action if
+    necessary.
+    `setState` - set the state, for tests primarily not recommended generally
+    (as timers etc. will not be affected).
+    `checkTimers` - see if any of the timers need popping.
+    """
 
     KeyNewState = "new state"
     KeyAction = "action"
@@ -264,6 +273,7 @@ class FSM(object):
     def __init__(self, name=None, asynchronous_timers=False):
         """name: a name for this FSM for debugging purposes.
         """
+        log.debug("FSM init")
         super(FSM, self).__init__()
 
         if name is None:
