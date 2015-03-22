@@ -20,6 +20,7 @@ limitations under the License.
 import collections
 import time
 import threading
+import weakref
 import logging
 
 log = logging.getLogger(__name__)
@@ -79,6 +80,10 @@ class Timer(object):
         # pauses have been tried.
         return self._tmr_startTime is not None
 
+    @property
+    def nextPopTime(self):
+        return self._tmr_alarmTime
+
     def start(self):
         "Start the timer."
         log.debug("Start timer %r.", self._tmr_name)
@@ -93,7 +98,7 @@ class Timer(object):
         self._tmr_currentPauseIter = None
 
     def check(self):
-        """Checks the timer, and if it has expired runs the action."""
+        "Checks the timer, and if it has expired runs the action."
         if self._tmr_alarmTime is None:
             raise TimerNotRunning(
                 "%r instance named %r not running." % (
@@ -143,6 +148,100 @@ class Timer(object):
         return res
 
 
+class RetryThread(threading.Thread):
+
+    Clock = time.clock
+
+    def __init__(self, action=None, **kwargs):
+        """Callers must be careful that they do not hold references to the
+        thread an pass in actions that hold references to themselves, which
+        leads to a retain deadlock (each hold the other so neither are ever
+        freed).
+
+        One way to get around this is to use the weakref module to ensure
+        that if the owner of this thread needs to be referenced in the action,
+        the action doesn't retain the owner.
+        """
+        super(RetryThread, self).__init__(**kwargs)
+        self._rthr_action = action
+        self._rthr_cancelled = False
+        self._rthr_retryTimes = []
+        self._rthr_newWorkCondition = threading.Condition()
+        self._rthr_nextTimesLock = threading.Lock()
+
+    def __del__(self):
+        log.debug("Deleting thread.")
+        self.cancel()
+        self.join()
+
+    def run(self):
+        """Runs until cancelled.
+
+        Note that because this method runs until cancelled, it holds a
+        reference to self, and so self cannot be garbage collected until self
+        has been cancelled. Therefore along with the note about retain
+        deadlocks in `__init__` callers would do well to call `cancel` in the
+        owner's `__del__` method.
+        """
+        while not self._rthr_cancelled:
+            log.debug("Thread not cancelled, next retry times: %r",
+                      self._rthr_retryTimes)
+
+            with self._rthr_nextTimesLock:
+                numrts = len(self._rthr_retryTimes)
+            if numrts == 0:
+                with self._rthr_newWorkCondition:
+                    self._rthr_newWorkCondition.wait()
+                log.debug("New work to do!")
+                continue
+
+            now = self.Clock()
+            with self._rthr_nextTimesLock:
+                next = self._rthr_retryTimes[0]
+            if next > now:
+                log.debug("Next try in %r seconds", next - now)
+                with self._rthr_newWorkCondition:
+                    self._rthr_newWorkCondition.wait(next - now)
+                continue
+
+            log.debug("Retrying as next %r <= now %r", next, now)
+            action = self._rthr_action
+            if action is not None:
+                action()
+            with self._rthr_nextTimesLock:
+                del self._rthr_retryTimes[0]
+
+        log.debug("Thread exiting.")
+
+    def addRetryTime(self, ctime):
+        """Add a time when we should retry the action. If the time is already
+        in the list, then the new time is not re-added."""
+        with self._rthr_nextTimesLock:
+            ii = 0
+            for ii, time in zip(
+                    range(len(self._rthr_retryTimes)), self._rthr_retryTimes):
+                if ctime < time:
+                    break
+                if ctime == time:
+                    # This time is already present, no need to re-add it.
+                    return
+            else:
+                ii = len(self._rthr_retryTimes)
+
+            new_rts = list(self._rthr_retryTimes)
+            new_rts.insert(ii, ctime)
+            self._rthr_retryTimes = new_rts
+            log.debug("Retry times: %r", self._rthr_retryTimes)
+
+        with self._rthr_newWorkCondition:
+            self._rthr_newWorkCondition.notify()
+
+    def cancel(self):
+        self._rthr_cancelled = True
+        with self._rthr_newWorkCondition:
+            self._rthr_newWorkCondition.notify()
+
+
 class FSM(object):
 
     KeyNewState = "new state"
@@ -177,8 +276,25 @@ class FSM(object):
         self._fsm_timers = {}
         self._fsm_use_async_timers = asynchronous_timers
         if asynchronous_timers:
-            self._fsm_thread = threading.Thread()
+            # If we pass ourselves directly to the RetryThread, then we'll get
+            # a retain deadlock so neither us nor the thread can be freed.
+            # Fortunately python 2.7 has a nice weak references module.
+            weak_self = weakref.ref(self)
+
+            def check_weak_self_timers():
+                strong_self = weak_self()
+                if strong_self is not None:
+                    strong_self.checkTimers()
+
+            self._fsm_thread = RetryThread(
+                action=check_weak_self_timers)
             self._fsm_lock = threading.RLock()
+            self._fsm_thread.start()
+
+    def __del__(self):
+        log.debug("Deleting FSM")
+        if self._fsm_use_async_timers:
+            self._fsm_thread.cancel()
 
     def __str__(self):
         return "\n".join([line for line in self._fsm_strgen()])
@@ -273,14 +389,17 @@ class FSM(object):
 
         for st in res[self.KeyStartTimers]:
             st.start()
+            if self._fsm_use_async_timers:
+                self._fsm_thread.addRetryTime(st.nextPopTime)
 
     @onlyWhenLocked
     def checkTimers(self):
         "Check all the timers that are running."
-        assert not self._fsm_use_async_timers
         for name, timer in self._fsm_timers.iteritems():
             if timer.isRunning:
                 timer.check()
+                if self._fsm_use_async_timers:
+                    self._fsm_thread.addRetryTime(timer.nextPopTime)
 
     #
     # INTERNAL METHODS FOLLOW.
@@ -297,6 +416,7 @@ class FSM(object):
             yield ""
         yield "Current state: %r" % self._fsm_state
 
+
 if __name__ == "__main__":
     import unittest
     logging.basicConfig(level=logging.DEBUG)
@@ -309,6 +429,7 @@ if __name__ == "__main__":
         def setUp(self):
             self._clock = 0
             Timer.Clock = self.clock
+            RetryThread.Clock = self.clock
             self.retry = 0
             self.cleanup = 0
 
@@ -422,16 +543,28 @@ if __name__ == "__main__":
         def testAsyncFSM(self):
             nf = FSM(name="TestAsyncFSM", asynchronous_timers=True)
 
-            self.retry = 0
+            retry = [0]
+
+            # Check trying to create a timer with a time that isn't iterable
+            # ("1") fails.
             self.assertRaises(
                 ValueError,
                 lambda: Timer("retry", lambda: self, 1))
 
             def pop_func():
-                self.retry += 1
+                retry[0] += 1
+
+            def wait_for(func, timeout=2):
+                now = time.clock()
+                until = now + timeout
+                while time.clock() < until:
+                    if func():
+                        break
+                else:
+                    self.assertTrue(0, "Timed out waiting for %r" % func)
 
             nf.addTimer("retry", pop_func,
-                        [5, 5])
+                        [0.1])
             nf.addTransition("initial", "start", "starting",
                              start_timers=["retry"])
             nf.addTransition("starting", "start", "starting",
@@ -439,5 +572,12 @@ if __name__ == "__main__":
             nf.addTransition("starting", "start_done", "running",
                              stop_timers=["retry"])
             nf.addTransition("running", "stop", "initial")
+
+            nf.setState("initial")
+            log.debug("Hit async FSM with start")
+            nf.hit("start")
+            self._clock = 0.1
+            log.debug("clock incremented")
+            wait_for(lambda: retry[0] == 1)
 
     unittest.main()
