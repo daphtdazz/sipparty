@@ -115,7 +115,7 @@ class Enum(set):
         self._en_list = list(vals)
 
     def __contains__(self, val):
-        if self.normalize:
+        if self.normalize is not None:
             nn = self.normalize(val)
         else:
             nn = val

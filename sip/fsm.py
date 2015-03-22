@@ -1,4 +1,4 @@
-"""party-fsm.py
+"""fsm.py
 
 Implements an `FSM` for use with sip party. This provides a generic way to
 implement arbitrary state machines, with easy support for timers.
@@ -371,8 +371,11 @@ class FSM(object):
         self._fsm_state = state
 
     @onlyWhenLocked
-    def hit(self, input):
-        "Hit the FSM with input `input`."
+    def hit(self, input, *args, **kwargs):
+        """Hit the FSM with input `input`.
+
+        args and kwargs are passed through to the action.
+        """
         trans = self._fsm_transitions[self._fsm_state]
         if input not in trans:
             raise UnexpectedInput(
@@ -381,6 +384,15 @@ class FSM(object):
                  self._fsm_state))
         res = trans[input]
         log.debug("%r: %r -> %r", self._fsm_state, input, res)
+
+        # Try `action` first; if this raises then we won't have updated the
+        # FSM... This is to make testing easier. If the opposite behaviour is
+        # desired then it might make sense to customize this class to support
+        # optionally soldiering on if `action` raises.
+        action = res[self.KeyAction]
+        if action is not None:
+            log.debug("Run transition's action %r", action)
+            action(*args, **kwargs)
 
         for st in res[self.KeyStopTimers]:
             st.stop()
@@ -422,6 +434,15 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
 
     class TestFSM(unittest.TestCase):
+
+        def wait_for(self, func, timeout=2):
+            now = time.clock()
+            until = now + timeout
+            while time.clock() < until:
+                if func():
+                    break
+            else:
+                self.assertTrue(0, "Timed out waiting for %r" % func)
 
         def clock(self):
             return self._clock
@@ -554,15 +575,6 @@ if __name__ == "__main__":
             def pop_func():
                 retry[0] += 1
 
-            def wait_for(func, timeout=2):
-                now = time.clock()
-                until = now + timeout
-                while time.clock() < until:
-                    if func():
-                        break
-                else:
-                    self.assertTrue(0, "Timed out waiting for %r" % func)
-
             nf.addTimer("retry", pop_func,
                         [0.1])
             nf.addTransition("initial", "start", "starting",
@@ -578,6 +590,34 @@ if __name__ == "__main__":
             nf.hit("start")
             self._clock = 0.1
             log.debug("clock incremented")
-            wait_for(lambda: retry[0] == 1)
+            self.wait_for(lambda: retry[0] == 1)
+
+        def testActions(self):
+            nf = FSM(name="TestActionsFSM", asynchronous_timers=True)
+
+            expect_args = 0
+            expect_kwargs = 0
+            actnow_hit = [0]
+
+            def actnow(*args, **kwargs):
+                actnow_hit[0] += 1
+                self.assertEqual(len(args), expect_args)
+                self.assertEqual(len(kwargs), expect_kwargs)
+
+            nf.addTransition("stopped", "start", "running", action=actnow)
+            expect_args = 3
+            expect_kwargs = 2
+            nf.hit("start", 1, 2, 3, a=1, b=2)
+            self.assertEqual(actnow_hit[0], 1)
+
+            actnext_hit = [0]
+
+            def actnext(arg1):
+                actnext_hit[0] += 1
+
+            nf.addTransition("running", "stop", "stopped", action=actnext)
+            self.assertRaises(TypeError, lambda: nf.hit("stop"))
+            nf.hit("stop", 1)
+            self.assertEqual(actnext_hit[0], 1)
 
     unittest.main()
