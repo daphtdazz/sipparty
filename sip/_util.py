@@ -16,6 +16,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+import types
 import logging
 import pdb
 import vb
@@ -278,3 +279,35 @@ def CCPropsFor(props):
                 cls, name, bases, dict)
 
     return CumulativeClassProperties
+
+
+class class_or_instance_method(object):
+    """This decorator allows you to make a method act on a class or an
+    instance. So:
+
+    class MyClass(object):
+        @class_or_instance_method
+        def AddProperty(cls_or_self, prop, val):
+            setattr(cls_or_self, prop, val)
+
+    inst = MyClass()
+    MyClass.AddProperty("a", 1)
+    inst.AddProperty("b", 2)
+    MyClass.a == 1  # True
+    MyClass.b # raises AttributeError
+    inst.a == 1  # True
+    inst.b == 2  # True
+    """
+
+    def __init__(self, func):
+        self._func = func
+
+    def __get__(self, obj, cls):
+        target = obj if obj is not None else cls
+
+        def class_or_instance_method_wrapper_(*args, **kwargs):
+            return self._func(target, *args, **kwargs)
+
+        class_or_instance_method_wrapper_.__name__ += self._func.__name__
+        log.debug("Returning %r", class_or_instance_method_wrapper_)
+        return class_or_instance_method_wrapper_

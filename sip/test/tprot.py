@@ -318,6 +318,22 @@ class TestProtocol(unittest.TestCase):
 
         self.assertEqual(en[1:3], ["dog", "aardvark"])
 
+    def testClassOrInstance(self):
+
+        class MyClass(object):
+
+            @sip._util.class_or_instance_method
+            def AddProperty(cls_or_self, prop, val):
+                setattr(cls_or_self, prop, val)
+
+        inst = MyClass()
+        MyClass.AddProperty("a", 1)
+        inst.AddProperty("b", 2)
+        MyClass.a == 1
+        self.assertRaises(AttributeError, lambda: MyClass.b)
+        self.assertEqual(inst.a, 1)
+        self.assertEqual(inst.b, 2)
+
 
 if __name__ == "__main__":
     sys.exit(unittest.main())
