@@ -305,9 +305,7 @@ class class_or_instance_method(object):
     def __get__(self, obj, cls):
         target = obj if obj is not None else cls
 
-        def class_or_instance_method_wrapper_(*args, **kwargs):
+        def class_or_instance_wrapper(*args, **kwargs):
             return self._func(target, *args, **kwargs)
 
-        class_or_instance_method_wrapper_.__name__ += self._func.__name__
-        log.debug("Returning %r", class_or_instance_method_wrapper_)
-        return class_or_instance_method_wrapper_
+        return class_or_instance_wrapper
