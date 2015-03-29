@@ -20,6 +20,7 @@ import time
 import logging
 import unittest
 import fsm
+import retrythread
 
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
@@ -42,7 +43,7 @@ class TestFSM(unittest.TestCase):
     def setUp(self):
         self._clock = 0
         fsm.Timer.Clock = self.clock
-        fsm.RetryThread.Clock = self.clock
+        retrythread.RetryThread.Clock = self.clock
         self.retry = 0
         self.cleanup = 0
 
