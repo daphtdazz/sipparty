@@ -20,6 +20,7 @@ limitations under the License.
 import collections
 import time
 import threading
+import Queue
 import weakref
 import logging
 import _util
@@ -248,10 +249,13 @@ class FSM(object):
             # Fortunately python 2.7 has a nice weak references module.
             weak_self = weakref.ref(self)
 
+            self._fsm_onThread = False
+            self._fsm_inputQueue = Queue.Queue()
+
             def check_weak_self_timers():
                 strong_self = weak_self()
                 if strong_self is not None:
-                    strong_self.checkTimers()
+                    strong_self._fsm_backgroundTimerPop()
 
             self._fsm_thread = retrythread.RetryThread(
                 action=check_weak_self_timers)
@@ -371,33 +375,13 @@ class FSM(object):
 
         args and kwargs are passed through to the action.
         """
-        trans = self._fsm_transitions[self._fsm_state]
-        if input not in trans:
-            raise UnexpectedInput(
-                "Input %r to %r %r (current state %r)." %
-                (input, self.__class__.__name__, self._fsm_name,
-                 self._fsm_state))
-        res = trans[input]
-        log.debug("%r: %r -> %r", self._fsm_state, input, res)
+        if self._fsm_use_async_timers and not self._fsm_onThread:
+            log.debug("Queuing input %r", input)
+            self._fsm_inputQueue.put((input, args, kwargs))
+            self._fsm_thread.addRetryTime(Timer.Clock())
+            return
 
-        # Try `action` first; if this raises then we won't have updated the
-        # FSM... This is to make testing easier. If the opposite behaviour is
-        # desired then it might make sense to customize this class to support
-        # optionally soldiering on if `action` raises.
-        action = res[self.KeyAction]
-        if action is not None:
-            log.debug("Run transition's action %r", action)
-            action(*args, **kwargs)
-
-        for st in res[self.KeyStopTimers]:
-            st.stop()
-
-        self._fsm_state = res[self.KeyNewState]
-
-        for st in res[self.KeyStartTimers]:
-            st.start()
-            if self._fsm_use_async_timers:
-                self._fsm_thread.addRetryTime(st.nextPopTime)
+        return self._fsm_hit(input, *args, **kwargs)
 
     @onlyWhenLocked
     def checkTimers(self):
@@ -454,3 +438,49 @@ class FSM(object):
                 (action, self.__class__.__name__))
 
         return new_action
+
+    def _fsm_hit(self, input, *args, **kwargs):
+        log.debug("_fsm_hit %r %r %r", input, args, kwargs)
+        trans = self._fsm_transitions[self._fsm_state]
+        if input not in trans:
+            raise UnexpectedInput(
+                "Input %r to %r %r (current state %r)." %
+                (input, self.__class__.__name__, self._fsm_name,
+                 self._fsm_state))
+        res = trans[input]
+        log.debug("%r: %r -> %r", self._fsm_state, input, res)
+
+        # Try `action` first; if this raises then we won't have updated the
+        # FSM... This is to make testing easier. If the opposite behaviour is
+        # desired then it might make sense to customize this class to support
+        # optionally soldiering on if `action` raises.
+        action = res[self.KeyAction]
+        if action is not None:
+            log.debug("Run transition's action %r", action)
+            action(*args, **kwargs)
+
+        for st in res[self.KeyStopTimers]:
+            st.stop()
+
+        self._fsm_state = res[self.KeyNewState]
+
+        for st in res[self.KeyStartTimers]:
+            st.start()
+            if self._fsm_use_async_timers:
+                self._fsm_thread.addRetryTime(st.nextPopTime)
+
+    def _fsm_backgroundTimerPop(self):
+        log.debug("_fsm_backgroundTimerPop")
+        try:
+            self._fsm_onThread = True
+
+            while not self._fsm_inputQueue.empty():
+                input, args, kwargs = self._fsm_inputQueue.get()
+                try:
+                    self._fsm_hit(input, *args, **kwargs)
+                finally:
+                    self._fsm_inputQueue.task_done()
+
+            self.checkTimers()
+        finally:
+            self._fsm_onThread = False

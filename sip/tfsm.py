@@ -16,6 +16,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+import sys
 import time
 import logging
 import unittest
@@ -29,11 +30,13 @@ log = logging.getLogger(__name__)
 class TestFSM(unittest.TestCase):
 
     def wait_for(self, func, timeout=2):
+        assert timeout > 0.05
         now = time.clock()
         until = now + timeout
         while time.clock() < until:
             if func():
                 break
+            time.sleep(0.01)
         else:
             self.assertTrue(0, "Timed out waiting for %r" % func)
 
@@ -166,6 +169,7 @@ class TestFSM(unittest.TestCase):
             lambda: fsm.Timer("retry", lambda: self, 1))
 
         def pop_func():
+            log.debug("test pop_func")
             retry[0] += 1
 
         nf.addTimer("retry", pop_func,
@@ -181,9 +185,10 @@ class TestFSM(unittest.TestCase):
         nf.setState("initial")
         log.debug("Hit async FSM with start")
         nf.hit("start")
+        self.wait_for(lambda: nf.state == "starting", timeout=2)
         self._clock = 0.1
         log.debug("clock incremented")
-        self.wait_for(lambda: retry[0] == 1)
+        self.wait_for(lambda: retry[0] == 1, timeout=2)
 
     def testActions(self):
         nf = fsm.FSM(name="TestActionsFSM", asynchronous_timers=True)
@@ -279,4 +284,5 @@ class TestFSM(unittest.TestCase):
 
         self.assertRaises(ValueError, lambda: FSMTestBadSubclass())
 
-unittest.main()
+if __name__ == "__main__":
+    sys.exit(unittest.main())
