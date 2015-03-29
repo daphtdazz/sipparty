@@ -18,6 +18,7 @@ limitations under the License.
 """
 import sys
 import time
+import socket
 import logging
 import unittest
 import fsm
@@ -250,6 +251,8 @@ class TestFSM(unittest.TestCase):
         nf.hit("start")
         self.assertEqual(actnow_hit[0], 1)
 
+        self.assertRaises(AttributeError, lambda: nf.addFDSource(1, None))
+
         self.assertEqual(nf.retries, 0)
         self._clock = 1
         nf.checkTimers()
@@ -282,6 +285,26 @@ class TestFSM(unittest.TestCase):
                              [1, 1, 1])
 
         self.assertRaises(ValueError, lambda: FSMTestBadSubclass())
+
+    def testFDSources(self):
+
+        nf = fsm.FSM(asynchronous_timers=True)
+
+        sck1, sck2 = socket.socketpair()
+
+        datalen = [0]
+        data = bytearray()
+        def sck1_data_len(sck):
+            data.extend(sck.recv(datalen[0]))
+
+        nf.addFDSource(sck2, sck1_data_len)
+        datalen[0] = 1
+        datain = b"hello world"
+        sck1.send(datain)
+
+        self.wait_for(lambda: len(data) == len(datain))
+
+        nf.rmFDSource(sck2)
 
 if __name__ == "__main__":
     sys.exit(unittest.main())

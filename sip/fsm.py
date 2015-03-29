@@ -201,6 +201,8 @@ class FSM(object):
     def onlyWhenLocked(method):
         "This is a decorator and should not be called as a method."
         def maybeGetLock(self, *args, **kwargs):
+            # This may decorate class methods, which don't have locks, so
+            # check for that here.
             if not isinstance(self, type) and self._fsm_use_async_timers:
                 with self._fsm_lock:
                     return method(self, *args, **kwargs)
@@ -368,6 +370,22 @@ class FSM(object):
                 "FSM %r has no state %r so it cannot be set." %
                 self._fsm_name, state)
         self._fsm_state = state
+
+    @onlyWhenLocked
+    def addFDSource(self, fd, action):
+        if not self._fsm_use_async_timers:
+            raise AttributeError(
+                "FD sources only supported with asynchronous FSMs.")
+
+        self._fsm_thread.addInputFD(fd, action)
+
+    @onlyWhenLocked
+    def rmFDSource(self, fd):
+        if not self._fsm_use_async_timers:
+            raise AttributeError(
+                "FD sources only supported with asynchronous FSMs.")
+
+        self._fsm_thread.rmInputFD(fd)
 
     @onlyWhenLocked
     def hit(self, input, *args, **kwargs):
