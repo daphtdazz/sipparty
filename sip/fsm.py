@@ -22,6 +22,7 @@ import time
 import threading
 import weakref
 import logging
+import _util
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -62,7 +63,7 @@ class Timer(object):
                 raise ValueError("retryer callable is not a generator.")
             retry_generator = retryer
         else:
-            raise ValueError("retryer is not an iterator or a generator")
+            raise ValueError("retryer is not a generator or iterable.")
 
         self._tmr_retryer = retry_generator
         self._tmr_currentPauseIter = None
@@ -140,7 +141,7 @@ class Timer(object):
 
     def _tmr_pop(self):
         "Pops this timer, calling the action."
-        log.debug("POP")
+        log.debug("POP, action %r", self._tmr_action)
         if self._tmr_action is not None:
             res = self._tmr_action()
         else:
@@ -243,14 +244,29 @@ class RetryThread(threading.Thread):
 
 
 class FSM(object):
-    """Primary interface methods:
-    `addTimer` - add a timer that the transitions can control
-    `addTransition` - add a transition
+    """Interface:
+
+    Class:
+    `AddClassTransitions` - for subclassing; if a subclass declares this then
+    it is called when the class is created (using the FSMType metaclass) and
+    is used to set up the standard transitions and timers for a class.
+
+    Class or instance:
+    `addTimer` - add a timer that the transitions can control. If called as a
+    class method, the timer is not created, but will be for each instance when
+    they are.
+    `addTransition` - add a transition.
+    `setState` - set the state. Use in the `AddClassTransitions` method when
+    subclassing to set the initial state. Can use on instances too for testing
+    purposes but not recommended generally (as timers etc. will not be
+    affected probably causing internal state to become inconsistent).
+
+    Instance only:
     `hit` - hit with an input. Pass args and kwargs for the action if
     necessary.
-    `setState` - set the state, for tests primarily not recommended generally
-    (as timers etc. will not be affected).
-    `checkTimers` - see if any of the timers need popping.
+
+    `checkTimers` - see if any of the timers need popping. Needs to be called
+    manually if asynchronous_timers are not in use.
     """
 
     KeyNewState = "new state"
@@ -260,14 +276,27 @@ class FSM(object):
 
     NextFSMNum = 1
 
+    class FSMType(type):
+        def __init__(self, *args, **kwargs):
+            type.__init__(self, *args, **kwargs)
+
+            self._fsm_transitions = {}
+            self._fsm_timers = {}
+            self._fsm_name = self.__name__
+            self._fsm_state = None
+
+            # Add any predefined transitions.
+            self.AddClassTransitions()
+
+    __metaclass__ = FSMType
+
     def onlyWhenLocked(method):
         "This is a decorator and should not be called as a method."
         def maybeGetLock(self, *args, **kwargs):
-            if self._fsm_use_async_timers:
+            if not isinstance(self, type) and self._fsm_use_async_timers:
                 with self._fsm_lock:
                     return method(self, *args, **kwargs)
-            else:
-                return method(self, *args, **kwargs)
+            return method(self, *args, **kwargs)
         return maybeGetLock
 
     def __init__(self, name=None, asynchronous_timers=False):
@@ -281,10 +310,31 @@ class FSM(object):
             self.__class__.NextFSMNum += 1
 
         self._fsm_name = name
+
+        # Need to learn configuration from the class.
+        class_transitions = self._fsm_transitions
         self._fsm_transitions = {}
-        self._fsm_state = None
+        class_timers = self._fsm_timers
         self._fsm_timers = {}
+
+        self._fsm_state = self._fsm_state
+
         self._fsm_use_async_timers = asynchronous_timers
+
+        # If the class had any pre-set transitions or timers, set them up now.
+        for timer_name, (action, retryer) in class_timers.iteritems():
+            self.addTimer(timer_name, action, retryer)
+
+        # Ditto for transitions.
+        for os, inp, ns, act, start_tmrs, stop_tmrs in [
+                (os, inp, result[self.KeyNewState],
+                 result[self.KeyAction],
+                 result[self.KeyStartTimers], result[self.KeyStopTimers])
+                for os, state_trans in class_transitions.iteritems()
+                for inp, result in state_trans.iteritems()]:
+            self.addTransition(
+                os, inp, ns, self._fsm_makeAction(act), start_tmrs, stop_tmrs)
+
         if asynchronous_timers:
             # If we pass ourselves directly to the RetryThread, then we'll get
             # a retain deadlock so neither us nor the thread can be freed.
@@ -313,9 +363,20 @@ class FSM(object):
     def state(self):
         return self._fsm_state
 
+    @classmethod
+    def AddClassTransitions(cls):
+        """Subclasses should override this to do initial subclass setup. It
+        is called when initializing the metaclass.
+        """
+        pass
+
+    @_util.class_or_instance_method
     def addTransition(self, old_state, input, new_state, action=None,
                       start_timers=None, stop_timers=None):
-        """old_state: the state from which to transition.
+        """Can be called either as class method or an instance method. Use as
+        a class method if you are going to use a lot of instances of the FSM.
+
+        old_state: the state from which to transition.
         input: the input to trigger this transition.
         new_state: the state into which to transition
         action: the action to perform when doing this transition (no args).
@@ -324,10 +385,16 @@ class FSM(object):
         stop_timers: list of timer names to stop when doing this transition
         (must have already been added with addTimer).
         """
-        if old_state not in self._fsm_transitions:
-            self._fsm_transitions[old_state] = {}
+        log.debug("addTransition self: %r", self)
 
-        state_trans = self._fsm_transitions[old_state]
+        self_is_class = isinstance(self, type)
+        trans_dict = self._fsm_transitions
+        timrs_dict = self._fsm_timers
+
+        if old_state not in trans_dict:
+            trans_dict[old_state] = {}
+
+        state_trans = trans_dict[old_state]
 
         if input in state_trans:
             log.debug(self)
@@ -339,12 +406,19 @@ class FSM(object):
         result = {}
         state_trans[input] = result
         result[self.KeyNewState] = new_state
-        result[self.KeyAction] = action
+        result[self.KeyAction] = self._fsm_makeAction(action)
 
         # Link up the timers.
         for key, timer_names in (
                 (self.KeyStartTimers, start_timers),
                 (self.KeyStopTimers, stop_timers)):
+
+            if self_is_class:
+                # If we're the class, just store the names. They will be
+                # converted into Timer instances when instances are created.
+                result[key] = timer_names if timer_names is not None else []
+                continue
+
             timers = []
             result[key] = timers
 
@@ -353,24 +427,28 @@ class FSM(object):
                 continue
 
             for timer_name in timer_names:
-                if timer_name not in self._fsm_timers:
+                if timer_name not in timrs_dict:
                     raise ValueError("No such timer %r." % (timer_name))
-                timers.append(self._fsm_timers[timer_name])
+                timers.append(timrs_dict[timer_name])
 
         # For convenience assume that the first transition set tells us the
         # initial state.
-        if self._fsm_state is None:
+        if not self_is_class and self._fsm_state is None:
             self.setState(old_state)
 
         log.debug("%r: %r -> %r", old_state, input, result[self.KeyNewState])
 
-    def addTimer(self, name, *args, **kwargs):
+    @_util.class_or_instance_method
+    def addTimer(self, name, action, retryer):
         """Add a timer with name `name`. Timers must be independent of
         transitions because they may be stopped or started at any transition.
         """
-        newtimer = Timer(name, *args, **kwargs)
+        newtimer = (
+            (action, retryer) if isinstance(self, type) else
+            Timer(name, self._fsm_makeAction(action), retryer))
         self._fsm_timers[name] = newtimer
 
+    @_util.class_or_instance_method
     @onlyWhenLocked
     def setState(self, state):
         "Force set the state, perhaps to initialize it."
@@ -438,6 +516,37 @@ class FSM(object):
             yield ""
         yield "Current state: %r" % self._fsm_state
 
+    @_util.class_or_instance_method
+    def _fsm_makeAction(self, action):
+        """action is either a callable, which is called directly, or it is a
+        method name, in which case we bind it to a method if we can.
+        """
+        log.debug("make action %r", action)
+
+        if action is None:
+            return None
+
+        if isinstance(action, collections.Callable):
+            return action
+
+        if isinstance(self, type):
+            # Delay deciding whether the action is appropriate because we
+            # can't bind the action name to a method at this point as we are
+            # the class not the instance.
+            return action
+
+        if not hasattr(self, action):
+            raise ValueError(
+                "Action %r is not a callable or a method on %r object." %
+                (action, self.__class__.__name__))
+
+        new_action = getattr(self, action)
+        if not isinstance(new_action, collections.Callable):
+            raise ValueError(
+                "Action %r is not a callable or a method on %r object." %
+                (action, self.__class__.__name__))
+
+        return new_action
 
 if __name__ == "__main__":
     import unittest
@@ -629,5 +738,71 @@ if __name__ == "__main__":
             self.assertRaises(TypeError, lambda: nf.hit("stop"))
             nf.hit("stop", 1)
             self.assertEqual(actnext_hit[0], 1)
+
+        def testFSMClass(self):
+
+            actnow_hit = [0]
+
+            def actnow(*args, **kwargs):
+                actnow_hit[0] += 1
+
+            class FSMTestSubclass(FSM):
+
+                @classmethod
+                def AddClassTransitions(cls):
+                    log.debug("Test add class transitions.")
+                    cls.addTimer("retry_start", "retry_start",
+                                 [1, 1, 1])
+                    cls.addTransition("stopped", "start", "starting",
+                                      start_timers=["retry_start"],
+                                      action=actnow)
+                    cls.addTransition("starting", "start_done", "running",
+                                      stop_timers=["retry_start"])
+                    cls.addTransition("running", "stop", "stopped")
+                    cls.setState("stopped")
+
+                def __init__(self, *args, **kwargs):
+                    super(FSMTestSubclass, self).__init__(*args, **kwargs)
+                    self.retries = 0
+
+                def retry_start(self):
+                    self.retries += 1
+
+            nf = FSMTestSubclass()
+            nf.hit("start")
+            self.assertEqual(actnow_hit[0], 1)
+
+            self.assertEqual(nf.retries, 0)
+            self._clock = 1
+            nf.checkTimers()
+            self.assertEqual(nf.retries, 1)
+            nf.hit("start_done")
+            self._clock = 2
+            nf.checkTimers()
+            self.assertEqual(nf.retries, 1)
+            nf.hit("stop")
+            nf.hit("start")
+
+            # The timer endeavours not to lose pops, so if we set the clock
+            # forward some number of seconds and check 3 times in a row, we
+            # should pop on each one.
+            self._clock = 10
+            nf.checkTimers()
+            self.assertEqual(nf.retries, 2)
+            nf.checkTimers()
+            self.assertEqual(nf.retries, 3)
+            nf.checkTimers()
+            self.assertEqual(nf.retries, 4)
+            nf.checkTimers()
+            self.assertEqual(nf.retries, 4)
+
+            class FSMTestBadSubclass(FSM):
+                @classmethod
+                def AddClassTransitions(cls):
+                    log.debug("Test bad method.")
+                    cls.addTimer("retry_start", "not-a-method",
+                                 [1, 1, 1])
+
+            self.assertRaises(ValueError, lambda: FSMTestBadSubclass())
 
     unittest.main()
