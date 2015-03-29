@@ -206,7 +206,7 @@ class TestFSM(unittest.TestCase):
         expect_args = 3
         expect_kwargs = 2
         nf.hit("start", 1, 2, 3, a=1, b=2)
-        self.assertEqual(actnow_hit[0], 1)
+        self.wait_for(lambda: actnow_hit[0] == 1)
 
         actnext_hit = [0]
 
@@ -214,9 +214,8 @@ class TestFSM(unittest.TestCase):
             actnext_hit[0] += 1
 
         nf.addTransition("running", "stop", "stopped", action=actnext)
-        self.assertRaises(TypeError, lambda: nf.hit("stop"))
         nf.hit("stop", 1)
-        self.assertEqual(actnext_hit[0], 1)
+        self.wait_for(lambda: actnext_hit[0] == 1)
 
     def testFSMClass(self):
 

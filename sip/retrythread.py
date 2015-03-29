@@ -33,9 +33,34 @@ limitations under the License.
 """
 import time
 import threading
+import socket
+import select
 import logging
 
 log = logging.getLogger(__name__)
+
+
+class _FDSource(object):
+
+    def __init__(self, selectable, action):
+        if not (isinstance(selectable, int) or hasattr(selectable, "fileno")):
+            raise ValueError(
+                "FD object %r is not selectable (is an int or implements "
+                "fileno())." % fd)
+
+        super(_FDSource, self).__init__()
+        self._fds_selectable = selectable
+        self._fds_int = (
+            self._fds_selectable
+            if isinstance(self._fds_selectable, int) else
+            self._fds_selectable.fileno())
+        self._fds_action = action
+
+    def __int__(self):
+        return self._fds_int
+
+    def newDataAvailable(self):
+        self._fds_action(self._fds_selectable)
 
 
 class RetryThread(threading.Thread):
@@ -56,8 +81,13 @@ class RetryThread(threading.Thread):
         self._rthr_action = action
         self._rthr_cancelled = False
         self._rthr_retryTimes = []
-        self._rthr_newWorkCondition = threading.Condition()
         self._rthr_nextTimesLock = threading.Lock()
+
+        self._rthr_fdSources = {}
+
+        self._rthr_triggerRunFD, output = socket.socketpair()
+
+        self.addInputFD(output, lambda selectable: selectable.recv(1))
 
     def __del__(self):
         log.debug("Deleting thread.")
@@ -73,25 +103,27 @@ class RetryThread(threading.Thread):
         deadlocks in `__init__` callers would do well to call `cancel` in the
         owner's `__del__` method.
         """
+        wait = 3600  # an hour if
         while not self._rthr_cancelled:
-            log.debug("Thread not cancelled, next retry times: %r",
-                      self._rthr_retryTimes)
+            log.debug("Thread not cancelled, next retry times: %r, wait: %d",
+                      self._rthr_retryTimes, wait)
 
+            rsrcs = self._rthr_fdSources.keys()
+            rfds, wfds, efds = select.select(rsrcs, [], rsrcs, wait)
+            self._rthr_processSelectedReadFDs(rfds)
+
+            # Check timers.
             with self._rthr_nextTimesLock:
                 numrts = len(self._rthr_retryTimes)
-            if numrts == 0:
-                with self._rthr_newWorkCondition:
-                    self._rthr_newWorkCondition.wait()
-                log.debug("New work to do!")
-                continue
+                if numrts == 0:
+                    wait = 3600
+                    continue
+                next = self._rthr_retryTimes[0]
 
             now = self.Clock()
-            with self._rthr_nextTimesLock:
-                next = self._rthr_retryTimes[0]
             if next > now:
-                log.debug("Next try in %r seconds", next - now)
-                with self._rthr_newWorkCondition:
-                    self._rthr_newWorkCondition.wait(next - now)
+                wait = next - now
+                log.debug("Next try in %r seconds", wait)
                 continue
 
             log.debug("Retrying as next %r <= now %r", next, now)
@@ -101,7 +133,22 @@ class RetryThread(threading.Thread):
             with self._rthr_nextTimesLock:
                 del self._rthr_retryTimes[0]
 
+            # Immediately respin since we haven't checked the next timer yet.
+            wait = 0
+
         log.debug("Thread exiting.")
+
+    def addInputFD(self, fd, action):
+        """Add file descriptor `fd` as a source to wait for data from, with
+        `action` to be called when there is data available from `fd`.
+        """
+        newinput = _FDSource(fd, action)
+        newinputint = int(newinput)
+        if newinputint in self._rthr_fdSources:
+            raise ValueError(
+                "Duplicate FD source %r added to thread." % newinput)
+
+        self._rthr_fdSources[newinputint] = newinput
 
     def addRetryTime(self, ctime):
         """Add a time when we should retry the action. If the time is already
@@ -123,10 +170,16 @@ class RetryThread(threading.Thread):
             self._rthr_retryTimes = new_rts
             log.debug("Retry times: %r", self._rthr_retryTimes)
 
-        with self._rthr_newWorkCondition:
-            self._rthr_newWorkCondition.notify()
+        self._rthr_triggerRunFD.send('1')
 
     def cancel(self):
         self._rthr_cancelled = True
-        with self._rthr_newWorkCondition:
-            self._rthr_newWorkCondition.notify()
+        self._rthr_triggerRunFD.send('1')
+
+    #
+    # INTERNAL METHODS
+    #
+    def _rthr_processSelectedReadFDs(self, rfds):
+        for rfd in rfds:
+            fdsrc = self._rthr_fdSources[rfd]
+            fdsrc.newDataAvailable()
