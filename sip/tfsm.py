@@ -19,8 +19,10 @@ limitations under the License.
 import sys
 import time
 import socket
+import threading
 import logging
 import unittest
+import pdb
 import fsm
 import retrythread
 
@@ -283,7 +285,6 @@ class TestFSM(unittest.TestCase):
                 log.debug("Test bad method.")
                 cls.addTimer("retry_start", "not-a-method",
                              [1, 1, 1])
-
         self.assertRaises(ValueError, lambda: FSMTestBadSubclass())
 
     def testFDSources(self):
@@ -294,6 +295,7 @@ class TestFSM(unittest.TestCase):
 
         datalen = [0]
         data = bytearray()
+
         def sck1_data_len(sck):
             data.extend(sck.recv(datalen[0]))
 
@@ -304,7 +306,37 @@ class TestFSM(unittest.TestCase):
 
         self.wait_for(lambda: len(data) == len(datain))
 
+        log.debug("Remove source %d -> %d", sck2.fileno(), sck1.fileno())
         nf.rmFDSource(sck2)
+
+    def testThreads(self):
+
+        thr_res = [0]
+
+        def runthread():
+            thr_res[0] += 1
+
+        class ThreadFSM(fsm.FSM):
+            def thrmethod(self):
+                thr_res[0] += 1
+
+        nf = ThreadFSM()
+
+        bgthread = threading.Thread(name="bgthread", target=runthread)
+
+        nf.addTransition("not_running", "start", "running",
+                         start_threads=[("runthread", runthread)],
+                         join_threads=["not-running"])
+        nf.addTransition("running", "jump", "jumping",
+                         start_threads=[("thrmethod", "thrmethod")])
+        nf.addTransition("jumping", "stop", "not_running",
+                         join_threads=["thrmethod"])
+
+        for ii in range(8):
+            nf.hit("start")
+            nf.hit("jump")
+            nf.hit("stop")
+        self.assertEqual(thr_res[0], 8 * 2)
 
 if __name__ == "__main__":
     sys.exit(unittest.main())

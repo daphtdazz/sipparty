@@ -78,6 +78,10 @@ class Timer(object):
             self._tmr_name, self._tmr_action, self._tmr_retryer)
 
     @property
+    def name(self):
+        return self._tmr_name
+
+    @property
     def isRunning(self):
         # If the timer is running. A timer stops automatically after all the
         # pauses have been tried.
@@ -181,6 +185,8 @@ class FSM(object):
     KeyAction = "action"
     KeyStartTimers = "start timers"
     KeyStopTimers = "stop timers"
+    KeyStartThreads = "start threads"
+    KeyJoinThreads = "join threads"
 
     NextFSMNum = 1
 
@@ -219,7 +225,10 @@ class FSM(object):
             name = str(self.__class__.NextFSMNum)
             self.__class__.NextFSMNum += 1
 
+        self._fsm_runningThreads = {}  # Dictionary keyed by thread name.
+        self._fsm_oldThreads = []
         self._fsm_name = name
+        self._fsm_use_async_timers = asynchronous_timers
 
         # Need to learn configuration from the class.
         class_transitions = self._fsm_transitions
@@ -228,8 +237,6 @@ class FSM(object):
         self._fsm_timers = {}
 
         self._fsm_state = self._fsm_state
-
-        self._fsm_use_async_timers = asynchronous_timers
 
         # If the class had any pre-set transitions or timers, set them up now.
         for timer_name, (action, retryer) in class_timers.iteritems():
@@ -268,6 +275,7 @@ class FSM(object):
         log.debug("Deleting FSM")
         if self._fsm_use_async_timers:
             self._fsm_thread.cancel()
+            self._fsm_thread.join()
 
     def __str__(self):
         return "\n".join([line for line in self._fsm_strgen()])
@@ -285,7 +293,8 @@ class FSM(object):
 
     @_util.class_or_instance_method
     def addTransition(self, old_state, input, new_state, action=None,
-                      start_timers=None, stop_timers=None):
+                      start_timers=None, stop_timers=None,
+                      start_threads=None, join_threads=None):
         """Can be called either as class method or an instance method. Use as
         a class method if you are going to use a lot of instances of the FSM.
 
@@ -320,6 +329,12 @@ class FSM(object):
         state_trans[input] = result
         result[self.KeyNewState] = new_state
         result[self.KeyAction] = self._fsm_makeAction(action)
+
+        result[self.KeyStartThreads] = (
+            start_threads if start_threads is not None else [])
+
+        result[self.KeyJoinThreads] = (
+            join_threads if join_threads is not None else [])
 
         # Link up the timers.
         for key, timer_names in (
@@ -449,15 +464,32 @@ class FSM(object):
                 "Action %r is not a callable or a method on %r object." %
                 (action, self.__class__.__name__))
 
+        # Have to be careful not to retain ourselves, so use weak references.
         new_action = getattr(self, action)
         if not isinstance(new_action, collections.Callable):
             raise ValueError(
                 "Action %r is not a callable or a method on %r object." %
                 (action, self.__class__.__name__))
 
-        return new_action
+        weak_self = weakref.ref(self)
+
+        def weak_action(*args, **kwargs):
+            strong_self = weak_self()
+            if strong_self is not None:
+                getattr(strong_self, action)(*args, **kwargs)
+
+        return weak_action
 
     def _fsm_hit(self, input, *args, **kwargs):
+        """When the FSM is hit, the following actions are taken in the
+        following order:
+
+        1. Join any threads we're expecting to join.
+        2. Stop any timers we're expecting are running.
+        3. Update the state.
+        4. Start any timers for the transition.
+        5. Start any threads
+        """
         log.debug("_fsm_hit %r %r %r", input, args, kwargs)
         trans = self._fsm_transitions[self._fsm_state]
         if input not in trans:
@@ -468,24 +500,67 @@ class FSM(object):
         res = trans[input]
         log.debug("%r: %r -> %r", self._fsm_state, input, res)
 
-        # Try `action` first; if this raises then we won't have updated the
-        # FSM... This is to make testing easier. If the opposite behaviour is
-        # desired then it might make sense to customize this class to support
-        # optionally soldiering on if `action` raises.
-        action = res[self.KeyAction]
-        if action is not None:
-            log.debug("Run transition's action %r", action)
-            action(*args, **kwargs)
+        for thrname in res[self.KeyJoinThreads]:
+            if thrname not in self._fsm_runningThreads:
+                log.warning(
+                    "FSM %r could not stop thread %r on transition %r: %r -> "
+                    "%r as it was not running.",
+                    self._fsm_name, thrname, input, self.state,
+                    res[self.KeyNewState])
+                continue
+
+            log.debug("join thread %r", thrname)
+            thr = self._fsm_runningThreads.pop(thrname)
+            thr.join()
 
         for st in res[self.KeyStopTimers]:
+            log.debug("Stop timer %r", st.name)
             st.stop()
 
         self._fsm_state = res[self.KeyNewState]
 
+        action = res[self.KeyAction]
+        if action is not None:
+            log.debug("Run transition's action %r", action)
+            try:
+                action(*args, **kwargs)
+            except Exception as exc:
+                log.exception("Hit exception processing FSM action %r." %
+                              action)
+
         for st in res[self.KeyStartTimers]:
+            log.debug("Start timer %r", st.name)
             st.start()
             if self._fsm_use_async_timers:
                 self._fsm_thread.addRetryTime(st.nextPopTime)
+
+        for thrname, thr in res[self.KeyStartThreads]:
+            log.debug("Start thread %r", thrname)
+            thrAction = self._fsm_makeAction(thr)
+            thrThread = threading.Thread(target=thrAction, name=thrname)
+            thrThread.start()
+
+            if thrname in self._fsm_runningThreads:
+                self._fsm_oldThreads.append(
+                    self._fsm_runningThreads.pop(thrname))
+
+            self._fsm_runningThreads[thrname] = thrThread
+
+        # Remove old threads. This is in reverse order so that we can just
+        # remove the indexes as we find them.
+        for index, oldthread in zip(
+                range(len(self._fsm_oldThreads) - 1, 0, -1),
+                self._fsm_oldThreads[::-1]):
+
+            if oldthread.isAlive():
+                log.warning("Old thread %r still alive.", oldthread.name)
+                continue
+
+            log.debug("Join old thread %r", oldthread.name)
+            oldthread.join()
+            del self._fsm_oldThreads[index]
+
+        log.debug("Done hit.")
 
     def _fsm_backgroundTimerPop(self):
         log.debug("_fsm_backgroundTimerPop")
