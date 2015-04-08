@@ -243,14 +243,16 @@ class FSM(object):
             self.addTimer(timer_name, action, retryer)
 
         # Ditto for transitions.
-        for os, inp, ns, act, start_tmrs, stop_tmrs in [
+        for os, inp, ns, act, start_tmrs, stop_tmrs, strt_thrs, join_thrs in [
                 (os, inp, result[self.KeyNewState],
                  result[self.KeyAction],
-                 result[self.KeyStartTimers], result[self.KeyStopTimers])
+                 result[self.KeyStartTimers], result[self.KeyStopTimers],
+                 result[self.KeyStartThreads], result[self.KeyJoinThreads])
                 for os, state_trans in class_transitions.iteritems()
                 for inp, result in state_trans.iteritems()]:
             self.addTransition(
-                os, inp, ns, self._fsm_makeAction(act), start_tmrs, stop_tmrs)
+                os, inp, ns, self._fsm_makeAction(act), start_tmrs, stop_tmrs,
+                strt_thrs, join_thrs)
 
         if asynchronous_timers:
             # If we pass ourselves directly to the RetryThread, then we'll get
@@ -488,7 +490,8 @@ class FSM(object):
         2. Stop any timers we're expecting are running.
         3. Update the state.
         4. Start any timers for the transition.
-        5. Start any threads
+        5. Start any threads.
+        6. If there are any old threads, tidy them up.
         """
         log.debug("_fsm_hit %r %r %r", input, args, kwargs)
         trans = self._fsm_transitions[self._fsm_state]

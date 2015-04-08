@@ -317,6 +317,18 @@ class TestFSM(unittest.TestCase):
             thr_res[0] += 1
 
         class ThreadFSM(fsm.FSM):
+
+            @classmethod
+            def AddClassTransitions(cls):
+                cls.addTransition(
+                    "not_running", "start", "running",
+                    start_threads=[("runthread", runthread)],
+                    join_threads=["not-running"])
+                cls.addTransition(
+                    "running", "jump", "jumping",
+                    start_threads=[("thrmethod", "thrmethod")])
+                cls.setState("not_running")
+
             def thrmethod(self):
                 thr_res[0] += 1
 
@@ -324,11 +336,6 @@ class TestFSM(unittest.TestCase):
 
         bgthread = threading.Thread(name="bgthread", target=runthread)
 
-        nf.addTransition("not_running", "start", "running",
-                         start_threads=[("runthread", runthread)],
-                         join_threads=["not-running"])
-        nf.addTransition("running", "jump", "jumping",
-                         start_threads=[("thrmethod", "thrmethod")])
         nf.addTransition("jumping", "stop", "not_running",
                          join_threads=["thrmethod"])
 
