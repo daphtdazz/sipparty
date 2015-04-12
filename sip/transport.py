@@ -105,11 +105,14 @@ class TransportFSM(fsm.FSM):
          "connected",
          "error"))
     Inputs = _util.Enum(
-        ("connect", "listen", "connected", "accepted", "disconnect", "error",
+        ("connect", "listen", "connected",
+         "send",
+         "disconnect", "error",
          "reset"))
     Actions = _util.Enum(
         ("createConnect", "attemptConnect",
-         "createListen", "startListening", "accepted",
+         "createListen", "startListening", "becomesConnected",
+         "send",
          "becomesDisconnected", "error"))
 
     @classmethod
@@ -118,45 +121,38 @@ class TransportFSM(fsm.FSM):
         S = cls.States
         I = cls.Inputs
         A = cls.Actions
+        Add = cls.addTransition
 
         # Transitions when connecting out.
-        cls.addTransition(  # Start the connect process.
-            S.disconnected, I.connect, S.connecting,
+        Add(S.disconnected, I.connect, S.connecting,  # Start connecting.
             action=A.createConnect,
             start_threads=[A.attemptConnect])
-        cls.addTransition(  # Error cases.
-            S.connecting, I.error, S.error,
+        Add(S.connecting, I.error, S.error,
             action=A.error)
-        cls.addTransition(  # Connect succeeds.
-            S.connecting, I.connected, S.connected,
-            action=None,
-            join_threads=[A.attemptConnect])
-
-        # Disconnect.
-        cls.addTransition(
-            S.connected, I.disconnect, S.disconnected,
-            action=A.becomesDisconnected)
+        Add(S.connecting, I.connected, S.connected,
+            action=A.becomesConnected)
 
         # Transitions when being connected to.
-        cls.addTransition(  # Start listening and waiting for an accept.
-            S.disconnected, I.listen, S.listening,
+        Add(S.disconnected, I.listen, S.listening,
             action=A.createListen,
             start_threads=[A.startListening])
-        cls.addTransition(  # Error.
-            S.listening, I.error, S.error,
+        Add(S.listening, I.error, S.error,
             action=A.error)
-        cls.addTransition(  # Successful listen.
-            S.listening, I.accepted, S.connected,
-            action=A.accepted,
-            join_threads=[A.startListening])
+        Add(S.listening, I.connected, S.connected,
+            action=A.becomesConnected)
+
+        # Actions when in the connected state.
+        Add(S.connected, I.send, S.connected,
+            action=A.send)
+        Add(S.connected, I.error, S.error,
+            action=A.becomesDisconnected)
+        Add(S.connected, I.disconnect, S.disconnected,
+            action=A.becomesDisconnected)
 
         # Error in error and reset from an error.
-        # cls.addTransition(S.error, I.error, S.error)
-        cls.addTransition(
-            S.error, I.reset, S.disconnected,
-            join_threads=[A.startListening, A.attemptConnect])
+        Add(S.error, I.reset, S.disconnected)
 
-        # Same transition for disconnected.
+        # Start disconnected.
         cls.setState(S.disconnected)
 
     def __init__(self, *args, **kwargs):
@@ -175,10 +171,13 @@ class TransportFSM(fsm.FSM):
         la = self.__dict__["_tfsm_localAddress"] = [None, 0, 0, 0]
         self._tfsm_remoteAddress = None
 
+        self._tfsm_receiveSize = 4096
         self._tfsm_timeout = 2
 
         self._tfsm_listenSck = None
         self._tfsm_activeSck = None
+        self._tfsm_buffer = bytearray()
+        self._tfsm_byteConsumer = None
 
         # BSD (Mac OS X anyway) seems not to propagate an error to an accept
         # call on a socket if you close it from a different thread. So need
@@ -198,6 +197,9 @@ class TransportFSM(fsm.FSM):
         "_tfsm_localAddressPort",
         lambda val: 0 <= val <= 0xffff)
     localAddressHost = _util.DerivedProperty("_tfsm_localAddressHost")
+    byteConsumer = _util.DerivedProperty(
+        "_tfsm_byteConsumer",
+        lambda val: isinstance(val, collections.Callable))
 
     def block_until_states(states):
         "This is a descriptor, so don't call it as a method."
@@ -247,12 +249,14 @@ class TransportFSM(fsm.FSM):
     def reset(self):
         self.hit(self.Inputs.reset)
 
-    #
     # ACTIONS ACTIONS ACTIONS ACTIONS ACTIONS ACTIONS ACTIONS ACTIONS ACTIONS
     #
     # These actions are expected to be done synchronously on the main FSM
     # thread, therefore they should not block. Blocking function should be
     # done in the THREADS methods below.
+    #
+    # They should not be called directly; all interaction with the FSM should
+    # be via one of the PUBLIC methods, and in particular the hit() method.
     #
     def createConnect(self, addr_tuple):
 
@@ -302,25 +306,26 @@ class TransportFSM(fsm.FSM):
 
     def becomesConnected(self):
         "Called when the transport becomes connected"
-        self.addFDSource(self._tfsm_activeSck, self.dataAvailable)
+        self.addFDSource(self._tfsm_activeSck, self._tfsm_dataAvailable)
 
     def becomesDisconnected(self):
         "Called when the transport goes down."
-        self.rmFDSource(self, self._tfsm_activeSck)
+        self.rmFDSource(self._tfsm_activeSck)
         for sck in (self._tfsm_activeSck, self._tfsm_listenSck):
             if sck is not None:
-                sck.shutdown()
                 sck.close()
         self._tfsm_activeSck = None
         self._tfsm_listenSck = None
 
-    def accepted(self):
-        "We just accepted an inbound connection."
+    def send(self, data):
+        "Send some data."
+        datalen = len(data)
+        sck = self._tfsm_activeSck
 
-    def dataAvailable(self, sck):
-        """This method is registered when connected with the FSM's thread to
-        be called when there is data available on the socket.
-        """
+        sent_bytes = sck.send(data)
+        if sent_bytes != datalen:
+            self.error("Failed to send %d bytes of data." %
+                       (datalen - sent_bytes))
 
     def error(self, msg="unknown error"):
         "We've hit an error."
@@ -337,7 +342,6 @@ class TransportFSM(fsm.FSM):
 
         log.error(msg)
 
-    #
     # THREADS THREADS THREADS THREADS THREADS THREADS THREADS THREADS THREADS
     #
     def attemptConnect(self):
@@ -392,7 +396,8 @@ class TransportFSM(fsm.FSM):
             try:
                 conn, addr = lsck.accept()
                 log.debug("Connection accepted from %r.", addr)
-                self.hit(self.Inputs.accepted, conn, addr)
+                self._tfsm_activeSck = conn
+                self.hit(self.Inputs.connected)
                 break
             except socket.timeout:
 
@@ -433,3 +438,29 @@ class TransportFSM(fsm.FSM):
     @_tfsm_localAddressPort.setter
     def _tfsm_localAddressPort(self, val):
         la = self.__dict__["_tfsm_localAddress"][1] = val
+
+    def _tfsm_dataAvailable(self, sck):
+        """This method is registered when connected with the FSM's thread to
+        be called when there is data available on the socket.
+        """
+        string, address = sck.recvfrom(self._tfsm_receiveSize)
+        strlen = len(string)
+        log.debug("Received %d bytes from %r.", strlen, address)
+        self._tfsm_buffer.extend(bytearray(string))
+
+        if self._tfsm_byteConsumer is None:
+            log.debug("No consumer; dumping bytes: %r.", self._tfsm_buffer)
+            del self._tfsm_buffer[:]
+
+        else:
+            while True:
+                bytes_consumed = self._tfsm_byteConsumer(self._tfsm_buffer)
+                if bytes_consumed == 0:
+                    log.debug("Can consume no more bytes now.")
+                    break
+
+                    del self._tfsm_buffer[:bytes_consumed]
+
+        if strlen == 0:
+            log.debug("Received 0 bytes: socket has demurely.")
+            self.hit(self.Inputs.disconnect)

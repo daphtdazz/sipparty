@@ -56,6 +56,8 @@ class _FDSource(object):
             if isinstance(self._fds_selectable, int) else
             self._fds_selectable.fileno())
         self._fds_action = action
+        self._fds_maxExceptions = 10
+        self._fds_exceptionCount = 0
 
     def __int__(self):
         return self._fds_int
@@ -63,7 +65,17 @@ class _FDSource(object):
     def newDataAvailable(self):
         log.debug("New data available for selectable %r.",
                   self._fds_selectable)
-        self._fds_action(self._fds_selectable)
+        try:
+            self._fds_action(self._fds_selectable)
+            self._fds_exceptionCount = 0
+        except Exception as exc:
+            if self._fds_exceptionCount >= self._fds_maxExceptions:
+                raise
+
+            log.exception(
+                "Exception %d processing new data for selectable %r (fd %d):",
+                self._fds_exceptionCount, self._fds_selectable, self._fds_int)
+            self._fds_exceptionCount += 1
 
 
 class RetryThread(threading.Thread):

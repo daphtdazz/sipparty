@@ -95,6 +95,14 @@ class TestFSM(unittest.TestCase):
         t2.connect(t1.localAddress)
         self.wait_for(lambda: t2.state == t2.States.connected)
         self.wait_for(lambda: t1.state == t1.States.connected)
+
+        log.debug("Send some data.")
+        t1.send("hello world")
+        t2.send("hello you")
+
+        t1.disconnect()
+        self.wait_for(lambda: t2.state == t2.States.disconnected)
+
         log.debug("Done.")
 
 if __name__ == "__main__":

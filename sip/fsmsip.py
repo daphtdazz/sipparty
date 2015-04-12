@@ -44,9 +44,6 @@ class SimpleCallFSM(fsm.FSM):
         # with a view to determing what functions should go into a general
         # abstract SIP FSM class.
         #
-        # !!! Also need to think the best way to share FSMs. Don't really want
-        # to have build one each time we want an instance.
-        #
         # !!!
         self.addTransition(states.no_dialogue, inputs.invite,
                            states.starting_dialogue)
