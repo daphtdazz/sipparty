@@ -237,7 +237,7 @@ class TransportFSM(fsm.FSM):
     def listen(self):
         self.hit(self.Inputs.listen)
 
-    @block_until_states((States.error, States.connecting))
+    @block_until_states((States.error, States.connecting, States.connected))
     def connect(self, *args, **kwargs):
         self.hit(self.Inputs.connect, *args, **kwargs)
 
