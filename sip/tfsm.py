@@ -330,8 +330,7 @@ class TestFSM(unittest.TestCase):
             def AddClassTransitions(cls):
                 cls.addTransition(
                     "not_running", "start", "running",
-                    start_threads=[runthread],
-                    join_threads=["not-running"])
+                    start_threads=[runthread])
                 cls.addTransition(
                     "running", "jump", "jumping",
                     start_threads=["thrmethod"])
@@ -353,8 +352,7 @@ class TestFSM(unittest.TestCase):
                 "a", "b", "c", start_threads=[("not", "a", "threadable")]))
         self.assertEqual(old_t_dict, nf._fsm_transitions)
 
-        nf.addTransition("jumping", "stop", "not_running",
-                         join_threads=["thrmethod"])
+        nf.addTransition("jumping", "stop", "not_running")
 
         for ii in range(8):
             nf.hit("start")
