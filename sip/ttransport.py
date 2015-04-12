@@ -18,9 +18,11 @@ limitations under the License.
 """
 import sys
 import socket
+import timeit
 import time
 import logging
 import unittest
+import _util
 import retrythread
 import fsm
 import transport
@@ -33,9 +35,9 @@ class TestFSM(unittest.TestCase):
 
     def wait_for(self, func, timeout=2):
         assert timeout > 0.05
-        now = time.clock()
+        now = timeit.default_timer()
         until = now + timeout
-        while time.clock() < until:
+        while timeit.default_timer() < until:
             if func():
                 break
             time.sleep(0.01)
@@ -47,19 +49,32 @@ class TestFSM(unittest.TestCase):
 
     def setUp(self):
         self._clock = 0
-        fsm.Timer.Clock = self.clock
+        _util.Clock = self.clock
         retrythread.RetryThread.Clock = self.clock
         self.retry = 0
         self.cleanup = 0
 
-    def testSimpleTransport(self):
+    def testValues(self):
+        t1 = transport.TransportFSM()
+        self.assertRaises(ValueError,
+                          lambda: setattr(t1, "localAddressPort", -1))
+        self.assertRaises(ValueError,
+                          lambda: setattr(t1, "localAddressPort", 0x10000))
+        t1.localPort = 2
+        self.assertEqual(t1.localPort, 2)
+
+    def testTransportErrors(self):
 
         t1 = transport.TransportFSM()
+
+        log.debug("Check connect can fail.")
         t1.connect()
-        self.assertEqual(t1.state, t1.States.error)
+        t1.hit(t1.Inputs.error)
+        self.wait_for(lambda: t1.state == t1.States.error)
         t1.reset()
         self.assertEqual(t1.state, t1.States.disconnected)
 
+        log.debug("Check listen can be cancelled.")
         t1.family = socket.AF_INET
         t1.type = socket.SOCK_STREAM
         t1.listen()
@@ -67,6 +82,19 @@ class TestFSM(unittest.TestCase):
         t1.hit(t1.Inputs.error, "user cancelled")
         self.wait_for(lambda: t1.state == t1.States.error)
         t1.reset()
+
+    def testSimpleTransport(self):
+
+        log.debug("Listen")
+        t1 = transport.TransportFSM()
+        t1.listen()
+        self.wait_for(lambda: t1.localAddressHost is not None)
+
+        log.debug("Connect to %r", t1.localAddress)
+        t2 = transport.TransportFSM()
+        t2.connect(t1.localAddress)
+        self.wait_for(lambda: t2.state == t2.States.connected)
+        self.wait_for(lambda: t1.state == t1.States.connected)
         log.debug("Done.")
 
 if __name__ == "__main__":

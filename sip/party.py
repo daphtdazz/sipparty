@@ -19,6 +19,7 @@ limitations under the License.
 import socket
 import logging
 import copy
+import transport
 import prot
 import components
 import defaults
@@ -33,22 +34,6 @@ log = logging.getLogger(__name__)
 
 class BadNetwork(Exception):
     pass
-
-
-def SockFamilyName(family):
-    if family == socket.AF_INET:
-        return "IPv4"
-    if family == socket.AF_INET6:
-        return "IPv6"
-    assert family in (socket.AF_INET, socket.AF_INET6)
-
-
-def SockTypeName(socktype):
-    if socktype == socket.SOCK_STREAM:
-        return "TCP"
-    if socktype == socket.SOCK_DGRAM:
-        return "UDP"
-    assert socktype in (socket.SOCK_STREAM, socket.SOCK_DGRAM)
 
 
 class PortManager(object):
@@ -81,8 +66,8 @@ class PortManager(object):
         else:
             raise BadNetwork("Could not find a public address to connect to")
 
-        family_name = SockFamilyName(family)
-        socktype_name = SockTypeName(socktype)
+        family_name = transport.SockFamilyName(family)
+        socktype_name = transport.SockTypeName(socktype)
         ssocket = socket.socket(family, socktype)
 
         def port_generator():
@@ -173,7 +158,8 @@ class Party(object):
         invite = Message.invite()
         invite.startline.uri.aor = copy.deepcopy(callee.aor)
         invite.fromheader.value.value.uri.aor = copy.deepcopy(self.aor)
-        invite.viaheader.value.transport = SockTypeName(callee.socktype)
+        invite.viaheader.value.transport = transport.SockTypeName(
+            callee.socktype)
         self.connect(
             callee.address, callee.port, callee.sockfamily, callee.socktype)
         self.active_socket.sendall(str(invite))

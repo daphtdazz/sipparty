@@ -68,8 +68,6 @@ class _FDSource(object):
 
 class RetryThread(threading.Thread):
 
-    Clock = time.clock
-
     def __init__(self, action=None, **kwargs):
         """Callers must be careful that they do not hold references to the
         thread and pass in actions that hold references to themselves, which
@@ -129,20 +127,25 @@ class RetryThread(threading.Thread):
                 if numrts == 0:
                     wait = self._rthr_noWorkWait
                     continue
-                next = self._rthr_retryTimes[0]
 
-            now = self.Clock()
-            if next > now:
-                wait = next - now
-                log.debug("Next try in %r seconds", wait)
-                continue
+                next = self._rthr_retryTimes[0]
+                now = _util.Clock()
+
+                if next > now:
+                    wait = next - now
+                    log.debug("Next try in %r seconds", wait)
+                    continue
+
+                del self._rthr_retryTimes[0]
 
             log.debug("Retrying as next %r <= now %r", next, now)
             action = self._rthr_action
             if action is not None:
-                action()
-            with self._rthr_nextTimesLock:
-                del self._rthr_retryTimes[0]
+                try:
+                    action()
+                except Exception as exc:
+                    log.debug("Exception doing action %r:",
+                              action, exc_info=True)
 
             # Immediately respin since we haven't checked the next timer yet.
             wait = 0
@@ -175,15 +178,17 @@ class RetryThread(threading.Thread):
     def addRetryTime(self, ctime):
         """Add a time when we should retry the action. If the time is already
         in the list, then the new time is not re-added."""
-        log.debug("Add retry time %d", ctime)
+        log.debug("Add retry time %d to %r", ctime, self._rthr_retryTimes)
         with self._rthr_nextTimesLock:
             ii = 0
             for ii, time in zip(
                     range(len(self._rthr_retryTimes)), self._rthr_retryTimes):
                 if ctime < time:
                     break
+
                 if ctime == time:
                     # This time is already present, no need to re-add it.
+                    log.debug("Time already in list.")
                     return
             else:
                 ii = len(self._rthr_retryTimes)

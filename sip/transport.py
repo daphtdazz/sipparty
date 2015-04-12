@@ -30,45 +30,66 @@ class BadNetwork(Exception):
     pass
 
 
-def GetPassiveSocket(name=None, family=0, socktype=0, port=None):
+def SockFamilyName(family):
+    if family == socket.AF_INET:
+        return "IPv4"
+    if family == socket.AF_INET6:
+        return "IPv6"
+    assert family in (socket.AF_INET, socket.AF_INET6)
 
-    if name is None:
-        name = socket.gethostname()
+
+def SockTypeName(socktype):
+    if socktype == socket.SOCK_STREAM:
+        return "TCP"
+    if socktype == socket.SOCK_DGRAM:
+        return "UDP"
+    assert socktype in (socket.SOCK_STREAM, socket.SOCK_DGRAM)
+
+
+def GetBoundSocket(family, socktype, address):
+
+    assert family in (0, socket.AF_INET, socket.AF_INET6)
+    assert socktype in (0, socket.SOCK_STREAM, socket.SOCK_DGRAM)
+
+    address = list(address)
+    if address[0] is None:
+        address[0] = socket.gethostname()
 
     # family e.g. AF_INET / AF_INET6
     # socktype e.g. SOCK_STREAM
     # Just grab the first addr info if we haven't
     log.debug("getaddrinfo addr:%r port:%r family:%r socktype:%r",
-              name, port, family, socktype)
-    addrinfos = socket.getaddrinfo(name, port, family, socktype)
+              address[0], address[1], family, socktype)
+    addrinfos = socket.getaddrinfo(address[0], address[1], family, socktype)
 
-    for family, socktype, proto, _, (sockaddr, _) in addrinfos:
-        if (family in (socket.AF_INET, socket.AF_INET6) and
-                socktype in (socket.SOCK_STREAM, socket.SOCK_DGRAM)):
-            break
-    else:
-        raise BadNetwork("Could not find an address to bind to %r." % name)
+    if len(addrinfos) == 0:
+        raise BadNetwork("Could not find an address to bind to %r." % address)
+
+    _family, _socktype, _proto, _canonname, address = addrinfos[0]
 
     ssocket = socket.socket(family, socktype)
 
     def port_generator():
+        if address[1] != 0:
+            # The port was specified.
+            yield address[1]
+            return
+
+        # Guess a port.
         yield 5060  # Always try 5060 first.
         for ii in range(15060, 0x10000):
             yield ii
 
     for port in port_generator():
         try:
-            ssocket.bind((sockaddr, port))
+            ssocket.bind(address)
             break
         except socket.error:
             pass
     else:
         raise BadNetwork(
-            "Couldn't get a port for address {sockaddr}.".format(
+            "Couldn't bind to address {address}.".format(
                 **locals()))
-
-    if socktype == socket.SOCK_STREAM:
-        ssocket.listen(0)
 
     return ssocket
 
@@ -87,9 +108,9 @@ class TransportFSM(fsm.FSM):
         ("connect", "listen", "connected", "accepted", "disconnect", "error",
          "reset"))
     Actions = _util.Enum(
-        ("attemptConnect", "becomesDisconnected", "createListen",
-         "startListening",
-         "accepted", "error"))
+        ("createConnect", "attemptConnect",
+         "createListen", "startListening", "accepted",
+         "becomesDisconnected", "error"))
 
     @classmethod
     def AddClassTransitions(cls):
@@ -101,7 +122,7 @@ class TransportFSM(fsm.FSM):
         # Transitions when connecting out.
         cls.addTransition(  # Start the connect process.
             S.disconnected, I.connect, S.connecting,
-            action=None,
+            action=A.createConnect,
             start_threads=[A.attemptConnect])
         cls.addTransition(  # Error cases.
             S.connecting, I.error, S.error,
@@ -148,11 +169,11 @@ class TransportFSM(fsm.FSM):
         kwargs["asynchronous_timers"] = True
         super(TransportFSM, self).__init__(*args, **kwargs)
 
-        self._tfsm_family = None
-        self._tfsm_type = None
-        self._tfsm_address = None
+        self._tfsm_family = socket.AF_INET
+        self._tfsm_type = socket.SOCK_STREAM
+
+        la = self.__dict__["_tfsm_localAddress"] = [None, 0, 0, 0]
         self._tfsm_remoteAddress = None
-        self._tfsm_remotePort = None
 
         self._tfsm_timeout = 2
 
@@ -165,25 +186,18 @@ class TransportFSM(fsm.FSM):
         # checking whether the socket is still valid.
         self._tfsm_acceptSocketTimeout = 0.1
 
-    @property
-    def family(self):
-        return self._tfsm_family
+    # Public properties.
+    family = _util.DerivedProperty(
+        "_tfsm_family", lambda val: val in (socket.AF_INET, socket.AF_INET6))
+    type = _util.DerivedProperty(
+        "_tfsm_type",
+        lambda val: val in (socket.SOCK_STREAM, socket.SOCK_DGRAM))
 
-    @family.setter
-    def family(self, value):
-        if value not in (socket.AF_INET, socket.AF_INET6):
-            raise ValueError("Bad socket family %r." % value)
-        self._tfsm_family = value
-
-    @property
-    def type(self):
-        return self._tfsm_type
-
-    @type.setter
-    def type(self, value):
-        if value not in (socket.SOCK_STREAM, socket.SOCK_DGRAM):
-            raise ValueError("Bad socket type %r." % value)
-        self._tfsm_type = value
+    localAddress = _util.DerivedProperty("_tfsm_localAddress")
+    localAddressPort = _util.DerivedProperty(
+        "_tfsm_localAddressPort",
+        lambda val: 0 <= val <= 0xffff)
+    localAddressHost = _util.DerivedProperty("_tfsm_localAddressHost")
 
     def block_until_states(states):
         "This is a descriptor, so don't call it as a method."
@@ -194,7 +208,7 @@ class TransportFSM(fsm.FSM):
                 method(self, *args, **kwargs)
 
                 end_states = states
-                time_start = time.clock()
+                time_start = _util.Clock()
                 time_now = time_start
                 while self.state not in end_states:
                     if time_now - time_start > self._tfsm_timeout:
@@ -208,7 +222,7 @@ class TransportFSM(fsm.FSM):
                         time_start = time_now
 
                     time.sleep(0.00001)
-                    time_now = time.clock()
+                    time_now = _util.Clock()
 
                 if self.state not in end_states:
                     # Ahh must do proper exceptions!
@@ -221,9 +235,9 @@ class TransportFSM(fsm.FSM):
     def listen(self):
         self.hit(self.Inputs.listen)
 
-    @block_until_states((States.error, States.connected))
-    def connect(self):
-        self.hit(self.Inputs.connect)
+    @block_until_states((States.error, States.connecting))
+    def connect(self, *args, **kwargs):
+        self.hit(self.Inputs.connect, *args, **kwargs)
 
     @block_until_states((States.error, States.disconnected))
     def disconnect(self):
@@ -234,29 +248,57 @@ class TransportFSM(fsm.FSM):
         self.hit(self.Inputs.reset)
 
     #
-    # FSM ACTIONS
+    # ACTIONS ACTIONS ACTIONS ACTIONS ACTIONS ACTIONS ACTIONS ACTIONS ACTIONS
     #
+    # These actions are expected to be done synchronously on the main FSM
+    # thread, therefore they should not block. Blocking function should be
+    # done in the THREADS methods below.
+    #
+    def createConnect(self, addr_tuple):
 
-    def createListen(self):
-        family = self.family
-        sck_type = self.type
-        address = self._tfsm_address
-        remote_address = self._tfsm_remoteAddress
+        log.debug("Create connect socket destined for %r.", addr_tuple)
 
-        if not self._trnsfsm_checkLocalConfigIsOK(family, sck_type, address):
-            # CheckLocalConfigIsOK respins with error if it is not.
+        fam = self.family
+        typ = self.type
+        adr = self._tfsm_localAddress
+        prt = self._tfsm_localAddressPort
+
+        explen = 2 if fam == socket.AF_INET else 4
+
+        if len(addr_tuple) != explen:
+            self.hit(self.Inputs.error, "Bad address %r for %r socket." %
+                     (addr_tuple, SockFamilyName(fam)))
             return
 
         try:
-            self._tfsm_listenSck = GetPassiveSocket(address, family, sck_type)
+            self._tfsm_activeSck = GetBoundSocket(fam, typ, adr)
+        # Need to add proper exception handling for socket errors here.
+        except:
+            log.error("Exception hit getting bound socket for connection.")
+            self.hit(self.Inputs.error)
+            raise
+
+        self._tfsm_remoteAddressTuple = addr_tuple
+
+    def createListen(self):
+        try:
+            self._tfsm_listenSck = GetBoundSocket(
+                self.family, self.type, self._tfsm_localAddress)
         except Exception as exc:
             log.exception("Exception getting passive socket.")
             self.hit(self.Inputs.error,
                      "Exception getting passive socket: %r." % exc)
             return
 
+        # Listen if it's a stream.
+        if self._tfsm_listenSck.type == socket.SOCK_STREAM:
+            log.debug("Listening for connections.")
+            self._tfsm_listenSck.listen(0)
+
         self._tfsm_listenSck.settimeout(self._tfsm_acceptSocketTimeout)
-        log.debug("Listen socket created %r.", self._tfsm_listenSck)
+        log.info(
+            "Passive socket created on %r.",
+            self._tfsm_listenSck.getsockname())
 
     def becomesConnected(self):
         "Called when the transport becomes connected"
@@ -265,9 +307,12 @@ class TransportFSM(fsm.FSM):
     def becomesDisconnected(self):
         "Called when the transport goes down."
         self.rmFDSource(self, self._tfsm_activeSck)
-        actsck = self._tfsm_activeSck
+        for sck in (self._tfsm_activeSck, self._tfsm_listenSck):
+            if sck is not None:
+                sck.shutdown()
+                sck.close()
         self._tfsm_activeSck = None
-        del actsck
+        self._tfsm_listenSck = None
 
     def accepted(self):
         "We just accepted an inbound connection."
@@ -290,33 +335,59 @@ class TransportFSM(fsm.FSM):
             self._tfsm_activeSck.close()
             self._tfsm_activeSck = None
 
-        log.error("Error in transport: %r.", msg)
+        log.error(msg)
 
-    # Asynchronous actions.
+    #
+    # THREADS THREADS THREADS THREADS THREADS THREADS THREADS THREADS THREADS
+    #
     def attemptConnect(self):
         "Attempt to connect out."
+
+        sck = self._tfsm_activeSck
+        if sck is None:
+            log.debug("Create socket failed, so nothing to do.")
+            return
+
         family = self.family
         sck_type = self.type
-        address = self._tfsm_address
-        remote_address = self._tfsm_remoteAddress
-
-        if not self._trnsfsm_checkLocalConfigIsOK(family, sck_type, address):
-            return
+        address = self._tfsm_localAddress
+        remote_address = self._tfsm_remoteAddressTuple
 
         # Finish the connect out FSM side, and move on to the accept.
 
-    def startListening(self):
+        try:
+            self._tfsm_activeSck.connect(self._tfsm_remoteAddressTuple)
+        except Exception as exc:
+            self.hit(
+                self.Inputs.error,
+                "Exception connecting to %r: %r." %
+                (self._tfsm_remoteAddressTuple, exc))
+            return
 
-        if self._tfsm_listenSck.type == socket.SOCK_DGRAM:
-            raise ValueError("DGRAM socket (UDP) support not implemented.")
+        self.hit(self.Inputs.connected)
+
+    def startListening(self):
 
         log.debug("STREAM socket so block to accept a connection.")
 
+        startListen = _util.Clock()
+        nextLog = startListen + 1
+
         while True:
             lsck = self._tfsm_listenSck
+
             if lsck is None:
                 log.debug("Listen has been cancelled.")
                 break
+
+            if lsck.type == socket.SOCK_DGRAM:
+                raise ValueError("DGRAM socket (UDP) support not "
+                                 "implemented.")
+
+            now = _util.Clock()
+            if now > nextLog:
+                log.debug("Still waiting to accept...")
+                nextLog = now + 1
 
             try:
                 conn, addr = lsck.accept()
@@ -324,6 +395,7 @@ class TransportFSM(fsm.FSM):
                 self.hit(self.Inputs.accepted, conn, addr)
                 break
             except socket.timeout:
+
                 continue
             except Exception as exc:
                 log.debug("Exception selecting listen socket", exc_info=True)
@@ -331,21 +403,33 @@ class TransportFSM(fsm.FSM):
                          "Exception selecting listen socket %r." % exc)
                 break
 
+        log.debug("Start listening done.")
+
     #
-    # INTERNAL METHODS.
+    # INTERNAL INTERNAL INTERNAL INTERNAL INTERNAL INTERNAL INTERNAL INTERNAL
     #
-    def _trnsfsm_checkLocalConfigIsOK(self, family, sck_type, address):
-        if family is None:
-            self.hit(self.Inputs.error,
-                     "No INET family specified to connect to.")
-            return False
+    @property
+    def _tfsm_localAddress(self):
+        for sck in (self._tfsm_activeSck, self._tfsm_listenSck):
+            if sck is not None:
+                return sck.getsockname()
 
-        if sck_type is None:
-            self.hit(self.Inputs.error,
-                     "No socket type (STREAM / DGRAM) specified.")
-            return False
+        la = self.__dict__["_tfsm_localAddress"]
+        return (tuple(la[:2]) if self._tfsm_family == socket.AF_INET else
+                tuple(la))
 
-        return True
+    @property
+    def _tfsm_localAddressHost(self):
+        return self._tfsm_localAddress[0]
 
-    def _trnsfsm_checkRemoteConfigIsOK(sellf, address, port):
-        pass
+    @_tfsm_localAddressHost.setter
+    def _tfsm_localAddressHost(self, val):
+        self.__dict__["_tfsm_localAddress"][0] = val
+
+    @property
+    def _tfsm_localAddressPort(self):
+        return self._tfsm_localAddress[1]
+
+    @_tfsm_localAddressPort.setter
+    def _tfsm_localAddressPort(self, val):
+        la = self.__dict__["_tfsm_localAddress"][1] = val

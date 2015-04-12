@@ -23,7 +23,7 @@ import socket
 import threading
 import logging
 import unittest
-import pdb
+import _util
 import fsm
 import retrythread
 
@@ -56,7 +56,7 @@ class TestFSM(unittest.TestCase):
 
     def setUp(self):
         self._clock = 0
-        fsm.Timer.Clock = self.clock
+        _util.Clock = self.clock
         retrythread.RetryThread.Clock = self.clock
         self.retry = 0
         self.cleanup = 0

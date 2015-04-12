@@ -18,11 +18,15 @@ limitations under the License.
 """
 import types
 import threading
+import timeit
 import logging
 import pdb
 import vb
 
 log = logging.getLogger(__name__)
+
+# The clock. Defined here so that it can be overridden in the testbed.
+Clock = timeit.default_timer
 
 
 class attributesubclassgen(type):
@@ -342,11 +346,42 @@ def OnlyWhenLocked(method):
             log.debug("Thread %r got FSM %r lock for %r.",
                       cthr, self, method)
             self._lock_holdingThread = cthr
-            result = method(self, *args, **kwargs)
-            self._lock_holdingThread = None
+            try:
+                result = method(self, *args, **kwargs)
+            finally:
+                self._lock_holdingThread = None
 
         log.debug("Thread %r released FSM %r lock.",
                   cthr, self)
         return result
 
     return maybeGetLock
+
+
+class DerivedProperty(object):
+
+    def __init__(self, name, check=None, get=None, set=None):
+        self._rp_propName = name
+        self._rp_check = check
+        self._rp_get = get
+        self._rp_store = set
+
+    def __get__(self, obj, cls):
+        target = obj if obj is not None else cls
+        if self._rp_get is None:
+            val = getattr(target, self._rp_propName)
+        else:
+            val = self._rp_get(obj)
+        return val
+
+    def __set__(self, obj, value):
+        pname = self._rp_propName
+        if self._rp_check is not None and not self._rp_check(value):
+            raise ValueError(
+                "%r is not an allowed value for attribute %r of class %r." %
+                (value, pname, obj.__class__.__name__))
+
+        if self._rp_store is None:
+            setattr(obj, pname, value)
+        else:
+            self._rp_store(obj, value)
