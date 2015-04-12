@@ -17,6 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import types
+import threading
 import logging
 import pdb
 import vb
@@ -309,3 +310,43 @@ class class_or_instance_method(object):
             return self._func(target, *args, **kwargs)
 
         return class_or_instance_wrapper
+
+
+def OnlyWhenLocked(method):
+    """This decorator sees if the owner of method has a _lock attribute, and
+    if so locks it before calling method, releasing it after."""
+
+    def maybeGetLock(self, *args, **kwargs):
+        if not hasattr(self, "_lock"):
+            log.debug("No locking in this object.")
+            return method(self, *args, **kwargs)
+
+        if not hasattr(self, "_lock_holdingThread"):
+            raise AttributeError(
+                "Object %r of type %r uses OnlyWhenLocked but has no "
+                "attribute _lock_holdingThread which is required." %
+                (self, self.__class__))
+
+        cthr = threading.currentThread()
+        hthr = self._lock_holdingThread
+
+        if cthr is hthr:
+            raise RuntimeError(
+                "Thread %r attempting to get FSM lock when it already has "
+                "it." % cthr)
+
+        log.debug("Thread %r get FSM %r lock for %r (held by %r).",
+                  cthr, self, method, hthr)
+
+        with self._lock:
+            log.debug("Thread %r got FSM %r lock for %r.",
+                      cthr, self, method)
+            self._lock_holdingThread = cthr
+            result = method(self, *args, **kwargs)
+            self._lock_holdingThread = None
+
+        log.debug("Thread %r released FSM %r lock.",
+                  cthr, self)
+        return result
+
+    return maybeGetLock

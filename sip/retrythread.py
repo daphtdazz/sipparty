@@ -15,7 +15,7 @@ bgthr.addRetryTime(0.0)
 # thread).
 
 Timing will not be very precise, and basically depends on the latency of
-python's and therefore the OS's conditionlock implementation.
+python's and therefore the OS's select implementation.
 
 Copyright 2015 David Park
 
@@ -36,6 +36,7 @@ import threading
 import socket
 import select
 import logging
+import _util
 
 log = logging.getLogger(__name__)
 
@@ -60,6 +61,8 @@ class _FDSource(object):
         return self._fds_int
 
     def newDataAvailable(self):
+        log.debug("New data available for selectable %r.",
+                  self._fds_selectable)
         self._fds_action(self._fds_selectable)
 
 
@@ -89,10 +92,9 @@ class RetryThread(threading.Thread):
 
         self.addInputFD(output, lambda selectable: selectable.recv(1))
 
-    def __del__(self):
-        log.debug("Deleting thread.")
-        self.cancel()
-        self.join()
+        # Initialize support for _util.OnlyWhenLocked
+        self._lock = threading.RLock()
+        self._lock_holdingThread = None
 
     def run(self):
         """Runs until cancelled.
@@ -105,10 +107,11 @@ class RetryThread(threading.Thread):
         """
         wait = 3600  # an hour if
         while not self._rthr_cancelled:
-            log.debug("Thread not cancelled, next retry times: %r, wait: %d",
-                      self._rthr_retryTimes, wait)
-
             rsrcs = self._rthr_fdSources.keys()
+            log.debug("Thread not cancelled, next retry times: %r, wait: %d"
+                      "on %r.",
+                      self._rthr_retryTimes, wait, rsrcs)
+
             rfds, wfds, efds = select.select(rsrcs, [], rsrcs, wait)
             self._rthr_processSelectedReadFDs(rfds)
 
@@ -138,6 +141,7 @@ class RetryThread(threading.Thread):
 
         log.debug("Thread exiting.")
 
+    @_util.OnlyWhenLocked
     def addInputFD(self, fd, action):
         """Add file descriptor `fd` as a source to wait for data from, with
         `action` to be called when there is data available from `fd`.
@@ -149,10 +153,21 @@ class RetryThread(threading.Thread):
                 "Duplicate FD source %r added to thread." % newinput)
 
         self._rthr_fdSources[newinputint] = newinput
+        self._rthr_triggerSpin()
+
+    @_util.OnlyWhenLocked
+    def rmInputFD(self, fd):
+        fd = int(_FDSource(fd, None))
+        if fd not in self._rthr_fdSources:
+            raise ValueError(
+                "FD %r cannot be removed as it is not on the thread." % fd)
+        del self._rthr_fdSources[fd]
+        self._rthr_triggerSpin()
 
     def addRetryTime(self, ctime):
         """Add a time when we should retry the action. If the time is already
         in the list, then the new time is not re-added."""
+        log.debug("Add retry time %d", ctime)
         with self._rthr_nextTimesLock:
             ii = 0
             for ii, time in zip(
@@ -170,11 +185,11 @@ class RetryThread(threading.Thread):
             self._rthr_retryTimes = new_rts
             log.debug("Retry times: %r", self._rthr_retryTimes)
 
-        self._rthr_triggerRunFD.send('1')
+        self._rthr_triggerSpin()
 
     def cancel(self):
         self._rthr_cancelled = True
-        self._rthr_triggerRunFD.send('1')
+        self._rthr_triggerSpin()
 
     #
     # INTERNAL METHODS
@@ -183,3 +198,6 @@ class RetryThread(threading.Thread):
         for rfd in rfds:
             fdsrc = self._rthr_fdSources[rfd]
             fdsrc.newDataAvailable()
+
+    def _rthr_triggerSpin(self):
+        self._rthr_triggerRunFD.send('1')

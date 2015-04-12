@@ -18,6 +18,7 @@ limitations under the License.
 """
 import sys
 import time
+import timeit
 import socket
 import threading
 import logging
@@ -32,14 +33,21 @@ log = logging.getLogger(__name__)
 
 class TestFSM(unittest.TestCase):
 
+    RClock = timeit.default_timer
+
     def wait_for(self, func, timeout=2):
         assert timeout > 0.05
-        now = time.clock()
+        now = self.RClock()
+        next_log = now + 1
         until = now + timeout
-        while time.clock() < until:
+        while self.RClock() < until:
             if func():
                 break
             time.sleep(0.01)
+            if self.RClock() > next_log:
+                next_log = self.RClock() + 1
+                log.debug("Still waiting...")
+
         else:
             self.assertTrue(0, "Timed out waiting for %r" % func)
 
@@ -322,11 +330,11 @@ class TestFSM(unittest.TestCase):
             def AddClassTransitions(cls):
                 cls.addTransition(
                     "not_running", "start", "running",
-                    start_threads=[("runthread", runthread)],
+                    start_threads=[runthread],
                     join_threads=["not-running"])
                 cls.addTransition(
                     "running", "jump", "jumping",
-                    start_threads=[("thrmethod", "thrmethod")])
+                    start_threads=["thrmethod"])
                 cls.setState("not_running")
 
             def thrmethod(self):
@@ -335,6 +343,15 @@ class TestFSM(unittest.TestCase):
         nf = ThreadFSM()
 
         bgthread = threading.Thread(name="bgthread", target=runthread)
+
+        log.debug("Check that if we fail to add a transition the transition "
+                  "configuration is not updated.")
+        old_t_dict = nf._fsm_transitions
+        self.assertRaises(
+            ValueError,
+            lambda: nf.addTransition(
+                "a", "b", "c", start_threads=[("not", "a", "threadable")]))
+        self.assertEqual(old_t_dict, nf._fsm_transitions)
 
         nf.addTransition("jumping", "stop", "not_running",
                          join_threads=["thrmethod"])
