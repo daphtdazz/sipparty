@@ -18,7 +18,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import collections
-import time
+import timeit
 import threading
 import Queue
 import weakref
@@ -48,7 +48,7 @@ class UnexpectedInput(FSMError):
 
 class Timer(object):
 
-    Clock = time.clock
+    Clock = timeit.default_timer
 
     def __init__(self, name, action, retryer):
         super(Timer, self).__init__()
@@ -251,8 +251,6 @@ class FSM(object):
             # Fortunately python 2.7 has a nice weak references module.
             weak_self = weakref.ref(self)
 
-            self._fsm_onThread = False
-
             def check_weak_self_timers():
                 strong_self = weak_self()
                 if strong_self is not None:
@@ -264,6 +262,7 @@ class FSM(object):
             # Initialize support for the _util.OnlyWhenLocked decorator.
             self._lock = threading.RLock()
             self._lock_holdingThread = None
+
             self._fsm_thread.start()
 
     def __del__(self):
@@ -407,7 +406,7 @@ class FSM(object):
         log.debug("Queuing input %r", input)
         self._fsm_inputQueue.put((input, args, kwargs))
 
-        if self._fsm_use_async_timers and not self._fsm_onThread:
+        if self._fsm_use_async_timers:
             self._fsm_thread.addRetryTime(Timer.Clock())
         else:
             self._fsm_backgroundTimerPop()
@@ -574,16 +573,12 @@ class FSM(object):
 
     def _fsm_backgroundTimerPop(self):
         log.debug("_fsm_backgroundTimerPop")
-        try:
-            self._fsm_onThread = True
 
-            while not self._fsm_inputQueue.empty():
-                input, args, kwargs = self._fsm_inputQueue.get()
-                try:
-                    self._fsm_hit(input, *args, **kwargs)
-                finally:
-                    self._fsm_inputQueue.task_done()
+        while not self._fsm_inputQueue.empty():
+            input, args, kwargs = self._fsm_inputQueue.get()
+            try:
+                self._fsm_hit(input, *args, **kwargs)
+            finally:
+                self._fsm_inputQueue.task_done()
 
-            self.checkTimers()
-        finally:
-            self._fsm_onThread = False
+        self.checkTimers()
