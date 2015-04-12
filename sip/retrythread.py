@@ -72,24 +72,32 @@ class RetryThread(threading.Thread):
 
     def __init__(self, action=None, **kwargs):
         """Callers must be careful that they do not hold references to the
-        thread an pass in actions that hold references to themselves, which
+        thread and pass in actions that hold references to themselves, which
         leads to a retain deadlock (each hold the other so neither are ever
         freed).
 
-        One way to get around this is to use the weakref module to ensure
-        that if the owner of this thread needs to be referenced in the action,
-        the action doesn't retain the owner.
+        I.e. avoid this:
+
+        UserObject --retains--> RetryThread --retains--> Action (or method)
+                ^                                           |
+                |                                           |
+                +---------------retains---------------------+
+
+        One way to get around this is to use the weakref module so that either
+        RetryThread is a weak reference in UserObject, or UserObject is a
+        weak reference in Action.
         """
         super(RetryThread, self).__init__(**kwargs)
         self._rthr_action = action
         self._rthr_cancelled = False
         self._rthr_retryTimes = []
         self._rthr_nextTimesLock = threading.Lock()
+        self._rthr_noWorkWait = 3600
 
         self._rthr_fdSources = {}
 
+        # Set up the trigger mechanism.
         self._rthr_triggerRunFD, output = socket.socketpair()
-
         self.addInputFD(output, lambda selectable: selectable.recv(1))
 
         # Initialize support for _util.OnlyWhenLocked
@@ -105,7 +113,7 @@ class RetryThread(threading.Thread):
         deadlocks in `__init__` callers would do well to call `cancel` in the
         owner's `__del__` method.
         """
-        wait = 3600  # an hour if
+        wait = self._rthr_noWorkWait
         while not self._rthr_cancelled:
             rsrcs = self._rthr_fdSources.keys()
             log.debug("Thread not cancelled, next retry times: %r, wait: %d"
@@ -119,7 +127,7 @@ class RetryThread(threading.Thread):
             with self._rthr_nextTimesLock:
                 numrts = len(self._rthr_retryTimes)
                 if numrts == 0:
-                    wait = 3600
+                    wait = self._rthr_noWorkWait
                     continue
                 next = self._rthr_retryTimes[0]
 
