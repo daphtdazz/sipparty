@@ -19,6 +19,7 @@ limitations under the License.
 import socket
 import threading
 import time
+import collections
 import logging
 import _util
 import fsm
@@ -112,7 +113,7 @@ class TransportFSM(fsm.FSM):
     Actions = _util.Enum(
         ("createConnect", "attemptConnect",
          "createListen", "startListening", "becomesConnected",
-         "send",
+         "connectedSend",
          "becomesDisconnected", "error"))
 
     @classmethod
@@ -143,7 +144,7 @@ class TransportFSM(fsm.FSM):
 
         # Actions when in the connected state.
         Add(S.connected, I.send, S.connected,
-            action=A.send)
+            action=A.connectedSend)
         Add(S.connected, I.error, S.error,
             action=A.becomesDisconnected)
         Add(S.connected, I.disconnect, S.disconnected,
@@ -241,6 +242,9 @@ class TransportFSM(fsm.FSM):
     def connect(self, *args, **kwargs):
         self.hit(self.Inputs.connect, *args, **kwargs)
 
+    def send(self, data):
+        self.hit(self.Inputs.send, data)
+
     @block_until_states((States.error, States.disconnected))
     def disconnect(self):
         self.hit(self.Inputs.disconnect)
@@ -317,7 +321,7 @@ class TransportFSM(fsm.FSM):
         self._tfsm_activeSck = None
         self._tfsm_listenSck = None
 
-    def send(self, data):
+    def connectedSend(self, data):
         "Send some data."
         datalen = len(data)
         sck = self._tfsm_activeSck
@@ -456,10 +460,10 @@ class TransportFSM(fsm.FSM):
             while True:
                 bytes_consumed = self._tfsm_byteConsumer(self._tfsm_buffer)
                 if bytes_consumed == 0:
-                    log.debug("Can consume no more bytes now.")
+                    log.debug("Consumer has used as much as it can.")
                     break
-
-                    del self._tfsm_buffer[:bytes_consumed]
+                log.debug("Consumer consumed %d more bytes.", bytes_consumed)
+                del self._tfsm_buffer[:bytes_consumed]
 
         if strlen == 0:
             log.debug("Received 0 bytes: socket has demurely.")

@@ -101,6 +101,43 @@ class TestFSM(unittest.TestCase):
         t2.send("hello you")
 
         t1.disconnect()
+        self.wait_for(lambda: t1.state == t1.States.disconnected)
+        self.wait_for(lambda: t2.state == t2.States.disconnected)
+
+        log.debug("Handle data.")
+        expected_bytes = [None]
+        received_bytes = [None]
+
+        def tByteConsumer(bytes):
+            eb = expected_bytes[0]
+            match = None if eb is None else bytearray(eb)
+            if match is None or not bytes.startswith(match):
+                return 0
+
+            received_bytes[0] = bytes[:len(match)]
+            return len(match)
+
+        t1.byteConsumer = tByteConsumer
+        t1.listen()
+        self.wait_for(lambda: t1.localAddressHost is not None)
+        t2.connect(t1.localAddress)
+        self.wait_for(lambda: t2.state == t2.States.connected)
+        self.wait_for(lambda: t1.state == t1.States.connected)
+
+        log.debug("Send a message and a bit.")
+        expected_bytes[0] = "hello "
+        t2.send("hello b")
+        self.wait_for(
+            lambda: received_bytes[0] == bytearray("hello "),
+            timeout=10)
+
+        log.debug("Send the rest of it.")
+        expected_bytes[0] = "boss "
+        t2.send("oss ")
+        self.wait_for(lambda: received_bytes == [bytearray("boss ")])
+
+        t2.disconnect()
+        self.wait_for(lambda: t1.state == t1.States.disconnected)
         self.wait_for(lambda: t2.state == t2.States.disconnected)
 
         log.debug("Done.")
