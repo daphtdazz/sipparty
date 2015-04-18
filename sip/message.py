@@ -16,7 +16,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-
+import six
 import pdb
 import re
 import logging
@@ -34,6 +34,7 @@ from header import Header
 log = logging.getLogger(__name__)
 
 
+@six.add_metaclass(_util.attributesubclassgen)
 class Message(vb.ValueBinder):
     """Generic message class. Use `Request` or `Response` rather than using
     this directly.
@@ -56,8 +57,6 @@ class Message(vb.ValueBinder):
     naheaders = None  # By default the complement of the union of the others.
 
     mandatoryparameters = {}
-
-    __metaclass__ = _util.attributesubclassgen
 
     bindings = []
 
@@ -160,10 +159,10 @@ class Message(vb.ValueBinder):
         components = [self.startline]
         components.extend(self.headers)
         # Note we need an extra newline between headers and bodies
-        components.append("")
+        components.append(b"")
         if self.bodies:
             components.extend(self.bodies)
-            components.append("")  # need a newline at the end.
+            components.append(b"")  # need a newline at the end.
 
         return prot.EOL.join([str(_cp) for _cp in components])
 
@@ -283,10 +282,12 @@ class Message(vb.ValueBinder):
             setattratpath(targetmsg, tpath, new_obj)
 
 
+@six.add_metaclass(type)
 class Response(Message):
-    # Override metaclass of message as we don't want to attempt to generate
-    # subclasses from our type, which we don't have.
-    __metaclass__ = type
+    """ A response message.
+
+    NB this overrides the metaclass of Message as we don't want to attempt to
+    generate subclasses from our type, which we don't have."""
 
     def __init__(self, code):
         sl = response.Response(code)

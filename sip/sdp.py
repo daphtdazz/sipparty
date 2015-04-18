@@ -16,6 +16,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+import six
 import logging
 import _util
 import vb
@@ -29,6 +30,7 @@ class SDPNoSuchDescription(Exception):
     pass
 
 
+@six.add_metaclass(_util.attributesubclassgen)
 class Line(Parser):
     types = _util.Enum((
         "v", "o", "s", "i", "u", "e", "p", "c", "b", "t", "z", "k", "a", "m"))
@@ -48,7 +50,6 @@ class Line(Parser):
         "attributes",
         "media"
     ))
-    __metaclass__ = _util.attributesubclassgen
 
     descvalpattern = (
         "([^{eol}]+)[{eol}]+".format(eol=prot.EOL)

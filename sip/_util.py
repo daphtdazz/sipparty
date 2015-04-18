@@ -35,10 +35,10 @@ class attributesubclassgen(type):
 
     So for example:
 
+    six.add_metaclass(attributesubclassgen)
     class AttributeGen(object):
 
         types = Enum(("Subclass",))
-        __metaclass__ = attributesubclassgen
 
     class SubclassAttributeGen(object):
         pass
@@ -257,7 +257,7 @@ def CCPropsFor(props):
                 cprops = dict[cprop_name]
                 log.debug("Starting properties %r", cprops)
                 cpropstype = type(cprops)
-                newcprops = cpropstype()
+                newcprops = cpropstype(cprops)
                 for method_name in ("extend", "update"):
                     if hasattr(newcprops, method_name):
                         break

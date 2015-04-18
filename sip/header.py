@@ -16,6 +16,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+import six
 import datetime
 import random
 import re
@@ -31,9 +32,21 @@ import pdb
 log = logging.getLogger(__name__)
 
 
+@six.add_metaclass(_util.attributesubclassgen)
 class Header(Parser, vb.ValueBinder):
-    """A SIP header."""
+    """A SIP header.
 
+    Each type of SIP header has its own subclass, and so generally the Header
+    class is just used as an abstract class. To get an instance of a subclass
+    of a particular type, do:
+
+    Header.type()
+    # E.g
+    Header.accept()
+    """
+
+    # The `types` class attribute is used by the attributesubclassgen
+    # metaclass to know what types of subclass may be created.
     types = _util.Enum(
         ("Accept", "Accept-Encoding", "Accept-Language", "Alert-Info", "Allow",
          "Authentication-Info", "Authorization", "Call-ID", "Call-Info",
@@ -46,10 +59,6 @@ class Header(Parser, vb.ValueBinder):
          "Subject", "Supported", "Timestamp", "To", "Unsupported",
          "User-Agent", "Via", "Warning", "WWW-Authenticate"),
         normalize=_util.sipheader)
-
-    # This allows us to generate instances of subclasses by class attribute
-    # access, so Header.accept creates an accept header etc.
-    __metaclass__ = _util.attributesubclassgen
 
     type = _util.ClassType("Header")
     value = _util.Value()

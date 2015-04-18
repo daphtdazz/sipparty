@@ -17,6 +17,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+import six
 import collections
 import timeit
 import threading
@@ -153,6 +154,26 @@ class Timer(object):
         return res
 
 
+class FSMClassInitializer(type):
+        def __init__(self, *args, **kwargs):
+            super(FSMClassInitializer, self).__init__(*args, **kwargs)
+
+            self._fsm_transitions = {}
+            self._fsm_timers = {}
+            self._fsm_name = self.__name__
+            self._fsm_state = None
+
+            # Add any predefined transitions.
+            self.AddClassTransitions()
+
+
+@six.add_metaclass(
+    # The FSM type needs both the FSMClassInitializer and the cumulative
+    # properties tool.
+    type('FSMType',
+         (FSMClassInitializer,
+          _util.CCPropsFor(("States", "Inputs", "Actions"))),
+         dict()))
 class FSM(object):
     """Interface:
 
@@ -187,19 +208,10 @@ class FSM(object):
 
     NextFSMNum = 1
 
-    class FSMType(type):
-        def __init__(self, *args, **kwargs):
-            type.__init__(self, *args, **kwargs)
-
-            self._fsm_transitions = {}
-            self._fsm_timers = {}
-            self._fsm_name = self.__name__
-            self._fsm_state = None
-
-            # Add any predefined transitions.
-            self.AddClassTransitions()
-
-    __metaclass__ = FSMType
+    # These are Cumulative Properties (see the metaclass).
+    States = _util.Enum(tuple())
+    Inputs = _util.Enum(tuple())
+    Actions = _util.Enum(tuple())
 
     def __init__(self, name=None, asynchronous_timers=False):
         """name: a name for this FSM for debugging purposes.
@@ -411,7 +423,7 @@ class FSM(object):
                     self._fsm_thread.addRetryTime(timer.nextPopTime)
 
     #
-    # INTERNAL METHODS FOLLOW.
+    # ======================= INTERNAL METHODS FOLLOW. =======================
     #
     def _fsm_strgen(self):
         yield "{0!r} {1!r}:".format(self.__class__.__name__, self._fsm_name)

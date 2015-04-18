@@ -16,6 +16,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+import six
 import random
 import logging
 import _util
@@ -30,9 +31,8 @@ import pdb
 log = logging.getLogger(__name__)
 
 
+@six.add_metaclass(_util.CCPropsFor(("delegateattributes", "parseinfo")))
 class Field(parse.Parser, vb.ValueBinder):
-
-    __metaclass__ = _util.CCPropsFor(("delegateattributes", "parseinfo"))
 
     # For headers that delegate properties, these are the properties to
     # delegate. Note that these are cumulative, so subclasses declaring their

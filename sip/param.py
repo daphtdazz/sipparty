@@ -16,6 +16,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+import six
 import random
 import logging
 import _util
@@ -51,11 +52,10 @@ class Parameters(Parser, vb.ValueBinder, dict):
             self[newp.name] = newp
 
 
+@six.add_metaclass(_util.attributesubclassgen)
 class Param(Parser, vb.ValueBinder):
 
     types = _util.Enum(("branch", "tag",), normalize=lambda x: x.lower())
-
-    __metaclass__ = _util.attributesubclassgen
 
     parseinfo = {
         Parser.Pattern:

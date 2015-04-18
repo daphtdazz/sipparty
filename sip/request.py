@@ -16,6 +16,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+import six
 import re
 import logging
 import prot
@@ -30,16 +31,13 @@ import pdb
 log = logging.getLogger(__name__)
 
 
+@six.add_metaclass(_util.attributesubclassgen)
 class Request(parse.Parser, vb.ValueBinder):
     """Enumeration class generator"""
 
     types = _util.Enum(
         ("ACK", "BYE", "CANCEL", "INVITE", "OPTIONS", "REGISTER"),
         normalize=_util.upper)
-
-    # This gives me case insensitive subclass instance creation and type-
-    # checking.
-    __metaclass__ = _util.attributesubclassgen
 
     # "type" is a descriptor that returns the type (e.g. ACK or BYE) based on
     # the class type, i.e. by removing "Request" from the class type.

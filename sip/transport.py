@@ -186,7 +186,9 @@ class TransportFSM(fsm.FSM):
         # checking whether the socket is still valid.
         self._tfsm_acceptSocketTimeout = 0.1
 
-    # Public properties.
+    #
+    # =================== PUBLIC PROPERTIES ==================================
+    #
     family = _util.DerivedProperty(
         "_tfsm_family", lambda val: val in (socket.AF_INET, socket.AF_INET6))
     type = _util.DerivedProperty(
@@ -253,7 +255,8 @@ class TransportFSM(fsm.FSM):
     def reset(self):
         self.hit(self.Inputs.reset)
 
-    # ACTIONS ACTIONS ACTIONS ACTIONS ACTIONS ACTIONS ACTIONS ACTIONS ACTIONS
+    #
+    # =================== ACTIONS ============================================
     #
     # These actions are expected to be done synchronously on the main FSM
     # thread, therefore they should not block. Blocking function should be
@@ -346,7 +349,8 @@ class TransportFSM(fsm.FSM):
 
         log.error(msg)
 
-    # THREADS THREADS THREADS THREADS THREADS THREADS THREADS THREADS THREADS
+    #
+    # =================== THREADS ============================================
     #
     def attemptConnect(self):
         "Attempt to connect out."
@@ -415,7 +419,7 @@ class TransportFSM(fsm.FSM):
         log.debug("Start listening done.")
 
     #
-    # INTERNAL INTERNAL INTERNAL INTERNAL INTERNAL INTERNAL INTERNAL INTERNAL
+    # =================== INTERNAL ===========================================
     #
     @property
     def _tfsm_localAddress(self):
