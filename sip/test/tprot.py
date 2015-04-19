@@ -230,6 +230,11 @@ class TestProtocol(unittest.TestCase):
         a.d = D
         self.assertEqual(a.d.x, 7)
 
+        e = VB()
+        e.bind("a", "ea")
+        e.a = a
+        self.assertEqual(e.ea, a)
+
     def testDependentBindings(self):
 
         class A(sip.vb.ValueBinder):

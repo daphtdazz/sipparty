@@ -63,18 +63,8 @@ class ValueBinder(object):
 
         super(ValueBinder, self).__init__(*args, **kwargs)
 
-        if hasattr(self, "vb_dependencies"):
-            log.debug("%r has VB dependencies", self.__class__.__name__)
-            deps = self.vb_dependencies
-            deleattrmap = self._vb_delegate_attributes
-            for dele, deleattrs in deps:
-                for deleattr in deleattrs:
-                    if deleattr in deleattrmap:
-                        raise ValueError(
-                            "Delegate attribute %r declared twice" % deleattr)
-                    log.debug("Attr %r is delegated through %r", deleattr,
-                              dele)
-                    deleattrmap[deleattr] = dele
+        self._vb_initDependencies()
+        self._vb_initBindings()
 
     def bind(self, frompath, topath, transformer=None):
         """When any item on frompath or topath changes, set topath to frompath.
@@ -93,9 +83,9 @@ class ValueBinder(object):
         """
         log.debug("Bind %r to %r", frompath, topath)
         self._vb_binddirection(
-            frompath, topath, self, transformer, self.VB_Forward)
+            frompath, topath, None, transformer, self.VB_Forward)
         self._vb_binddirection(
-            topath, frompath, self, transformer, self.VB_Backward)
+            topath, frompath, None, transformer, self.VB_Backward)
 
     def unbind(self, frompath):
         """Unbind a binding. Raises NoSuchBinding() if the binding does not
@@ -132,8 +122,6 @@ class ValueBinder(object):
 
         Propagate bindings.
         """
-
-        log.debug("Setattr %r", attr)
 
         # If this is a delegated attribute, pass through.
         if attr in self._vb_delegate_attributes:
@@ -201,6 +189,9 @@ class ValueBinder(object):
         lp.insert(0, '')
         return cls.VB_JoinPath(lp)
 
+    #
+    # =================== INTERNAL ===========================================
+    #
     def _vb_unbindAllParent(self):
         for direction in self.VB_Directions:
             abds = self._vb_bindingsForDirection(direction)
@@ -426,3 +417,29 @@ class ValueBinder(object):
         else:
             nextattr = splitpath[-1]
         return nextobj, nextattr
+
+    def _vb_initDependencies(self):
+        if not hasattr(self, "vb_dependencies"):
+            return
+
+        log.debug("%r has VB dependencies", self.__class__.__name__)
+        deps = self.vb_dependencies
+        deleattrmap = self._vb_delegate_attributes
+        for dele, deleattrs in deps:
+            for deleattr in deleattrs:
+                if deleattr in deleattrmap:
+                    raise ValueError(
+                        "Delegate attribute %r declared twice" % deleattr)
+                log.debug("Attr %r is delegated through %r", deleattr, dele)
+                deleattrmap[deleattr] = dele
+
+    def _vb_initBindings(self):
+        if not hasattr(self, "vb_bindings"):
+            return
+
+        for binding in self.vb_bindings:
+            if len(binding) > 2:
+                transformer = binding[2]
+            else:
+                transformer = None
+            self.bind(binding[0], binding[1], transformer)
