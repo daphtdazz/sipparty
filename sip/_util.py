@@ -117,7 +117,7 @@ class Enum(set):
 
     def __init__(self, vals, normalize=None):
         self.normalize = normalize
-        super(self.__class__, self).__init__(vals)
+        super(Enum, self).__init__(vals)
         self._en_list = list(vals)
 
     def __contains__(self, val):
@@ -144,6 +144,13 @@ class Enum(set):
 
     def index(self, item):
         return self._en_list.index(item)
+
+    def update(self, iterable):
+        super(Enum, self).update(iterable)
+        for item in iterable:
+            if item in self._en_list:
+                continue
+            self._en_list.append(item)
 
 
 class ClassType(object):
@@ -242,7 +249,7 @@ class Resets(object):
 def CCPropsFor(props):
 
     class CumulativeClassProperties(type):
-        def __new__(cls, name, bases, dict):
+        def __init__(cls, name, bases, dict):
             """Initializes the class dictionary, so that all the properties in
             props are accumulated with all the inherited properties in the
             base classes.
@@ -258,6 +265,7 @@ def CCPropsFor(props):
                 log.debug("Starting properties %r", cprops)
                 cpropstype = type(cprops)
                 newcprops = cpropstype(cprops)
+                log.debug("cprops copy: %r", newcprops)
                 for method_name in ("extend", "update"):
                     if hasattr(newcprops, method_name):
                         break
@@ -272,16 +280,20 @@ def CCPropsFor(props):
                 blist.reverse()
                 for base in blist:
                     if hasattr(base, cprop_name):
+                        log.debug("hasattr %r", cprop_name)
                         inh_cprops = getattr(base, cprop_name)
+                        log.debug("base attrs: %r", inh_cprops)
                         method(inh_cprops)
+                        log.debug("newcprops %r", newcprops)
 
                 # Finally update with this class's version.
                 method(cprops)
                 dict[cprop_name] = newcprops
+                setattr(cls, cprop_name, newcprops)
                 log.debug("Ending properties %r", dict[cprop_name])
 
-            return super(CumulativeClassProperties, cls).__new__(
-                cls, name, bases, dict)
+            super(CumulativeClassProperties, cls).__init__(
+                name, bases, dict)
 
     return CumulativeClassProperties
 
