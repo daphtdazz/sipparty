@@ -62,3 +62,12 @@ docs/_build/
 
 # PyBuilder
 target/
+
+# pdfs
+*.pdf
+
+# sublime
+*sublime*
+
+# out
+*.out
