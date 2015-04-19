@@ -157,6 +157,8 @@ class Timer(object):
 class FSMClassInitializer(type):
         def __init__(self, name, bases, dict):
             super(FSMClassInitializer, self).__init__(name, bases, dict)
+            log.debug("FSMClass states after super init: %r",
+                      None if not hasattr(self, "States") else self.States)
 
             self._fsm_transitions = {}
             self._fsm_timers = {}
@@ -165,6 +167,8 @@ class FSMClassInitializer(type):
 
             # Add any predefined transitions.
             self.AddClassTransitions()
+            log.debug("FSMClass states after AddClassTransitions: %r",
+                      None if not hasattr(self, "States") else self.States)
 
 
 @six.add_metaclass(
@@ -277,7 +281,8 @@ class FSM(object):
         log.debug("Deleting FSM")
         if self._fsm_use_async_timers:
             self._fsm_thread.cancel()
-            self._fsm_thread.join()
+            if self._fsm_thread is not threading.currentThread():
+                self._fsm_thread.join()
 
     def __str__(self):
         return "\n".join([line for line in self._fsm_strgen()])

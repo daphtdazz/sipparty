@@ -462,7 +462,7 @@ class TransportFSM(fsm.FSM):
             del self._tfsm_buffer[:]
 
         else:
-            while True:
+            while len(self._tfsm_buffer) > 0:
                 bytes_consumed = self._tfsm_byteConsumer(
                     six.binary_type(self._tfsm_buffer))
                 if bytes_consumed == 0:

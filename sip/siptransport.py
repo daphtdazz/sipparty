@@ -32,9 +32,9 @@ class SipTransportFSM(transport.TransportFSM):
     #
     # =================== CLASS INTERFACE ====================================
     #
-
     # These are cumulative with the super classes'.
-    States = _util.Enum(("transmitting",))
+    States = _util.Enum(
+        ("sendingreq", "waitingrsp"))
 
     @classmethod
     def AddClassTransitions(cls):
@@ -47,23 +47,53 @@ class SipTransportFSM(transport.TransportFSM):
     def __init__(self):
         super(SipTransportFSM, self).__init__()
 
+        self._tsipfsm_messages = []
+
         # Use a weak reference to set up our consuming method as else we will
         # retain ourselves.
         weak_self = weakref.ref(self)
 
         def siptfsm_consumer(data):
-            self = weak_self()
-            if self is None:
+            strong_self = weak_self()
+            if strong_self is None:
                 return 0
-            return self._tsfsm_consumeBytes(data)
+            return strong_self._tsfsm_consumeBytes(data)
 
         self.byteConsumer = siptfsm_consumer
 
+    messages = _util.DerivedProperty("_tsipfsm_messages")
+    messageConsumer = _util.DerivedProperty(
+        "_tsipfsm_byteConsumer",
+        lambda val: isinstance(val, collections.Callable))
+
     def sendMessage(self, message):
-        pass
+        self.hit(self.Inputs.send, six.binary_type(message))
 
     #
     # =================== INTERNAL ===========================================
     #
     def _tsfsm_consumeBytes(self, data):
-        eoleol = bytearray(prot.EOL * 2)
+        log.debug(
+            "SipTransportFSM attempting to consume %d bytes.", len(data))
+        log.debug("%r", data)
+
+        # SIP messages always have \r\n\r\n after the headers and before any
+        # bodies.
+        eoleol = prot.EOL * 2
+
+        eoleol_index = data.find(eoleol)
+        if eoleol_index == -1:
+            # No possibility of a full message yet.
+            log.debug("Data not a full SIP message.")
+            return 0
+
+        # We've got a full message, so parse it.
+        newmessage = message.Message.Parse(data)
+        message_end = eoleol_index + len(eoleol)
+
+        # !!! Look at content length header / stream type (if available) and
+        # use that to burn the remaining data.
+
+        self.messages.append(newmessage)
+
+        return message_end

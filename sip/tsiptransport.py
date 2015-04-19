@@ -19,25 +19,56 @@ limitations under the License.
 import sys
 import os
 import re
+import time
+import timeit
 import logging
 import unittest
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
-log = logging.getLogger()
 
+import message
 import transport
 import siptransport
+
+log = logging.getLogger()
 
 
 class TestSIPTransport(unittest.TestCase):
 
+    def wait_for(self, func, timeout=2):
+        assert timeout > 0.05
+        now = timeit.default_timer()
+        until = now + timeout
+        while timeit.default_timer() < until:
+            if func():
+                break
+            time.sleep(0.01)
+        else:
+            self.assertTrue(0, "Timed out waiting for %r" % func)
+
     def testBasicSIPTransport(self):
+
+        S = siptransport.SipTransportFSM.States
+        I = siptransport.SipTransportFSM.Inputs
 
         t1 = siptransport.SipTransportFSM()
         t2 = siptransport.SipTransportFSM()
 
-        log.debug(t1.States)
+        t1.hit(I.listen)
+        self.wait_for(lambda: t1.localAddress != (None, 0))
+        log.debug("t1.localAddress: %r", t1.localAddress)
+        t2.hit(I.connect, t1.localAddress)
+
+        self.wait_for(lambda: t2.state == S.connected)
+        self.wait_for(lambda: t1.state == S.connected)
+
+        inv = message.Message.invite()
+        t1.sendMessage(inv)
+
+        self.wait_for(lambda: len(t2.messages) > 0)
+
+        t1.hit(I.disconnect)
 
 if __name__ == "__main__":
     unittest.main()

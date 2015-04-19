@@ -32,6 +32,7 @@ import response
 from header import Header
 
 log = logging.getLogger(__name__)
+log.setLevel(logging.DEBUG)
 
 
 @six.add_metaclass(_util.attributesubclassgen)
@@ -151,7 +152,7 @@ class Message(vb.ValueBinder):
             self.autofillheaders()
         self._establishbindings()
 
-    def __str__(self):
+    def __bytes__(self):
 
         log.debug(
             "%d headers, %d bodies.", len(self.headers), len(self.bodies))
@@ -162,9 +163,15 @@ class Message(vb.ValueBinder):
         components.append(b"")
         if self.bodies:
             components.extend(self.bodies)
-            components.append(b"")  # need a newline at the end.
+            components.append(b"")
 
+        components.append(b"")  # need a newline at the end.
+
+        log.debug("Last line: %r", components[-1])
         return prot.EOL.join([str(_cp) for _cp in components])
+
+    if six.PY2:
+        __str__ = __bytes__
 
     def __getattr__(self, attr):
         """Get some part of the message. E.g. get a particular header like:

@@ -37,16 +37,21 @@ states = _util.Enum(
 
 class SimpleCallFSM(fsm.FSM):
 
-    def __init__(self, *args, **kwargs):
-        super(SimpleCallFSM, self).__init__(self, *args, **kwargs)
+    #
+    # =================== CLASS INTERFACE ====================================
+    #
+    # These are cumulative with the super classes'.
+    States = _util.Enum(
+        ("initial", "waitingrsp"))
 
-        # !!! Test out the FSM mechanism and try building a simple call fsm
-        # with a view to determing what functions should go into a general
-        # abstract SIP FSM class.
-        #
-        # !!!
-        self.addTransition(states.no_dialogue, inputs.invite,
-                           states.starting_dialogue)
+    @classmethod
+    def AddClassTransitions(cls):
+        log.debug("STFSM's states: %r", cls.States)
+
+    def __init__(self, *args, **kwargs):
+
+        # This is a synchronous FSM.
+        super(SimpleCallFSM, self).__init__(self, *args, **kwargs)
 
     def receiveMessage(self, sipmessage):
         "Generate input based on the message."
