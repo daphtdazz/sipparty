@@ -155,8 +155,8 @@ class Timer(object):
 
 
 class FSMClassInitializer(type):
-        def __init__(self, *args, **kwargs):
-            super(FSMClassInitializer, self).__init__(*args, **kwargs)
+        def __init__(self, name, bases, dict):
+            super(FSMClassInitializer, self).__init__(name, bases, dict)
 
             self._fsm_transitions = {}
             self._fsm_timers = {}
@@ -171,8 +171,8 @@ class FSMClassInitializer(type):
     # The FSM type needs both the FSMClassInitializer and the cumulative
     # properties tool.
     type('FSMType',
-         (FSMClassInitializer,
-          _util.CCPropsFor(("States", "Inputs", "Actions"))),
+         (_util.CCPropsFor(("States", "Inputs", "Actions")),
+          FSMClassInitializer),
          dict()))
 class FSM(object):
     """Interface:

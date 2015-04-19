@@ -16,6 +16,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+import six
 import sys
 import os
 import re
@@ -318,6 +319,24 @@ class TestProtocol(unittest.TestCase):
 
         self.assertEqual(en[1:3], ["dog", "aardvark"])
 
+    def testCumulativeProperties(self):
+
+        @six.add_metaclass(sip._util.CCPropsFor(("CPs", "CPList")))
+        class CCPTestA(object):
+            CPs = sip._util.Enum((1, 2))
+            CPList = [1, 2]
+
+        class CCPTestB(CCPTestA):
+            CPs = sip._util.Enum((4, 5))
+            CPList = [4, 5]
+
+        class CCPTest1(CCPTestB):
+            CPs = sip._util.Enum((3, 2))
+            CPList = [3, 2]
+
+        self.assertEqual(CCPTest1.CPs, sip._util.Enum((1, 2, 3, 4, 5)))
+        self.assertEqual(CCPTest1.CPList, [3, 2, 4, 5, 1])
+
     def testClassOrInstance(self):
 
         class MyClass(object):
@@ -337,25 +356,3 @@ class TestProtocol(unittest.TestCase):
 
 if __name__ == "__main__":
     sys.exit(unittest.main())
-
-
-caller = sipparty.SipParty()
-callee = sipparty.SipParty()
-
-callee.listen()
-
-caller.register()
-
-callee.receiveRegister()
-callee.respond(200)
-
-caller.receiveResponse(200)
-
-caller.invite()
-callee.respond(100)
-callee.respond(180)
-caller.receiveResponse(100)
-caller.receiveResponse(180)
-
-callee.bye()
-caller.respond(200)

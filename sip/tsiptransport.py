@@ -21,10 +21,13 @@ import os
 import re
 import logging
 import unittest
-import siptransport
 
-logging.basicConfig(level=logging.DEBUG)
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger()
+
+import transport
+import siptransport
 
 
 class TestSIPTransport(unittest.TestCase):
@@ -33,3 +36,8 @@ class TestSIPTransport(unittest.TestCase):
 
         t1 = siptransport.SipTransportFSM()
         t2 = siptransport.SipTransportFSM()
+
+        log.debug(t1.States)
+
+if __name__ == "__main__":
+    unittest.main()

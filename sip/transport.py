@@ -16,6 +16,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+import six
 import socket
 import threading
 import time
@@ -451,10 +452,10 @@ class TransportFSM(fsm.FSM):
         """This method is registered when connected with the FSM's thread to
         be called when there is data available on the socket.
         """
-        string, address = sck.recvfrom(self._tfsm_receiveSize)
-        strlen = len(string)
-        log.debug("Received %d bytes from %r.", strlen, address)
-        self._tfsm_buffer.extend(bytearray(string))
+        bytes, address = sck.recvfrom(self._tfsm_receiveSize)
+        byteslen = len(bytes)
+        log.debug("Received %d bytes from %r.", byteslen, address)
+        self._tfsm_buffer.extend(bytes)
 
         if self._tfsm_byteConsumer is None:
             log.debug("No consumer; dumping bytes: %r.", self._tfsm_buffer)
@@ -462,13 +463,14 @@ class TransportFSM(fsm.FSM):
 
         else:
             while True:
-                bytes_consumed = self._tfsm_byteConsumer(self._tfsm_buffer)
+                bytes_consumed = self._tfsm_byteConsumer(
+                    six.binary_type(self._tfsm_buffer))
                 if bytes_consumed == 0:
                     log.debug("Consumer has used as much as it can.")
                     break
                 log.debug("Consumer consumed %d more bytes.", bytes_consumed)
                 del self._tfsm_buffer[:bytes_consumed]
 
-        if strlen == 0:
+        if byteslen == 0:
             log.debug("Received 0 bytes: socket has demurely.")
             self.hit(self.Inputs.disconnect)

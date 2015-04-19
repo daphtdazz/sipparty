@@ -34,17 +34,18 @@ class SipTransportFSM(transport.TransportFSM):
     #
 
     # These are cumulative with the super classes'.
-    States = _util.Enum(())
+    States = _util.Enum(("transmitting",))
 
     @classmethod
     def AddClassTransitions(cls):
-        transport.TransportFSM.AddClassTransitions()
+        log.debug("STFSM's states: %r", cls.States)
+        super(cls, cls).AddClassTransitions()
 
     #
     # =================== INSTANCE INTERFACE =================================
     #
     def __init__(self):
-        super(SipTransportFSM, self).__init__(self)
+        super(SipTransportFSM, self).__init__()
 
         # Use a weak reference to set up our consuming method as else we will
         # retain ourselves.
