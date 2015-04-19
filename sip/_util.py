@@ -258,21 +258,34 @@ def CCPropsFor(props):
                 log.debug("Starting properties %r", cprops)
                 cpropstype = type(cprops)
                 newcprops = cpropstype(cprops)
-                for method_name in ("extend", "update"):
-                    if hasattr(newcprops, method_name):
-                        break
+
+                # Use update if it has it.
+                if hasattr(newcprops, "update"):
+                    method = getattr(newcprops, "update")
+
+                elif hasattr(newcprops, "append"):
+                    def update_from_extend(new_vals):
+                        log.debug("Append to %r %r", newcprops, new_vals)
+                        for val in new_vals:
+                            if val in newcprops:
+                                continue
+                            newcprops.append(val)
+
+                    method = update_from_extend
+
                 else:
                     raise AttributeError(
                         "Cumulative property {cprop_name!r} is neither "
-                        "extendable nor updatable."
+                        "appendable nor updatable."
                         "".format(**locals()))
-                method = getattr(newcprops, method_name)
+
                 blist = list(bases)
                 log.debug("Base list: %r", blist)
                 blist.reverse()
                 for base in blist:
                     if hasattr(base, cprop_name):
                         inh_cprops = getattr(base, cprop_name)
+                        log.debug("Run method on %r", inh_cprops)
                         method(inh_cprops)
 
                 # Finally update with this class's version.
