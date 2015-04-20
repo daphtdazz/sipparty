@@ -167,20 +167,46 @@ class ClassType(object):
             self.class_append, ""))
 
 
-class Value(object):
-    def __get__(self, instance, owner):
-        if instance is None or len(instance.values) == 0:
-            raise AttributeError(
-                "{0!r} does not have attribute 'value'".format(owner.__name__))
+class FirstListItemProxy(object):
+    "This descriptor provides access to the first item in a list attribute."
 
-        return instance.values[0]
+    def __init__(self, list_attr_name):
+        super(FirstListItemProxy, self).__init__()
+
+        try:
+            hasattr(self, list_attr_name)
+        except TypeError:
+            raise TypeError(
+                "list_attr_name {0} wrong type.".format(list_attr_name))
+
+        self._flip_attrName = list_attr_name
+
+    def __get__(self, instance, owner):
+        if instance is None:
+            raise AttributeError(
+                "Class use of FirstListItemProxy descriptors not supported. "
+                "List attribute name: %r." % (self._flip_attrName,))
+
+        # Take a copy so the length won't change between checking it and
+        # returning the first item.
+        list_attr = list(getattr(instance, self._flip_attrName))
+
+        if len(list_attr) == 0:
+            raise AttributeError(
+                "Instance %r of class %r does not have attribute %r."
+                "".format(instance, owner, self._flip_attrName))
+
+        return list_attr[0]
 
     def __set__(self, instance, val):
         if instance is None:
             raise AttributeError(
-                "{0!r} does not have attribute 'value'".format(owner.__name__))
+                "Class %r does not support FirstListItemProxy descriptors. "
+                "List attribute name: %r." % (owner, self._flip_attrName))
 
-        instance.values.insert(0, val)
+        # Use a slice which works for the first addition as well.
+        list_attr = getattr(instance, self._flip_attrName)
+        list_attr[0:1] = (val,)
 
 
 class GenerateIfNotSet(object):

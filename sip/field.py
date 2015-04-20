@@ -59,11 +59,17 @@ class Field(parse.Parser, vb.ValueBinder):
         if value is not None:
             self.value = value
 
-    def __str__(self):
-        rs = "{self.value}".format(**locals())
-        rslist = [rs] + [str(val) for val in self.parameters.itervalues()]
-        rs = ";".join(rslist)
+    def __bytes__(self):
+        rs = b"{self.value}".format(**locals())
+        rslist = [rs]
+        rslist.extend(
+            [str(val) for val in self.parameters.itervalues()])
+        log.debug(";.join(%r)", rslist)
+        rs = b";".join(rslist)
         return rs
+
+    if six.PY2:
+        __str__ = __bytes__
 
     def __setattr__(self, attr, val):
         if attr in param.Param.types:

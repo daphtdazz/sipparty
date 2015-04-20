@@ -36,7 +36,7 @@ request = {
                 ("startline.protocol",)
             ],
             KeyActAdd: [
-                ("ToHeader.value.parameters.tag", param.Param.tag)
+                ("ToHeader.field.parameters.tag", param.Param.tag)
             ]
         }
     }

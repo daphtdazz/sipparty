@@ -64,8 +64,8 @@ class Party(object):
         """Start a call."""
         invite = Message.invite()
         invite.startline.uri.aor = copy.deepcopy(callee.aor)
-        invite.fromheader.value.value.uri.aor = copy.deepcopy(self.aor)
-        invite.viaheader.value.transport = transport.SockTypeName(
+        invite.fromheader.field.value.uri.aor = copy.deepcopy(self.aor)
+        invite.viaheader.field.transport = transport.SockTypeName(
             callee.socktype)
         self.connect(
             callee.address, callee.port, callee.sockfamily, callee.socktype)

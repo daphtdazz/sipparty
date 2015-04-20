@@ -12,7 +12,7 @@ SIP Party Map
       protocol
 
     Header
-      value
+      fields <- [Field, ...]
       parameters
 
     FieldDelegateHeader <= Header

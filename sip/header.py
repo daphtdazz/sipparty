@@ -61,7 +61,7 @@ class Header(Parser, vb.ValueBinder):
         normalize=_util.sipheader)
 
     type = _util.ClassType("Header")
-    value = _util.Value()
+    field = _util.FirstListItemProxy("fields")
 
     parseinfo = {
         Parser.Pattern:
@@ -79,15 +79,15 @@ class Header(Parser, vb.ValueBinder):
     def parsecust(self, string, mo):
 
         data = mo.group(2)
-        values = data.split(",")
-        log.debug("Header values: %r", values)
+        fields = data.split(",")
+        log.debug("Header fields: %r", fields)
 
         if not hasattr(self, "FieldDelegateClass"):
             try:
-                self.values = values
+                self.fields = fields
             except AttributeError:
                 log.debug(
-                    "Can't set 'values' on instance of %r.", self.__class__)
+                    "Can't set 'fields' on instance of %r.", self.__class__)
             return
 
         fdc = self.FieldDelegateClass
@@ -96,35 +96,35 @@ class Header(Parser, vb.ValueBinder):
         else:
             create = lambda x: fdc(x)
 
-        self.values = [create(val) for val in values]
+        self.fields = [create(f) for f in fields]
 
-    def __init__(self, values=None):
+    def __init__(self, fields=None):
         """Initialize a header line.
         """
         super(Header, self).__init__()
 
-        if values is None:
-            values = list()
+        if fields is None:
+            fields = list()
 
-        self.__dict__["values"] = values
+        self.__dict__["fields"] = fields
 
     def __str__(self):
         return "{0}: {1}".format(
-            self.type, ",".join([str(v) for v in self.values]))
+            self.type, ",".join([str(v) for v in self.fields]))
 
 
 class FieldDelegateHeader(Header):
     """The FieldDelegateHeader delegates the work to a field class. Useful
-    where the correct values are complex."""
+    where the correct fields are complex."""
 
     def __init__(self, *args, **kwargs):
         super(FieldDelegateHeader, self).__init__(*args, **kwargs)
-        if not hasattr(self, "value"):
-            self.value = self.FieldDelegateClass()
+        if not hasattr(self, "field"):
+            self.field = self.FieldDelegateClass()
 
     def __setattr__(self, attr, val):
-        if hasattr(self, "value"):
-            myval = self.value
+        if hasattr(self, "field"):
+            myval = self.field
             if myval:
                 dattrs = myval.delegateattributes
                 if attr in dattrs:
@@ -135,8 +135,8 @@ class FieldDelegateHeader(Header):
         return
 
     def __getattr__(self, attr):
-        if attr != "value" and hasattr(self, "value"):
-            myval = self.value
+        if attr != "field" and hasattr(self, "field"):
+            myval = self.field
             dattrs = myval.delegateattributes
             if attr in dattrs:
                 return getattr(myval, attr)
@@ -188,10 +188,10 @@ class Call_IdHeader(Header):
         self.key = None
 
     @property
-    def value(self):
-        values = self.__dict__["values"]
-        if values:
-            return values[0]
+    def field(self):
+        fields = self.__dict__["fields"]
+        if fields:
+            return fields[0]
 
         if self.key is None:
             self.key = Call_IdHeader.GenerateKey()
@@ -203,16 +203,16 @@ class Call_IdHeader(Header):
         return val
 
     @property
-    def values(self):
-        values = self.__dict__["values"]
-        if not values:
-            values = [self.value]
-            self.values = values
-        return values
+    def fields(self):
+        fields = self.__dict__["fields"]
+        if not fields:
+            fields = [self.field]
+            self.fields = fields
+        return fields
 
-    @values.setter
-    def values(self, values):
-        self.__dict__["values"] = values
+    @fields.setter
+    def fields(self, fields):
+        self.__dict__["fields"] = fields
 
 
 class CseqHeader(FieldDelegateHeader):

@@ -168,7 +168,7 @@ class Message(vb.ValueBinder):
         components.append(b"")  # need a newline at the end.
 
         log.debug("Last line: %r", components[-1])
-        return prot.EOL.join([str(_cp) for _cp in components])
+        return prot.EOL.join([six.binary_type(_cp) for _cp in components])
 
     if six.PY2:
         __str__ = __bytes__
@@ -251,7 +251,7 @@ class Message(vb.ValueBinder):
             mheader = getattr(self, mheader_name + "Header")
             for param_name in mparams:
                 setattr(
-                    mheader.value.parameters, param_name,
+                    mheader.field.parameters, param_name,
                     getattr(Param, param_name)())
 
     def applyTransform(self, targetmsg, tform):
@@ -305,11 +305,11 @@ class InviteMessage(Message):
     """An INVITE."""
 
     bindings = [
-        ("startline.uri", "ToHeader.value.uri"),
-        ("startline.protocol", "ViaHeader.value.protocol"),
-        ("startline", "ViaHeader.value.parameters.branch.startline"),
-        ("FromHeader.value.value.uri.aor.host", "ViaHeader.value.host.host"),
-        ("startline.type", "CseqHeader.value.reqtype")]
+        ("startline.uri", "ToHeader.field.uri"),
+        ("startline.protocol", "ViaHeader.field.protocol"),
+        ("startline", "ViaHeader.field.parameters.branch.startline"),
+        ("FromHeader.field.value.uri.aor.host", "ViaHeader.field.host.host"),
+        ("startline.type", "CseqHeader.field.reqtype")]
 
     mandatoryparameters = {
         Header.types.From: [Param.types.tag],
