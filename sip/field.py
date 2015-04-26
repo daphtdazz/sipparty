@@ -83,7 +83,7 @@ class Field(parse.Parser, vb.ValueBinder):
         super(Field, self).__setattr__(attr, val)
 
 
-class PartyIDField(Field):
+class DNameURIField(Field):
     delegateattributes = components.DNameURI.delegateattributes
 
     parseinfo = {
@@ -93,7 +93,7 @@ class PartyIDField(Field):
     }
 
     def __init__(self):
-        super(PartyIDField, self).__init__(components.DNameURI())
+        super(DNameURIField, self).__init__(components.DNameURI())
 
 
 class ViaField(Field):

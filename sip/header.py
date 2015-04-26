@@ -150,12 +150,12 @@ class FieldDelegateHeader(Header):
 
 class ToHeader(FieldDelegateHeader):
     """A To: header"""
-    FieldDelegateClass = field.PartyIDField
+    FieldDelegateClass = field.DNameURIField
 
 
 class FromHeader(FieldDelegateHeader):
     """A From: header"""
-    FieldDelegateClass = field.PartyIDField
+    FieldDelegateClass = field.DNameURIField
 
 
 class ViaHeader(FieldDelegateHeader):

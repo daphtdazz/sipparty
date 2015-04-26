@@ -20,15 +20,15 @@ SIP Party Map
 
     FromHeader <+= FieldDelegateHeader
     ToHeader   <+
-      FieldDelegateClass = field.PartyIDField
-      dname (d value.value)
-      uri (d value.value)
+      FieldDelegateClass = field.DNameURIField
+      dname (d field.value)
+      uri (d field.value)
 
     Field
       value
       parameters
 
-    PartyIDField <= Field
+    DNameURIField <= Field
       dname (d value)
       uri (d value)
 
