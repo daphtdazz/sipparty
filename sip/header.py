@@ -33,6 +33,7 @@ log = logging.getLogger(__name__)
 
 
 @six.add_metaclass(_util.attributesubclassgen)
+@_util.TwoCompatibleThree
 class Header(Parser, vb.ValueBinder):
     """A SIP header.
 
@@ -108,7 +109,7 @@ class Header(Parser, vb.ValueBinder):
 
         self.__dict__["fields"] = fields
 
-    def __str__(self):
+    def __bytes__(self):
         return "{0}: {1}".format(
             self.type, ",".join([str(v) for v in self.fields]))
 

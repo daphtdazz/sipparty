@@ -16,6 +16,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+import six
 import types
 import threading
 import timeit
@@ -434,3 +435,22 @@ class DerivedProperty(object):
             setattr(obj, pname, value)
         else:
             self._rp_store(obj, value)
+
+
+def TwoCompatibleThree(cls):
+    """Class decorator that makes certain python 3 aspects of the class
+    compatible with python 2.
+
+    These are:
+        __bytes__  - is called instead of __str__ in python 2."""
+    if six.PY2:
+        class BytesToStrDescriptor(object):
+            def __get__(self, obj, cls):
+                print("bytes to string desc")
+                return (
+                    obj.__bytes__ if obj is not None
+                    else cls.__bytes__)
+
+        cls.__str__ = BytesToStrDescriptor()
+
+    return cls
