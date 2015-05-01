@@ -164,6 +164,37 @@ class ViaHeader(FieldDelegateHeader):
     FieldDelegateClass = field.ViaField
 
 
+class ContactHeader(Header):
+    """ABNF from RFC3261:
+    Contact        =  ("Contact" / "m" ) HCOLON
+                      ( STAR / (contact-param *(COMMA contact-param)))
+    contact-param  =  (name-addr / addr-spec) *(SEMI contact-params)
+    name-addr      =  [ display-name ] LAQUOT addr-spec RAQUOT
+    addr-spec      =  SIP-URI / SIPS-URI / absoluteURI
+    display-name   =  *(token LWS)/ quoted-string
+
+    contact-params     =  c-p-q / c-p-expires
+                          / contact-extension
+    c-p-q              =  "q" EQUAL qvalue
+    c-p-expires        =  "expires" EQUAL delta-seconds
+    contact-extension  =  generic-param
+    delta-seconds      =  1*DIGIT
+    """
+
+    isStar = _util.DerivedProperty(
+            "_hdrctct_isStar", lambda x: x is True or x is False)
+
+    def __init__(self, *args, **kwargs):
+        super(ContactHeader, self).__init__(*args, **kwargs)
+        self._hdrctct_isStar = False
+
+    @property
+    def fields(self):
+        if self._hdrctct_isStar:
+            return ("*",)
+        return super(ContactHeader, self).fields
+
+
 class Call_IdHeader(Header):
     """Call ID header."""
 

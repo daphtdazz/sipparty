@@ -25,8 +25,9 @@ import parse
 import components
 import defaults
 import param
-import request
 import pdb
+
+# More imports at end of file.
 
 log = logging.getLogger(__name__)
 
@@ -197,3 +198,6 @@ class Max_ForwardsField(Field):
         super(Max_ForwardsField, self).__init__()
         self.number = number
         self.bind("number", "value")
+
+# These must be imported at the end to avoid ordering issues.
+import request

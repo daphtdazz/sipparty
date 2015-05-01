@@ -25,7 +25,6 @@ import components
 import parse
 import _util
 import vb
-from header import Header
 import pdb
 
 log = logging.getLogger(__name__)

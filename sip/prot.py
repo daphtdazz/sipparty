@@ -1,7 +1,7 @@
 """prot.py
 
-This module contains details on the SIP protocol, and should generally not
-require any of the other sip specific code.
+This module contains details on the SIP protocol from RFC3261, and should
+generally not require any of the other sip specific code.
 
 Note that for python2/3 compatibility all SIP messages use `bytes` not `str`
 (although obviously `bytes` is `str` in python 2).
@@ -20,10 +20,26 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import _util
+
+# Whitespace, linear, "separator" i.e. optional whitespace.
+#  LWS  =  [*WSP CRLF] 1*WSP ; linear whitespace
+#  SWS  =  [LWS] ; sep whitespace
+CRLF = b"\r\n"
+WS = "[ \t]"
+LWS = b"(?:%s*%s)?%s+" % (WS, CRLF, WS)
+SWS = b"(?:%s)?" % (LWS,)
+
+# A SIP token.
+# token       =  1*(alphanum / "-" / "." / "!" / "%" / "*"
+#                      / "_" / "+" / "`" / "'" / "~" )
+token = b"[\w-.!%*_+`'~]+"
+
+# Display name
+# display-name   =  *(token LWS)/ quoted-string
+display_name = b""
 
 # The end of line string used in SIP messages.
-EOL = b"\r\n"
+EOL = CRLF
 
 # Magic cookie used in branch parameters.
 BranchMagicCookie = b"z9hG4bK"
