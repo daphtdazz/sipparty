@@ -117,7 +117,10 @@ class URI(Parser, vb.ValueBinder):
 
 
 class DNameURI(Parser, vb.ValueBinder):
-    """A display name plus a uri value object
+    """A display name plus a uri value object.
+
+    This is basically (name-addr/addr-spec) where:
+
     name-addr      =  [ display-name ] LAQUOT addr-spec RAQUOT
     addr-spec      =  SIP-URI / SIPS-URI / absoluteURI
     display-name   =  *(token LWS)/ quoted-string

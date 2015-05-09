@@ -32,7 +32,13 @@ import pdb
 log = logging.getLogger(__name__)
 
 
-@six.add_metaclass(_util.attributesubclassgen)
+@six.add_metaclass(
+    # The FSM type needs both the attributesubclassgen and the cumulative
+    # properties metaclasses.
+    type('HeaderType',
+         (_util.CCPropsFor(("fields",)),
+          _util.attributesubclassgen),
+         dict()))
 @_util.TwoCompatibleThree
 class Header(Parser, vb.ValueBinder):
     """A SIP header.
@@ -63,6 +69,9 @@ class Header(Parser, vb.ValueBinder):
 
     type = _util.ClassType("Header")
     field = _util.FirstListItemProxy("fields")
+    fields = _util.DerivedProperty(
+        "_hdr_fields", check=lambda x: isinstance(x, list))
+    log.info("Header fields %s", fields)
 
     parseinfo = {
         Parser.Pattern:
@@ -102,12 +111,13 @@ class Header(Parser, vb.ValueBinder):
     def __init__(self, fields=None):
         """Initialize a header line.
         """
+        self.__dict__["_hdr_fields"] = []
         super(Header, self).__init__()
 
         if fields is None:
             fields = list()
 
-        self.__dict__["fields"] = fields
+        self.fields = fields
 
     def __bytes__(self):
         return "{0}: {1}".format(
@@ -120,13 +130,13 @@ class FieldDelegateHeader(Header):
 
     def __init__(self, *args, **kwargs):
         super(FieldDelegateHeader, self).__init__(*args, **kwargs)
-        if not hasattr(self, "field"):
-            self.field = self.FieldDelegateClass()
+        if not self.fields:
+            self.fields = [self.FieldDelegateClass()]
 
     def __setattr__(self, attr, val):
-        if hasattr(self, "field"):
-            myval = self.field
-            if myval:
+        if len(self.fields) > 0:
+            myval = self.fields[0]
+            if hasattr(myval, "delegateattributes"):
                 dattrs = myval.delegateattributes
                 if attr in dattrs:
                     setattr(myval, attr, val)
@@ -136,8 +146,8 @@ class FieldDelegateHeader(Header):
         return
 
     def __getattr__(self, attr):
-        if attr != "field" and hasattr(self, "field"):
-            myval = self.field
+        if len(self.fields) > 0:
+            myval = self.fields[0]
             dattrs = myval.delegateattributes
             if attr in dattrs:
                 return getattr(myval, attr)
@@ -146,7 +156,7 @@ class FieldDelegateHeader(Header):
         except AttributeError:
             raise AttributeError(
                 "{self.__class__.__name__!r} object has no attribute "
-                "{attr!r}".format(**locals()))
+                "{attr!r}.".format(**locals()))
 
 
 class ToHeader(FieldDelegateHeader):
@@ -164,7 +174,7 @@ class ViaHeader(FieldDelegateHeader):
     FieldDelegateClass = field.ViaField
 
 
-class ContactHeader(Header):
+class ContactHeader(FieldDelegateHeader):
     """ABNF from RFC3261:
     Contact        =  ("Contact" / "m" ) HCOLON
                       ( STAR / (contact-param *(COMMA contact-param)))
@@ -181,18 +191,25 @@ class ContactHeader(Header):
     delta-seconds      =  1*DIGIT
     """
 
+    # Fields is a cumulative DerivedProperty attribute, so we can update it
+    # here with a custom getter.
+    fields = _util.DerivedProperty(get="_hdrctc_fields")
+    log.info("Contact header fields %s", fields)
+
     isStar = _util.DerivedProperty(
-            "_hdrctct_isStar", lambda x: x is True or x is False)
+        "_hdrctct_isStar", lambda x: x is True or x is False)
+    FieldDelegateClass = field.DNameURIField
 
     def __init__(self, *args, **kwargs):
+        self.__dict__["_hdrctct_isStar"] = False
         super(ContactHeader, self).__init__(*args, **kwargs)
-        self._hdrctct_isStar = False
 
-    @property
-    def fields(self):
+    def _hdrctc_fields(self, underlying):
+
         if self._hdrctct_isStar:
-            return ("*",)
-        return super(ContactHeader, self).fields
+            return (prot.STAR,)
+
+        return underlying
 
 
 class Call_IdHeader(Header):
@@ -214,37 +231,28 @@ class Call_IdHeader(Header):
 
         return "{keyval:06x}-{keydate}".format(**locals())
 
+    fields = _util.DerivedProperty(get="_hdrcid_fields")
+    host = _util.DerivedProperty("_hdrcid_host")
+    key = _util.DerivedProperty("_hdrcid_key")
+
     def __init__(self, *args, **kwargs):
+        self.__dict__["_hdrcid_host"] = None
+        self.__dict__["_hdrcid_key"] = None
         Header.__init__(self, *args, **kwargs)
-        self.host = None
-        self.key = None
 
-    @property
-    def field(self):
-        fields = self.__dict__["fields"]
-        if fields:
-            return fields[0]
+    def _hdrcid_fields(self, underlying):
+        if underlying:
+            return underlying
 
-        if self.key is None:
+        if not self.key:
             self.key = Call_IdHeader.GenerateKey()
 
         if self.host:
-            val = "{self.key}@{self.host}".format(self=self)
+            field_text = "{self.key}@{self.host}".format(**locals())
         else:
-            val = "{self.key}".format(self=self)
-        return val
+            field_text = "{self.key}".format(**locals())
 
-    @property
-    def fields(self):
-        fields = self.__dict__["fields"]
-        if not fields:
-            fields = [self.field]
-            self.fields = fields
-        return fields
-
-    @fields.setter
-    def fields(self, fields):
-        self.__dict__["fields"] = fields
+        return [field_text]
 
 
 class CseqHeader(FieldDelegateHeader):

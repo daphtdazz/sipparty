@@ -18,6 +18,8 @@ limitations under the License.
 """
 import six
 import types
+import collections
+import copy
 import threading
 import timeit
 import logging
@@ -116,10 +118,10 @@ class Enum(set):
     It composes with a list to implement the listy bits.
     """
 
-    def __init__(self, vals, normalize=None):
+    def __init__(self, vals=None, normalize=None):
         self.normalize = normalize
-        super(Enum, self).__init__(vals)
-        self._en_list = list(vals)
+        super(Enum, self).__init__(*[v for v in [vals] if v is not None])
+        self._en_list = list(*[v for v in [vals] if v is not None])
 
     def __contains__(self, val):
         if self.normalize is not None:
@@ -274,24 +276,43 @@ class Resets(object):
 
 
 def CCPropsFor(props):
+    """Metaclass generator.
+
+    Returns a metaclass that can be used to accumulate properties from super
+    classes in subclasses.
+    """
 
     class CumulativeClassProperties(type):
-        def __init__(cls, name, bases, dict):
+        def __new__(cls, name, bases, class_dict):
             """Initializes the class dictionary, so that all the properties in
             props are accumulated with all the inherited properties in the
             base classes.
             """
+
+            # So we don't have to do mro calculation ourselves, make a dummy
+            # type using the bases passed in, which we will use to work out
+            # mro later on, however we have to catch recursion since we are
+            # the metaclass of at least one base class so will be called
+            # again...
+            dprefix = '_ccp_dummy_'
+            if name.startswith(dprefix):
+                return super(CumulativeClassProperties, cls).__new__(
+                    cls, name, bases, class_dict)
+
+            dummy_class = type(dprefix + name, bases, {})
+
+            log.debug("Class dictionary: %r.", class_dict)
             log.debug("Accumulate properties %r of %r.", props, name)
             for cprop_name in props:
-                if cprop_name not in dict:
+                if cprop_name not in class_dict:
                     log.debug("Class doesn't have property %r", cprop_name)
                     continue
 
                 log.debug("Fixing %r", cprop_name)
-                cprops = dict[cprop_name]
+                cprops = class_dict[cprop_name]
                 log.debug("Starting properties %r", cprops)
                 cpropstype = type(cprops)
-                newcprops = cpropstype(cprops)
+                newcprops = cpropstype()
 
                 # Use update if it has it.
                 if hasattr(newcprops, "update"):
@@ -313,25 +334,38 @@ def CCPropsFor(props):
                         "appendable nor updatable."
                         "".format(**locals()))
 
-                blist = list(bases)
-                log.debug("Base list: %r", blist)
-                blist.reverse()
-                for base in blist:
-                    if hasattr(base, cprop_name):
+                mro = dummy_class.__mro__
+                log.debug("MRO: %r", mro)
+                for base in mro[-1:0:-1]:
+                    # We are walking the mro ourselves, so we're just
+                    # interested in what's in the dictionary, so don't do
+                    # hasattr(). Ignore the last one which was the dummy
+                    # class to help with MRO.
+                    if cprop_name in base.__dict__:
                         log.debug("hasattr %r", cprop_name)
-                        inh_cprops = getattr(base, cprop_name)
+                        inh_cprops = base.__dict__[cprop_name]
                         log.debug("Run method on %r", inh_cprops)
                         method(inh_cprops)
                         log.debug("newcprops %r", newcprops)
 
                 # Finally update with this class's version.
                 method(cprops)
-                dict[cprop_name] = newcprops
-                setattr(cls, cprop_name, newcprops)
-                log.debug("Ending properties %r", dict[cprop_name])
+                class_dict[cprop_name] = newcprops
+                log.debug("Ending property %r:%r", cprop_name,
+                          class_dict[cprop_name])
 
-            super(CumulativeClassProperties, cls).__init__(
-                name, bases, dict)
+            # We must do this at the end after modifying the dictionary, as
+            # we won't be able to write to the python dict_proxy object
+            # afterwards, and we don't want to replace __dict__ with a
+            # different object.
+            inst = super(CumulativeClassProperties, cls).__new__(
+                cls, name, bases, class_dict)
+            for cprop_name in props:
+                if cprop_name in inst.__dict__:
+                    log.debug("%r: %r.", cprop_name,
+                              inst.__dict__[cprop_name])
+
+            return inst
 
     return CumulativeClassProperties
 
@@ -410,18 +444,54 @@ def OnlyWhenLocked(method):
 
 class DerivedProperty(object):
 
-    def __init__(self, name, check=None, get=None, set=None):
+    def update(self, newDP):
+        """Updates the derived property so that subclasses can override
+        particular methods. newDP is an instance of `DerivedProperty`.""",
+        log.debug("Update %r with %r.", self, newDP)
+        for pr in ("_rp_propName", "_rp_get", "_rp_set", "_rp_check"):
+            np = getattr(newDP, pr)
+            if np is not None:
+                # Only update if not None.
+                log.debug("Update property %r with %s %r.",
+                          self._rp_propName, pr, np)
+                setattr(self, pr, np)
+
+    def __init__(self, name=None, check=None, get=None, set=None):
         self._rp_propName = name
         self._rp_check = check
         self._rp_get = get
-        self._rp_store = set
+        self._rp_set = set
 
     def __get__(self, obj, cls):
+        # log.debug("Get derived prop for obj %r class %r.", obj, cls)
         target = obj if obj is not None else cls
-        if self._rp_get is None:
-            val = getattr(target, self._rp_propName)
-        else:
-            val = self._rp_get(obj)
+
+        log.debug("Get the underlying value (if any).")
+        val = getattr(target, self._rp_propName)
+        log.debug("Underlying value %r.", val)
+
+        gt = self._rp_get
+        if gt is None:
+            # No getter, so return now.
+            return val
+
+        # Get might be a method name...
+        if isinstance(gt, six.binary_type) and hasattr(target, gt):
+            meth = getattr(target, gt)
+            if not isinstance(meth, collections.Callable):
+                raise ValueError(
+                    "Getter attribute %r of %r object is not callable." % (
+                        gt, target.__class__.__name__))
+            val = meth(val)
+            return val
+
+        # Else getter should be a callable.
+        if not isinstance(gt, collections.Callable):
+            raise ValueError(
+                "Getter %r object for DerivedValue on %r on %r object is not "
+                "a callable or a method name." % (
+                    gt, self._rp_propName, target.__class__.__name__))
+        val = gt(obj, val)
         return val
 
     def __set__(self, obj, value):
@@ -431,10 +501,27 @@ class DerivedProperty(object):
                 "%r is not an allowed value for attribute %r of class %r." %
                 (value, pname, obj.__class__.__name__))
 
-        if self._rp_store is None:
+        st = self._rp_set
+
+        if st is None:
+            log.debug("Set %r to %r.", pname, value)
+            log.debug("Self: %r.", self)
             setattr(obj, pname, value)
+        elif isinstance(st, six.binary_type) and hasattr(obj, st):
+            meth = getattr(obj, st)
+            if not isinstance(meth, collections.Callable):
+                raise ValueError(
+                    "Setter attribute %r of %r object is not callable." % (
+                        st, obj.__class__.__name__))
+            val = meth(value)
         else:
-            self._rp_store(obj, value)
+            self._rp_set(obj, value)
+
+    def __repr__(self):
+        return (
+            "DerivedProperty({_rp_propName!r}, check={_rp_check!r}, "
+            "get={_rp_get!r}, set={_rp_set!r})"
+            "".format(**self.__dict__))
 
 
 def TwoCompatibleThree(cls):

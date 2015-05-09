@@ -1,5 +1,4 @@
-SIP Party Map
-=============
+# SIP Party Map #
 
     Message
       startline <- Request
@@ -47,6 +46,5 @@ SIP Party Map
     Host
       address  # reformat of Host in form that can be passed to socket code.
 
-SIP Scenario
-============
+# SIP Scenario #
 

@@ -140,6 +140,9 @@ class ValueBinder(object):
             raise AttributeError(
                 "Can't set {attr!r} on {self.__class__.__name__!r} instance: "
                 "{exc}".format(**locals()))
+        except RuntimeError:
+            print self.__class__.__mro__
+            raise
 
         if hasattr(existing_val, "_vb_unbindAllParent"):
             existing_val._vb_unbindAllParent()

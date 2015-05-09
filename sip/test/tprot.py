@@ -341,7 +341,10 @@ class TestProtocol(unittest.TestCase):
             CPList = [3, 2]
 
         self.assertEqual(CCPTest1.CPs, sip._util.Enum((1, 2, 3, 4, 5)))
-        self.assertEqual(CCPTest1.CPList, [3, 2, 4, 5, 1])
+
+        # Expect the order of the update to start with the most nested, then
+        # gradually get higher and higher.
+        self.assertEqual(CCPTest1.CPList, [1, 2, 4, 5, 3])
 
     def testClassOrInstance(self):
 

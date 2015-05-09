@@ -24,5 +24,4 @@ import sdp
 import party
 from party import *
 
-__all__ = (("defaults", "Request", "Header", "Message") +
-           party.__all__)
+__all__ = (("defaults", "Request", "Header", "Message") + party.__all__)

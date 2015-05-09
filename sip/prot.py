@@ -25,7 +25,7 @@ limitations under the License.
 #  LWS  =  [*WSP CRLF] 1*WSP ; linear whitespace
 #  SWS  =  [LWS] ; sep whitespace
 CRLF = b"\r\n"
-WS = "[ \t]"
+WS = b"[ \t]"
 LWS = b"(?:%s*%s)?%s+" % (WS, CRLF, WS)
 SWS = b"(?:%s)?" % (LWS,)
 
@@ -33,6 +33,7 @@ SWS = b"(?:%s)?" % (LWS,)
 # token       =  1*(alphanum / "-" / "." / "!" / "%" / "*"
 #                      / "_" / "+" / "`" / "'" / "~" )
 token = b"[\w-.!%*_+`'~]+"
+STAR = b"*"
 
 # Display name
 # display-name   =  *(token LWS)/ quoted-string
