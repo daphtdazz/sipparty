@@ -27,6 +27,7 @@ import pdb
 import vb
 
 log = logging.getLogger(__name__)
+log.setLevel(logging.INFO)
 
 # The clock. Defined here so that it can be overridden in the testbed.
 Clock = timeit.default_timer
@@ -65,6 +66,9 @@ class attributesubclassgen(type):
             raise AttributeError(
                 "{cls.__name__!r} needs a 'types' attribute.".format(
                     **locals()))
+
+        # !!! Would be nice to implement "type_aliases" so that we can map
+        # short names to longer names.
 
         if name not in cls.__dict__["types"]:
             raise AttributeError(
@@ -533,7 +537,6 @@ def TwoCompatibleThree(cls):
     if six.PY2:
         class BytesToStrDescriptor(object):
             def __get__(self, obj, cls):
-                print("bytes to string desc")
                 return (
                     obj.__bytes__ if obj is not None
                     else cls.__bytes__)

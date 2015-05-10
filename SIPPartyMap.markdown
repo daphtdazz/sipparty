@@ -5,6 +5,9 @@
       headers
       bodies
 
+      # Magic methods:
+      <headertype>Header  # E.g. toHeader
+
     Request
       type
       uri --> ToHeader.uri
@@ -45,6 +48,11 @@
 
     Host
       address  # reformat of Host in form that can be passed to socket code.
+
+    TransportFSM
+      localAddress
+      localAddressHost (p localAddress[0])
+      localAddressPort (p localAddress[1])
 
 # SIP Scenario #
 

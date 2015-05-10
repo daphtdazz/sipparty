@@ -330,6 +330,7 @@ class TransportFSM(fsm.FSM):
         datalen = len(data)
         sck = self._tfsm_activeSck
 
+        log.info("send\n>>>>>\n%s\n>>>>>", data)
         sent_bytes = sck.send(data)
         if sent_bytes != datalen:
             self.error("Failed to send %d bytes of data." %
@@ -454,7 +455,10 @@ class TransportFSM(fsm.FSM):
         """
         bytes, address = sck.recvfrom(self._tfsm_receiveSize)
         byteslen = len(bytes)
-        log.debug("Received %d bytes from %r.", byteslen, address)
+
+        if byteslen > 0:
+            log.info(" received from %r\n<<<<<\n%s\n<<<<<", address, bytes)
+
         self._tfsm_buffer.extend(bytes)
 
         if self._tfsm_byteConsumer is None:
@@ -472,5 +476,5 @@ class TransportFSM(fsm.FSM):
                 del self._tfsm_buffer[:bytes_consumed]
 
         if byteslen == 0:
-            log.debug("Received 0 bytes: socket has demurely.")
+            log.debug("Received 0 bytes: socket has demurely closed.")
             self.hit(self.Inputs.disconnect)

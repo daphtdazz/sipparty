@@ -27,9 +27,11 @@ import unittest
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
 
+import components
 import message
 import transport
 import siptransport
+import transform
 
 log = logging.getLogger()
 
@@ -64,9 +66,28 @@ class TestSIPTransport(unittest.TestCase):
         self.wait_for(lambda: t1.state == S.connected)
 
         inv = message.Message.invite()
+        inv.fromHeader.uri.aor = components.AOR(
+            "alice", "atlanta.com")
+        inv.toHeader.field.value.uri.aor = components.AOR("bob", "biloxi.com")
+        inv.contactHeader.field.value.uri.aor.username = "alice"
+        inv.contactHeader.field.value.uri.aor.host = t1.localAddressHost
         t1.sendMessage(inv)
 
         self.wait_for(lambda: len(t2.messages) > 0)
+
+        rx = t2.messages.pop()
+        resp = message.Response(200)
+        rx.applyTransform(resp, transform.request[rx.type][200])
+
+        t2.sendMessage(resp)
+
+        self.wait_for(lambda: len(t1.messages) > 0)
+
+        resp = t1.messages.pop()
+        self.assertEquals(resp.startline.code, 200)
+
+        self.assertEqual(inv.fromHeader.field.parameters["tag"],
+                         resp.fromHeader.field.parameters["tag"])
 
         t1.hit(I.disconnect)
 

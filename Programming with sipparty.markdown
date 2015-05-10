@@ -1,5 +1,9 @@
 # Programming with sipparty #
 
+## Message ##
+
+Access headers on a message using message.<type>Header.
+
 ## Headers ##
 
 ### `field` and `fields` property ###
@@ -18,6 +22,10 @@ Autogeneration of headers (i.e. population of the `fields` attribute) occurs dur
 1. If the class implements `autogenFields`, this is called.
 2. Else if the class has a `FieldClass` property, `fields` is initialized to `[FieldClass()]`.
 3. Else fields is left as an empty list.
+
+## Transport ##
+
+
 
 ? No overriding of fields as properties?
 ? How to trigger autogeneration?

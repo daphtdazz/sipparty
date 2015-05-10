@@ -86,6 +86,7 @@ class Field(parse.Parser, vb.ValueBinder):
 
 class DNameURIField(Field):
     delegateattributes = components.DNameURI.delegateattributes
+    vb_dependencies = (("value", delegateattributes),)
 
     parseinfo = {
         parse.Parser.Mappings:

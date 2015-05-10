@@ -27,35 +27,43 @@ import components
 import param
 import transform
 from param import Param
-from request import Request
+import request
 import response
 from header import Header
+import parse
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 
-@six.add_metaclass(_util.attributesubclassgen)
+@six.add_metaclass(
+    # The FSM type needs both the attributesubclassgen and the cumulative
+    # properties metaclasses.
+    type('HeaderType',
+         (_util.CCPropsFor(("mandatoryheaders", "mandatoryparameters")),
+          _util.attributesubclassgen),
+         dict()))
+@_util.TwoCompatibleThree
 class Message(vb.ValueBinder):
     """Generic message class. Use `Request` or `Response` rather than using
     this directly.
     """
 
-    types = Request.types
+    types = request.Request.types
 
-    mandatoryheaders = (
+    mandatoryheaders = [
         Header.types.From,  Header.types.To, Header.types.Via,
-        Header.types.call_id, Header.types.cseq, Header.types.max_forwards)
-    shouldheaders = ()  # Should be sent but parties must cope without.
-    conditionalheaders = ()
-    optionalheaders = (
+        Header.types.call_id, Header.types.cseq, Header.types.max_forwards]
+    shouldheaders = []  # Should be sent but parties must cope without.
+    conditionalheaders = []
+    optionalheaders = [
         Header.types.authorization, Header.types.content_disposition,
         Header.types.content_encoding, Header.types.content_language,
-        Header.types.content_type)
-    streamheaders = (  # Required to be sent with stream-based protocols.
-        Header.types.content_length,)
-    bodyheaders = None  # Required with non-empty bodies.
-    naheaders = None  # By default the complement of the union of the others.
+        Header.types.content_type]
+    streamheaders = [  # Required to be sent with stream-based protocols.
+        Header.types.content_length]
+    bodyheaders = []  # Required with non-empty bodies.
+    naheaders = []  # By default the complement of the union of the others.
 
     mandatoryparameters = {}
 
@@ -98,10 +106,18 @@ class Message(vb.ValueBinder):
         startline = lines.pop(0)
 
         # Fix the startline and build the message.
-        requestline = Request.Parse(startline)
-        message = getattr(Message, requestline.type)(
-            startline=requestline, autofillheaders=False)
-        log.debug("Message is of type %r", message.type)
+        try:
+            # !!! TODO: This is highly suboptimal; must come back and fix the
+            # parsing so that requests and responses are parsed more
+            # equivocally.
+            requestline = request.Request.Parse(startline)
+            message = getattr(Message, requestline.type)(
+                startline=requestline, autofillheaders=False)
+            log.debug("Message is of type %r", message.type)
+        except parse.ParseError:
+            # Try response...
+            reqline = response.Response.Parse(startline)
+            message = Response(startline=reqline)
 
         for line, ln in zip(lines, range(1, len(lines) + 1)):
             if len(line) == 0:
@@ -137,7 +153,7 @@ class Message(vb.ValueBinder):
 
         if startline is None:
             try:
-                startline = getattr(Request, self.type)()
+                startline = getattr(request.Request, self.type)()
             except Exception:
                 raise
         self.startline = startline
@@ -169,9 +185,6 @@ class Message(vb.ValueBinder):
 
         log.debug("Last line: %r", components[-1])
         return prot.EOL.join([six.binary_type(_cp) for _cp in components])
-
-    if six.PY2:
-        __str__ = __bytes__
 
     def __getattr__(self, attr):
         """Get some part of the message. E.g. get a particular header like:
@@ -296,9 +309,15 @@ class Response(Message):
     NB this overrides the metaclass of Message as we don't want to attempt to
     generate subclasses from our type, which we don't have."""
 
-    def __init__(self, code):
-        sl = response.Response(code)
-        super(Response, self).__init__(sl, autofillheaders=False)
+    def __init__(self, code=None, **kwargs):
+
+        if code is not None:
+            sl = response.Response(code)
+            kwargs["startline"] = sl
+        if "autofillheaders" not in kwargs:
+            kwargs["autofillheaders"] = False
+
+        super(Response, self).__init__(**kwargs)
 
 
 class InviteMessage(Message):
@@ -308,8 +327,12 @@ class InviteMessage(Message):
         ("startline.uri", "ToHeader.field.uri"),
         ("startline.protocol", "ViaHeader.field.protocol"),
         ("startline", "ViaHeader.field.parameters.branch.startline"),
-        ("FromHeader.field.value.uri.aor.host", "ViaHeader.field.host.host"),
+        ("ContactHeader.field.value.uri.aor.host",
+         "ViaHeader.field.host.host"),
         ("startline.type", "CseqHeader.field.reqtype")]
+
+    mandatoryheaders = [
+        Header.types.Contact]
 
     mandatoryparameters = {
         Header.types.From: [Param.types.tag],

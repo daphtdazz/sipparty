@@ -25,6 +25,7 @@ import prot
 from parse import Parser
 
 log = logging.getLogger(__name__)
+log.setLevel(logging.DEBUG)
 
 
 class Parameters(Parser, vb.ValueBinder, dict):
@@ -53,6 +54,7 @@ class Parameters(Parser, vb.ValueBinder, dict):
 
 
 @six.add_metaclass(_util.attributesubclassgen)
+@_util.TwoCompatibleThree
 class Param(Parser, vb.ValueBinder):
 
     types = _util.Enum(("branch", "tag",), normalize=lambda x: x.lower())
@@ -77,10 +79,23 @@ class Param(Parser, vb.ValueBinder):
         if value is not None:
             self.value = value
 
-    def __str__(self):
+    def __bytes__(self):
         if not hasattr(self, "value") and hasattr(self, "newvalue"):
             self.value = self.newvalue()
-        return "{self.name}={self.value}".format(self=self)
+        return b"{self.name}={self.value}".format(self=self)
+
+    def __eq__(self, other):
+        log.debug("Param %r ?= %r", self, other)
+        if self.__class__ != other.__class__:
+            return False
+
+        if self.value != other.value:
+            return False
+
+        return True
+
+    def __repr__(self):
+        return "%s(value=%r)" % (self.__class__.__name__, self.value)
 
 
 class BranchParam(Param):
@@ -129,4 +144,5 @@ class TagParam(Param):
         # RFC 3261 asks for 32 bits of randomness. Expect random is good
         # enough.
         return "{0:08x}".format(random.randint(0, 2**32 - 1))
+
     value = _util.GenerateIfNotSet("value")

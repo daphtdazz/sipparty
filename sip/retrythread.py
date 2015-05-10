@@ -39,6 +39,7 @@ import logging
 import _util
 
 log = logging.getLogger(__name__)
+log.setLevel(logging.INFO)
 
 
 class _FDSource(object):

@@ -28,7 +28,7 @@ import _util
 import retrythread
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.DEBUG)
+log.setLevel(logging.INFO)
 
 
 class TimerError(Exception):

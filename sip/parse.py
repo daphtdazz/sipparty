@@ -22,7 +22,7 @@ import logging
 import pdb
 
 log = logging.getLogger(__name__)
-log.level = logging.DEBUG
+log.setLevel(logging.INFO)
 
 
 class ParseError(Exception):

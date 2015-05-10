@@ -31,6 +31,7 @@ import pdb
 __all__ = ('Party',)
 
 log = logging.getLogger(__name__)
+log.setLevel(logging.DEBUG)
 
 
 def NewAOR():
@@ -107,7 +108,8 @@ class Party(object):
     def receive_response(self, code):
         """Receive a response code after a request."""
 
-    # INTERNAL INTERNAL INTERNAL INTERNAL INTERNAL INTERNAL INTERNAL INTERNAL
+    #
+    # =================== INTERNAL ===========================================
     #
     def _pt_byteConsumer(self, data):
         return len(data)
