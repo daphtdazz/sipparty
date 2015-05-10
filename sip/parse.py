@@ -22,7 +22,7 @@ import logging
 import pdb
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.INFO)
+log.setLevel(logging.DEBUG)
 
 
 class ParseError(Exception):
@@ -146,7 +146,7 @@ class Parser(object):
                 "'parseinfo' field)."
                 "".format(**locals()))
 
-        log.debug("SimpleParse with parseinfo %r", cls.parseinfo)
+        log.debug("  parseinfo: %r", cls.parseinfo)
 
         pi = cls.parseinfo
         if Parser.RE not in pi:
@@ -157,11 +157,14 @@ class Parser(object):
                 raise TypeError(
                     "{0!r} does not have a Parser.Pattern in its "
                     "'parseinfo' dictionary.".format(cls))
-            log.debug("Compile re %s", ptrn)
+            log.debug("  compile pattern.")
             pi[Parser.RE] = re.compile(ptrn)
+            log.debug("  compile done.")
 
         pre = pi[Parser.RE]
+        log.debug("  match")
         mo = pre.match(string)
+        log.debug("  match done")
         if mo is None:
             cls.ParseFail(string, "Pattern was %r" % pi[Parser.Pattern])
 
@@ -176,21 +179,25 @@ class Parser(object):
         """
         pi = cls.parseinfo
 
+        log.debug("%r Parse.", cls.__name__)
+
         if Parser.Repeats in pi and pi[Parser.Repeats]:
-            log.debug("Repeating parser for class %s", cls.__name__)
+            log.debug("  repeats")
             result = []
             repeats = True
         else:
-            log.debug("Non-repeating parser for class %s", cls.__name__)
+            log.debug("  does not repeat")
             repeats = False
 
         while len(string) > 0:
-            log.debug("Parse remaining data %r", string)
+            log.debug("  %r", string)
             mo = cls.SimpleParse(string)
 
             if Parser.Constructor in pi:
+
                 constructor_tuple = pi[Parser.Constructor]
-                log.debug("Using constructor %r", constructor_tuple)
+                log.debug("  constructor: %r.", constructor_tuple)
+
                 constructor_gp = constructor_tuple[0]
                 constructor_func = constructor_tuple[1]
                 constructor_data = mo.group(constructor_gp)
@@ -200,15 +207,13 @@ class Parser(object):
                         string,
                         "Could not construct the object from the data.")
             else:
-                log.debug("No constructor: new version of class %r",
-                          cls.__name__)
+                log.debug("  initialize class.")
                 obj = cls()
 
-            log.debug("Parse %r", obj)
             obj.parse(string, mo)
 
             if not repeats:
-                log.debug("Not a repeater; finished.")
+                log.debug("  finished.")
                 result = obj
                 break
 
@@ -222,7 +227,8 @@ class Parser(object):
         return result
 
     def parse(self, string, mo=None):
-        log.debug("%r parse %s", self, string)
+        log.debug("%r parse:", self.__class__.__name__)
+        log.debug("  %r", string)
 
         if mo is None:
             mo = self.SimpleParse(string)
@@ -236,19 +242,18 @@ class Parser(object):
             self.parsecust(string=string, mo=mo)
 
     def parsemappings(self, mo, mappings):
-        log.debug("Apply mappings %r", mappings)
         for mapping, gpnum in zip(mappings, range(1, len(mappings) + 1)):
             if mapping is None:
                 continue
 
+            log.debug("  group %d mapping %r", gpnum, mapping)
             data = mo.group(gpnum)
             if not data:
                 # No data in this group so nothing to parse. If a group can
                 # have no data then that implies this mapping is optional.
-                log.debug("No data for mapping %r", mapping)
+                log.debug("  no data")
                 continue
 
-            log.debug("Apply mapping %r to group %d", mapping, gpnum)
             attr = mapping[0]
             cls = str
             gen = lambda x: x

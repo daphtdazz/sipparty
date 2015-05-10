@@ -21,18 +21,33 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-# Whitespace, linear, "separator" i.e. optional whitespace.
-#  LWS  =  [*WSP CRLF] 1*WSP ; linear whitespace
-#  SWS  =  [LWS] ; sep whitespace
+# Primitives. Refer to https://tools.ietf.org/html/rfc3261#section-25.1 for
+# the ABNF.  All written out for perf reasons.
 CRLF = b"\r\n"
-WS = b"[ \t]"
-LWS = b"(?:%s*%s)?%s+" % (WS, CRLF, WS)
-SWS = b"(?:%s)?" % (LWS,)
+SP = b" "
+HTAB = b"\t"
+WS = b"[ \t]".format(**locals())
+# LWS = b"(?:{WS}*{CRLF})?{WS}+"
+LWS = b"(?:{WS}*{CRLF})?{WS}+".format(**locals())  # Linear whitespace.
+SWS = b"(?:{LWS})?".format(**locals())  # Separator whitespace.
+HCOLON = b"{WS}*:{SWS}".format(**locals())
+SEMI = b"{SWS};{SWS}".format(**locals())
+SLASH = b"{SWS}/{SWS}".format(**locals())
+COLON = b"{SWS}:{SWS}".format(**locals())
+ALPHA = b"[a-zA-Z]".format(**locals())
+DIGIT = b"[0-9]".format(**locals())
+HEXDIG = b"[0-9a-fA-F]".format(**locals())
+EQUAL = b"{SWS}={SWS}".format(**locals())
+DQUOTE = b"\""
+# UTF8_NONASCII = b"" TODO sort out uses.
+# alphanum is written out for performance reasons.
+# alphanum = "(?:{ALPHA}|{DIGIT})"
+alphanum = b"[a-zA-Z0-9]"
 
 # A SIP token.
 # token       =  1*(alphanum / "-" / "." / "!" / "%" / "*"
 #                      / "_" / "+" / "`" / "'" / "~" )
-token = b"[\w-.!%*_+`'~]+"
+token = b"[a-zA-Z0-9#-_.!%*+`'~]+".format(**locals())
 STAR = b"*"
 
 # Display name
@@ -44,6 +59,84 @@ EOL = CRLF
 
 # Magic cookie used in branch parameters.
 BranchMagicCookie = b"z9hG4bK"
+
+"""
+Via               =  ( "Via" / "v" ) HCOLON via-parm *(COMMA via-parm)
+via-parm          =  sent-protocol LWS sent-by *( SEMI via-params )
+via-params        =  via-ttl / via-maddr
+                     / via-received / via-branch
+                     / via-extension
+via-ttl           =  "ttl" EQUAL ttl
+via-maddr         =  "maddr" EQUAL host
+via-received      =  "received" EQUAL (IPv4address / IPv6address)
+via-branch        =  "branch" EQUAL token
+via-extension     =  generic-param
+sent-protocol     =  protocol-name SLASH protocol-version
+                     SLASH transport
+protocol-name     =  "SIP" / token
+protocol-version  =  token
+transport         =  "UDP" / "TCP" / "TLS" / "SCTP"
+                     / other-transport
+sent-by           =  host [ COLON port ]
+ttl               =  1*3DIGIT ; 0 to 255
+
+quoted-pair  =  "\" (%x00-09 / %x0B-0C
+                / %x0E-7F)
+
+SIP-URI          =  "sip:" [ userinfo ] hostport
+                    uri-parameters [ headers ]
+SIPS-URI         =  "sips:" [ userinfo ] hostport
+                    uri-parameters [ headers ]
+userinfo         =  ( user / telephone-subscriber ) [ ":" password ] "@"
+user             =  1*( unreserved / escaped / user-unreserved )
+user-unreserved  =  "&" / "=" / "+" / "$" / "," / ";" / "?" / "/"
+password         =  *( unreserved / escaped /
+                    "&" / "=" / "+" / "$" / "," )
+hostport         =  host [ ":" port ]
+host             =  hostname / IPv4address / IPv6reference
+hostname         =  *( domainlabel "." ) toplabel [ "." ]
+domainlabel      =  alphanum
+                    / alphanum *( alphanum / "-" ) alphanum
+toplabel         =  ALPHA / ALPHA *( alphanum / "-" ) alphanum
+IPv4address    =  1*3DIGIT "." 1*3DIGIT "." 1*3DIGIT "." 1*3DIGIT
+IPv6reference  =  "[" IPv6address "]"
+IPv6address    =  hexpart [ ":" IPv4address ]
+hexpart        =  hexseq / hexseq "::" [ hexseq ] / "::" [ hexseq ]
+hexseq         =  hex4 *( ":" hex4)
+hex4           =  1*4HEXDIG
+port           =  1*DIGIT"""
+
+
+hex4 = b"{HEXDIG}{{1,4}}".format(**locals())
+# Surely IPv6 address length is limited?
+hexseq = b"{hex4}(?::{hex4})*".format(**locals())
+hexpart = b"(?:{hexseq}|{hexseq}::(?:{hexseq})?|::(?:{hexseq})?)".format(
+    **locals())
+IPv4address = b"{DIGIT}{{1,3}}(?:[.]{DIGIT}{{1,3}}){{3}}".format(**locals())
+IPv6address = b"{hexpart}(?::{IPv4address})?".format(**locals())
+IPv6reference = b"[[]{IPv6address}[]]".format(**locals())
+port = b"{DIGIT}+".format(**locals())
+toplabel = b"(?:{ALPHA}|{ALPHA}(?:{alphanum}|-)*{alphanum})".format(
+    **locals())
+domainlabel = b"(?:{alphanum}|{alphanum}(?:{alphanum}|-)*{alphanum})".format(
+    **locals())
+hostname = b"(?:{domainlabel}[.])*{toplabel}[.]?".format(**locals())
+host = b"(?:{hostname}|{IPv4address}|{IPv6reference})".format(**locals())
+# Should be SIP or token, but just use token.
+protocol_name = token
+protocol_version = token
+sent_protocol = b"{protocol_name}{SLASH}{protocol_version}".format(**locals())
+# TODO qdtext should include UTF8-NONASCII.
+qdtext = b"(?:{LWS}|[\x21\x23-\x5B\x5D-\x7E])".format(**locals())
+quoted_pair = b"\\[\x00-\x09\x0B-\x0C\x0E-\x7F]"
+quoted_string = b"{SWS}{DQUOTE}(?:{qdtext}|{quoted_pair})*{DQUOTE}".format(
+    **locals())
+gen_value = b"(?:{token}|{host}|{quoted_string})".format(**locals())
+generic_param = b"{token}(?:{EQUAL}{gen_value})?".format(**locals())
+sent_by = b"{host}(?:{COLON}{port})?".format(**locals())
+via_parm = b"{sent_protocol}{LWS}{sent_by}".format(**locals())
+# transport actually includes specific sets of token as well in the spec.
+transport = token
 
 
 class ProtocolError(Exception):

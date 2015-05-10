@@ -19,6 +19,7 @@ limitations under the License.
 import six
 import random
 import logging
+import prot
 import _util
 import vb
 import parse
@@ -30,9 +31,11 @@ import pdb
 # More imports at end of file.
 
 log = logging.getLogger(__name__)
+log.setLevel(logging.DEBUG)
 
 
 @six.add_metaclass(_util.CCPropsFor(("delegateattributes", "parseinfo")))
+@_util.TwoCompatibleThree
 class Field(parse.Parser, vb.ValueBinder):
 
     # For headers that delegate properties, these are the properties to
@@ -69,9 +72,6 @@ class Field(parse.Parser, vb.ValueBinder):
         rs = b";".join(rslist)
         return rs
 
-    if six.PY2:
-        __str__ = __bytes__
-
     def __setattr__(self, attr, val):
         if attr in param.Param.types:
             return setattr(self.parameters, attr, val)
@@ -99,18 +99,29 @@ class DNameURIField(Field):
 
 
 class ViaField(Field):
+    """Via               =  ( "Via" / "v" ) HCOLON via-parm *(COMMA via-parm)
+    via-parm          =  sent-protocol LWS sent-by *( SEMI via-params )
+    via-params        =  via-ttl / via-maddr
+                         / via-received / via-branch
+                         / via-extension
+    via-ttl           =  "ttl" EQUAL ttl
+    via-maddr         =  "maddr" EQUAL host
+    via-received      =  "received" EQUAL (IPv4address / IPv6address)
+    via-branch        =  "branch" EQUAL token
+    via-extension     =  generic-param
+    """
 
     delegateattributes = ["protocol", "transport", "host"]
 
     parseinfo = {
         parse.Parser.Pattern:
-            "(SIP */ *2[.]0)"  # protocol, i.e. SIP/2.0
-            "\s*/\s*"
-            "(\w+)"  # transport, UDP TCP etc.
-            "\s*"
-            "([^;]+)"  # Host.
-            "((;[^;]*)*)"  # Parameters.
-            "",
+            "({protocol_name}{SLASH}{protocol_version})"
+            "{SLASH}"
+            "({transport})"
+            "{LWS}"
+            "({sent_by})"  # transport, UDP TCP etc.
+            "({SEMI}{generic_param})*"  # Parameters.
+            "".format(**prot.__dict__),
         parse.Parser.Mappings:
             [("protocol", None, lambda x: x.replace(" ", "")),
              ("transport",),
@@ -136,6 +147,7 @@ class ViaField(Field):
         prottrans = "/".join((self.protocol, self.transport))
 
         if self.host is not None:
+            log.debug("Viaheader host is %r %s.", self.host, self.host)
             hoststr = str(self.host)
             if len(hoststr) == 0:
                 hoststr = None
@@ -144,6 +156,8 @@ class ViaField(Field):
             rv = "{prottrans} {hoststr}".format(**locals())
         else:
             rv = "{prottrans}".format(**locals())
+        log.debug("host:%s, prot: %s, trans: %r, Return %r",
+                  self.host, self.protocol, self.transport, rv)
         return rv
 
     def __setattr__(self, attr, val):

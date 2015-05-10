@@ -26,6 +26,12 @@
       dname (d field.value)
       uri (d field.value)
 
+    ViaHeader <= FieldDelegateHeader
+      FieldDelegateClass = ViaField
+      protocol (d field.protocol)
+      transport (d field.transport)
+      host (d field.host)
+
     Field
       value
       parameters

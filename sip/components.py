@@ -19,16 +19,20 @@ limitations under the License.
 # We import defaults at the bottom, since defaults uses these classes, and so
 # they must always be declared before defaults is.
 # import defaults
+import prot
+import _util
 import vb
 from parse import Parser
 
 
+@_util.TwoCompatibleThree
 class Host(Parser, vb.ValueBinder):
 
     parseinfo = {
         Parser.Pattern:
-            "([^:]+|[[][:a-fA-F\d]+[]])"
-            "(:(\d)+)?$",
+            "({host})"
+            "(?:{COLON}({port}))?$"
+            "".format(**prot.__dict__),
         Parser.Mappings:
             [("host",),
              ("port",)],
@@ -39,7 +43,7 @@ class Host(Parser, vb.ValueBinder):
         self.host = host
         self.port = port
 
-    def __str__(self):
+    def __bytes__(self):
 
         host = self.host
         port = self.port
@@ -55,7 +59,11 @@ class Host(Parser, vb.ValueBinder):
 
         return ""
 
+    def __repr__(self):
+        return "Host(host={host}, port={port})".format(**self.__dict__)
 
+
+@_util.TwoCompatibleThree
 class AOR(Parser, vb.ValueBinder):
     """A AOR object."""
 
@@ -76,7 +84,7 @@ class AOR(Parser, vb.ValueBinder):
                 continue
             setattr(self, prop, locals()[prop])
 
-    def __str__(self):
+    def __bytes__(self):
         if self.username and self.host:
             return "{username}@{host}".format(**self.__dict__)
 
@@ -86,6 +94,7 @@ class AOR(Parser, vb.ValueBinder):
         return ""
 
 
+@_util.TwoCompatibleThree
 class URI(Parser, vb.ValueBinder):
     """A URI object."""
 
@@ -112,10 +121,11 @@ class URI(Parser, vb.ValueBinder):
                 continue
             setattr(self, prop, locals()[prop])
 
-    def __str__(self):
+    def __bytes__(self):
         return "{scheme}:{aor}".format(**self.__dict__)
 
 
+@_util.TwoCompatibleThree
 class DNameURI(Parser, vb.ValueBinder):
     """A display name plus a uri value object.
 
@@ -168,7 +178,7 @@ class DNameURI(Parser, vb.ValueBinder):
         self.dname = dname
         self.uri = uri
 
-    def __str__(self):
+    def __bytes__(self):
         if self.dname and self.uri:
             return("\"{self.dname}\" <{self.uri}>".format(**locals()))
 

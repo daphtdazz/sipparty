@@ -75,13 +75,13 @@ class Header(Parser, vb.ValueBinder):
 
     parseinfo = {
         Parser.Pattern:
-            "^\s*([^:\s]*)\s*:"  # The type.
+            # The type. Checked in the constructor whether it's a valid header
+            # or not.
+            "({token})"
+            "{HCOLON}"
             "\s*"
             "([^,]+)$"  # Everything else to be parsed in parsecust().
-            "".format("|".join([
-                _util.attributesubclassgen.NormalizeGeneratingAttributeName(
-                    type)
-                for type in types])),
+            "".format(**prot.__dict__),
         Parser.Constructor:
             (1, lambda type: getattr(Header, type)())
     }

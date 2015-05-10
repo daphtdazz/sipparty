@@ -89,11 +89,12 @@ class TestProtocol(unittest.TestCase):
         self.assertNotEqual(old_branch, new_branch)
         invite.fromheader.field.value.uri.aor.username = "alice"
         invite.fromheader.field.value.uri.aor.host = "atlanta.com"
+        invite.viaheader.field.host.host = "127.0.0.1"
         self.assertTrue(re.match(
             "INVITE sip:bob@baltimore.com SIP/2.0\r\n"
             "From: sip:alice@atlanta.com;{3}\r\n"
             "To: sip:bob@baltimore.com\r\n"
-            "Via: SIP/2.0/UDP atlanta.com;{1}\r\n"
+            "Via: SIP/2.0/UDP 127.0.0.1;{1}\r\n"
             # 6 random hex digits followed by a date/timestamp
             "Call-ID: {0}\r\n"
             "CSeq: {2} INVITE\r\n"
@@ -114,7 +115,7 @@ class TestProtocol(unittest.TestCase):
             "SIP/2.0 200 OK\r\n"
             "From: sip:alice@atlanta.com;{3}\r\n"
             "To: sip:bob@baltimore.com;{3}\r\n"
-            "Via: SIP/2.0/UDP atlanta.com;{1}\r\n"
+            "Via: SIP/2.0/UDP 127.0.0.1;{1}\r\n"
             # 6 random hex digits followed by a date/timestamp
             "Call-ID: {0}\r\n"
             "CSeq: {2} INVITE\r\n".format(
@@ -127,11 +128,15 @@ class TestProtocol(unittest.TestCase):
         return
 
     def testParse(self):
+
         invite = sip.Message.invite()
         invite.startline.uri.aor.username = "bob"
         invite.startline.uri.aor.host = "biloxi.com"
         invite.fromheader.field.value.uri.aor.username = "alice"
         invite.fromheader.field.value.uri.aor.host = "atlanta.com"
+        log.debug("Set via header host.")
+        invite.viaheader.field.host.host = "127.0.0.1"
+        invite.viaheader.field.host.port = "5060"
         invite_str = str(invite)
         log.debug("Invite to stringify and parse: %r", invite_str)
 
@@ -151,7 +156,7 @@ class TestProtocol(unittest.TestCase):
             # between them.
             "To: sip:bob@biloxi.com\r\n"
             "Via: SIP/2.0/UDP arkansas.com\r\n"
-            "Via: SIP/2.0/UDP atlanta.com;{1}\r\n"
+            "Via: SIP/2.0/UDP 127.0.0.1:5060;{1}\r\n"
             # 6 random hex digits followed by a date/timestamp
             "Call-ID: {0}\r\n"
             "CSeq: {2} INVITE\r\n"
