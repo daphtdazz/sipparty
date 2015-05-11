@@ -54,6 +54,12 @@ class TestHeaders(unittest.TestCase):
             six.binary_type(ch),
             b"Contact: sip:bill@billland.com")
 
+        nh = header.Header.Parse(six.binary_type(ch))
+        self.assertEqual(
+            six.binary_type(ch),
+            b"Contact: sip:bill@billland.com")
+        self.assertEqual(
+            ch.field.value.uri.aor.host, b"billland.com")
 
 if __name__ == "__main__":
     unittest.main()
