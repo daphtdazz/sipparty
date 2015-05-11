@@ -88,7 +88,6 @@ class TestFSM(unittest.TestCase):
         log.debug("Listen")
         t1 = transport.TransportFSM()
         t1.listen()
-        self.wait_for(lambda: t1.localAddressHost is not None)
 
         log.debug("Connect to %r", t1.localAddress)
         t2 = transport.TransportFSM()
@@ -119,7 +118,6 @@ class TestFSM(unittest.TestCase):
 
         t1.byteConsumer = tByteConsumer
         t1.listen()
-        self.wait_for(lambda: t1.localAddressHost is not None)
         t2.connect(t1.localAddress)
         self.wait_for(lambda: t2.state == t2.States.connected)
         self.wait_for(lambda: t1.state == t1.States.connected)

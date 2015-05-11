@@ -26,6 +26,7 @@ import _util
 import fsm
 
 log = logging.getLogger(__name__)
+log.setLevel(logging.INFO)
 
 
 class BadNetwork(Exception):
@@ -102,12 +103,13 @@ class TransportFSM(fsm.FSM):
 
     States = _util.Enum(
         ("disconnected",
+         "startListen",
          "listening",
          "connecting",
          "connected",
          "error"))
     Inputs = _util.Enum(
-        ("connect", "listen", "connected",
+        ("connect", "listen", "listenup", "connected",
          "send",
          "disconnect", "error",
          "reset"))
@@ -135,9 +137,10 @@ class TransportFSM(fsm.FSM):
             action=A.becomesConnected)
 
         # Transitions when being connected to.
-        Add(S.disconnected, I.listen, S.listening,
+        Add(S.disconnected, I.listen, S.startListen,
             action=A.createListen,
             start_threads=[A.startListening])
+        Add(S.startListen, I.listenup, S.listening)
         Add(S.listening, I.error, S.error,
             action=A.error)
         Add(S.listening, I.connected, S.connected,
@@ -205,54 +208,24 @@ class TransportFSM(fsm.FSM):
         "_tfsm_byteConsumer",
         lambda val: isinstance(val, collections.Callable))
 
-    def block_until_states(states):
-        "This is a descriptor, so don't call it as a method."
-
-        def buse_desc(method):
-            def block_until_states_wrapper(self, *args, **kwargs):
-                state_now = self.state
-                method(self, *args, **kwargs)
-
-                end_states = states
-                time_start = _util.Clock()
-                time_now = time_start
-                while self.state not in end_states:
-                    if time_now - time_start > self._tfsm_timeout:
-                        self.hit(self.States.error)
-                        new_end_states = (self.States.error,)
-                        if end_states == new_end_states:
-                            # Ahh must do proper exceptions!
-                            raise Exception(
-                                "help failed to enter error state.")
-                        end_states = new_end_states
-                        time_start = time_now
-
-                    time.sleep(0.00001)
-                    time_now = _util.Clock()
-
-                if self.state not in end_states:
-                    # Ahh must do proper exceptions!
-                    raise Exception("Timeout reaching end state.")
-            return block_until_states_wrapper
-        return buse_desc
-
     # !!! These could be improved.
-    @block_until_states((States.error, States.listening))
+    @fsm.block_until_states((States.error, States.listening))
     def listen(self):
         self.hit(self.Inputs.listen)
 
-    @block_until_states((States.error, States.connecting, States.connected))
+    @fsm.block_until_states((
+        States.error, States.connecting, States.connected))
     def connect(self, *args, **kwargs):
         self.hit(self.Inputs.connect, *args, **kwargs)
 
     def send(self, data):
         self.hit(self.Inputs.send, data)
 
-    @block_until_states((States.error, States.disconnected))
+    @fsm.block_until_states((States.error, States.disconnected))
     def disconnect(self):
         self.hit(self.Inputs.disconnect)
 
-    @block_until_states((States.disconnected))
+    @fsm.block_until_states((States.disconnected))
     def reset(self):
         self.hit(self.Inputs.reset)
 
@@ -311,6 +284,9 @@ class TransportFSM(fsm.FSM):
         log.info(
             "Passive socket created on %r.",
             self._tfsm_listenSck.getsockname())
+
+        log.debug("passive listen address: %r", self.localAddress)
+        self.hit(self.Inputs.listenup)
 
     def becomesConnected(self):
         "Called when the transport becomes connected"

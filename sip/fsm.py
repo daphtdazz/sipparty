@@ -19,6 +19,7 @@ limitations under the License.
 """
 import six
 import collections
+import time
 import timeit
 import threading
 import Queue
@@ -29,6 +30,10 @@ import retrythread
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
+
+__all__ = [
+    "TimerError", "TimerNotRunning", "FSMError", "UnexpectedInput"
+    ""]
 
 
 class TimerError(Exception):
@@ -152,6 +157,40 @@ class Timer(object):
         else:
             res = None
         return res
+
+
+def block_until_states(states):
+    "Decorator factory to block waiting for an FSM transition."
+    log.debug("Create block until for %r.", states)
+
+    def buse_desc(method):
+        def block_until_states_wrapper(self, *args, **kwargs):
+            state_now = self.state
+            log.debug("Block %r until %r.", method.__name__, states)
+            method(self, *args, **kwargs)
+
+            end_states = states
+            time_start = _util.Clock()
+            time_now = time_start
+            while self.state not in end_states:
+                if time_now - time_start > self._tfsm_timeout:
+                    self.hit(self.States.error)
+                    new_end_states = (self.States.error,)
+                    if end_states == new_end_states:
+                        # Ahh must do proper exceptions!
+                        raise Exception(
+                            "help failed to enter error state.")
+                    end_states = new_end_states
+                    time_start = time_now
+
+                time.sleep(0.00001)
+                time_now = _util.Clock()
+
+            if self.state not in end_states:
+                # Ahh must do proper exceptions!
+                raise Exception("Timeout reaching end state.")
+        return block_until_states_wrapper
+    return buse_desc
 
 
 class FSMClassInitializer(type):

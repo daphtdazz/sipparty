@@ -57,8 +57,7 @@ class TestSIPTransport(unittest.TestCase):
         t1 = siptransport.SipTransportFSM()
         t2 = siptransport.SipTransportFSM()
 
-        t1.hit(I.listen)
-        self.wait_for(lambda: t1.localAddress != (None, 0))
+        t1.listen()
         log.debug("t1.localAddress: %r", t1.localAddress)
         t2.hit(I.connect, t1.localAddress)
 
