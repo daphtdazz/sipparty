@@ -24,16 +24,54 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
 import unittest
 import party
+import scenario
 
 log = logging.getLogger()
+tks = scenario.TransitionKeys
 
 
 class TestParty(unittest.TestCase):
 
     def testBasicParty(self):
 
-        p1 = party.Party()
-        p2 = party.Party()
+        class Simple(party.Party):
+            ScenarioDefinitions = {
+                scenario.InitialStateKey: {
+                    "sendInvite": {
+                        tks.NewState: "invite sent",
+                        tks.Message: "invite"
+                    },
+                    "invite": {
+                        tks.NewState: "in call",
+                        tks.Message: 200
+                    }
+                },
+                "invite sent": {
+                    "4xx": {
+                        tks.NewState: scenario.InitialStateKey
+                    },
+                    200: {
+                        tks.NewState: "in call"
+                    }
+                },
+                "in call": {
+                    "send bye": {
+                        tks.NewState: "bye sent"
+                    },
+                    "bye": {
+                        tks.NewState: scenario.InitialStateKey
+                    }
+                },
+                "bye sent": {
+                    200: {
+                        tks.NewState: scenario.InitialStateKey
+                    }
+                }
+            }
+
+        self.assertEqual(Simple.scenario.__name__, "SimpleScenario")
+        p1 = Simple()
+        p2 = Simple()
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,4 +1,4 @@
-# SIP Party Map #
+# SIP Message Map #
 
     Message
       startline <- Request
@@ -60,5 +60,10 @@
       localAddressHost (p localAddress[0])
       localAddressPort (p localAddress[1])
 
-# SIP Scenario #
+# SIP Party Map #
 
+    Party
+      aor
+      scenario
+      transforms
+      transport

@@ -19,7 +19,7 @@ limitations under the License.
 """
 import re
 import logging
-import pdb
+import six
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -131,7 +131,7 @@ class Parser(object):
     @classmethod
     def ParseFail(cls, string, *args, **kwargs):
         log.warning("Parse failure of message %r", string)
-        for key, val in kwargs.iteritems():
+        for key, val in six.iteritems(kwargs):
             log.debug("%r=%r", key, val)
         raise ParseError(
             "{cls.__name__!r} type failed to parse text {string!r}. Extra "

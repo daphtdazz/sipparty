@@ -4,7 +4,7 @@ import threading
 import sip._util
 import logging
 
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 log.setLevel(logging.DEBUG)
 logging.basicConfig(level=logging.DEBUG)
 
@@ -33,6 +33,10 @@ class PTest(object):
         self.__dict__['desc'] = 15
         self.__dict__['prop'] = 15
 
+    @classmethod
+    def tClassM(cls):
+        log.info("PTest tClassM")
+
 
 class QTest(PTest):
 
@@ -52,8 +56,14 @@ class QTest(PTest):
     def prop(self):
         return 14
 
-p = PTest()
-q = QTest()
+    @classmethod
+    def tClassM(cls):
+        log.info("Before PTest tClassM")
+        super(QTest, cls).tClassM()
+        log.info("After PTest tClassM")
 
-print(p.desc)
-print(q.desc)
+    def __getattr__(self, attr):
+        log.info("Get attr %r.", attr)
+
+PTest.dp = 2
+log.info("%r", PTest.dp)

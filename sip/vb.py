@@ -15,6 +15,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
+import six
 import re
 
 log = logging.getLogger(__name__)
@@ -151,7 +152,7 @@ class ValueBinder(object):
             for direction in self.VB_Directions:
                 _, _, _, bs, _ = self._vb_bindingdicts(attr, direction,
                                                        all=True)
-                for subpath, bdict in bs.iteritems():
+                for subpath, bdict in six.iteritems(bs):
                     if len(subpath) == 0:
                         continue
                     topath = bdict[self.KeyTargetPath]
@@ -166,7 +167,7 @@ class ValueBinder(object):
         _, _, _, fbds, _ = self._vb_bindingdicts(attr, self.VB_Forward,
                                                  all=True)
 
-        for fromattrattrs, bdict in fbds.iteritems():
+        for fromattrattrs, bdict in six.iteritems(fbds):
             if len(fromattrattrs) == 0:
                 topath = bdict[ValueBinder.KeyTargetPath]
                 log.debug("Push %s.%s to %s", attr, fromattrattrs,
@@ -204,7 +205,7 @@ class ValueBinder(object):
                 _, _, _, bs, _ = self._vb_bindingdicts(
                     attr, direction, all=True)
                 log.debug("  %d bindings through %r", len(bs), attr)
-                for subpath, bdict in dict(bs).iteritems():
+                for subpath, bdict in six.iteritems(dict(bs)):
                     topath = bdict[self.KeyTargetPath]
                     toattr, _ = self.VB_PartitionPath(topath)
                     log.debug("  binding %r %r -> %r", attr, subpath,

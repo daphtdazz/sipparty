@@ -21,6 +21,7 @@ from request import Request
 from header import Header
 from message import Message
 import sdp
+import scenario
 import party
 from party import *
 

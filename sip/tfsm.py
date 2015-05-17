@@ -26,6 +26,7 @@ import unittest
 import _util
 import fsm
 import retrythread
+import fsmtimer
 
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
@@ -103,7 +104,7 @@ class TestFSM(unittest.TestCase):
 
         self.assertRaises(
             ValueError,
-            lambda: fsm.Timer("retry", lambda: self, 1))
+            lambda: fsmtimer.Timer("retry", lambda: self, 1))
 
         def pop_func():
             self.retry += 1
@@ -177,7 +178,7 @@ class TestFSM(unittest.TestCase):
         # ("1") fails.
         self.assertRaises(
             ValueError,
-            lambda: fsm.Timer("retry", lambda: self, 1))
+            lambda: fsmtimer.Timer("retry", lambda: self, 1))
 
         def pop_func():
             log.debug("test pop_func")

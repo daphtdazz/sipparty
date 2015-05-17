@@ -260,7 +260,7 @@ class Message(vb.ValueBinder):
             if hdr not in [_hdr.type for _hdr in self.headers]:
                 self.addHeader(getattr(Header, hdr)())
 
-        for mheader_name, mparams in self.mandatoryparameters.iteritems():
+        for mheader_name, mparams in six.iteritems(self.mandatoryparameters):
             mheader = getattr(self, mheader_name + "Header")
             for param_name in mparams:
                 setattr(
