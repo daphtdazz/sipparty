@@ -58,8 +58,8 @@ class Line(Parser):
         Parser.Pattern:
             # Each valpat has a single group in it, which covers the value of
             # the line.
-            "({types})={valpat}[{eol}]+"
-            "".format(types="|".join(types), valpat=descvalpattern,
+            "([{types}])={valpat}[{eol}]+"
+            "".format(types="".join(types), valpat=descvalpattern,
                       eol=prot.EOL),
         Parser.Constructor:
             (1, lambda t: getattr(Line, t)()),

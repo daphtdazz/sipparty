@@ -36,7 +36,7 @@ class Request(parse.Parser, vb.ValueBinder):
 
     types = _util.Enum(
         ("ACK", "BYE", "CANCEL", "INVITE", "OPTIONS", "REGISTER"),
-        normalize=_util.upper)
+        normalize=lambda x: str(x).upper())
 
     # "type" is a descriptor that returns the type (e.g. ACK or BYE) based on
     # the class type, i.e. by removing "Request" from the class type.

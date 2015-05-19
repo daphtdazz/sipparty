@@ -27,6 +27,7 @@ import prot
 import components
 import scenario
 import defaults
+import request
 from message import (Message, Response)
 import transform
 import pdb
@@ -49,7 +50,7 @@ class PartyMetaclass(type):
             log.debug("PartyMetaclass init")
 
             # Add any predefined transitions.
-            cls.scenario = (
+            cls.Scenario = (
                 None if not hasattr(cls, "ScenarioDefinitions") else
                 scenario.ScenarioClassWithDefinition(
                     name, cls.ScenarioDefinitions))
@@ -67,6 +68,7 @@ class Party(object):
     def __init__(self, username=None, host=None, displayname=None):
         """Create the party.
         """
+        super(Party, self).__init__()
 
         self.aor = NewAOR()
         if username is not None:
@@ -76,10 +78,31 @@ class Party(object):
 
         # Set up the transport.
         self._pt_transport = siptransport.SipTransportFSM()
+
+        # Set up the scenario.
+        self.scenario = self.Scenario()
+
         # self._pt_transport.byteConsumer = self._pt_byteConsumer
 
         # !!! Make a new SIPTransportFSM class to handle sip transport
         # !!! requirements?
+
+    def __getattr__(self, attr):
+
+        if attr in request.Request.types:
+            na = getattr(request.Request.types, attr)
+
+            def scenario_input(*args, **kwargs):
+                self.scenario.hit(na, *args, **kwargs)
+            return scenario_input
+
+        try:
+            return super(Party, self).__getattr__(attr)
+        except AttributeError:
+            raise AttributeError(
+                "{self.__class__.__name__!r} instance has no attribute "
+                "{attr!r}."
+                "".format(**locals()))
 
 if 0:
     def _sendinvite(self, callee):

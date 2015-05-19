@@ -23,6 +23,8 @@ import unittest
 import _util
 import fsm
 import request
+import weakref
+import collections
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
@@ -51,9 +53,28 @@ class Scenario(fsm.FSM):
 
     @classmethod
     def PopulateWithDefinition(cls, definition_dict):
+        new_dict = dict(definition_dict)
+
+        # Normalize message names in the dictionary and add action based on
+        # message.
+        for state, stdict in six.iteritems(new_dict):
+            for name, val in six.iteritems(dict(stdict)):
+                if name in request.Request.types:
+                    nn = getattr(request.Request.types, name)
+                    stdict[nn] = val
+                    del stdict[name]
+                if tks.Message in val and tks.Action not in val:
+                    message = val[tks.Message]
+                    log.debug("Converting message %r into action.", message)
+                    val[tks.Action] = (
+                        "_scn_action" + six.binary_type(message))
+
         super(Scenario, cls).PopulateWithDefinition(definition_dict)
 
+    state = _util.DerivedProperty(get="_scn_state")
+
     def __init__(self, transform=None, transitions=None):
+        super(Scenario, self).__init__()
         pass
 
     def receiveMessage(self, msg):
@@ -61,8 +82,23 @@ class Scenario(fsm.FSM):
 
     def __getattr__(self, attr):
         # if attr in
+        if attr.startswith("_scn_action"):
+            message = attr.replace("_scn_action", "", 1)
+            wself = weakref.ref(self)
+
+            def scn_action(*args, **kwargs):
+                ss = wself()
+                ss._scn_action(message, *args, **kwargs)
+
+            log.debug("Returning func which %s a callable.",
+                      "is" if isinstance(scn_action, collections.Callable)
+                      else "is not")
+            return scn_action
 
         if not hasattr(super(Scenario, self), attr):
             raise AttributeError(
                 "{self.__class__!r} instance has no attribute {attr!r}."
                 "".format(**locals()))
+
+    def _scn_action(self, message, *args, **kwargs):
+        log.debug("Scenario action for message %r.", message)

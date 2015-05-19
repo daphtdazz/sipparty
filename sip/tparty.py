@@ -34,7 +34,7 @@ class TestParty(unittest.TestCase):
 
     def testBasicParty(self):
 
-        class Simple(party.Party):
+        class SimpleParty(party.Party):
             ScenarioDefinitions = {
                 scenario.InitialStateKey: {
                     "sendInvite": {
@@ -69,9 +69,20 @@ class TestParty(unittest.TestCase):
                 }
             }
 
-        self.assertEqual(Simple.scenario.__name__, "SimpleScenario")
-        p1 = Simple()
-        p2 = Simple()
+        self.assertEqual(SimpleParty.Scenario.__name__, "SimplePartyScenario")
+        self.assertTrue(
+            'INVITE' in
+            SimpleParty.Scenario._fsm_definitionDictionary[
+                scenario.InitialStateKey])
+        self.assertFalse(
+            'invite' in
+            SimpleParty.Scenario._fsm_definitionDictionary[
+                scenario.InitialStateKey])
+        p1 = SimpleParty()
+        p2 = SimpleParty()
+
+        p1.invite(p2)
+
 
 if __name__ == "__main__":
     unittest.main()

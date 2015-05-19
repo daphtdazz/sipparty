@@ -84,7 +84,7 @@ def block_until_states(states):
 InitialStateKey = "Initial"
 TransitionKeys = _util.Enum((
     "NewState",
-    # TODO: Action
+    "Action"
     ))
 
 
@@ -227,7 +227,7 @@ class FSM(object):
 
     @classmethod
     def PopulateWithDefinition(cls, definition_dict):
-
+        cls._fsm_definitionDictionary = definition_dict
         for old_state, stdict in six.iteritems(definition_dict):
             for input, transdef in six.iteritems(stdict):
                 try:
@@ -238,7 +238,12 @@ class FSM(object):
                         "input {input!r} into state {old_state!r} doesn't "
                         "have a {ns!r} value."
                         "".format(ns=TransitionKeys.NewState, **locals()))
-                cls.addTransition(old_state, input, ns)
+                action = (
+                    transdef[TransitionKeys.Action]
+                    if TransitionKeys.Action in transdef else
+                    None)
+
+                cls.addTransition(old_state, input, ns, action=action)
 
         # If the special initial state is specified, set that.
         if InitialStateKey in definition_dict:
