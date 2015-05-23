@@ -21,6 +21,7 @@ import types
 import collections
 import copy
 import threading
+import time
 import timeit
 import logging
 import pdb
@@ -570,3 +571,28 @@ def WeakMethod(object, method, static_args=None, static_kwargs=None,
         return getattr(sr, method)(*pass_args, **pass_kwargs)
 
     return weak_method
+
+
+class Timeout(Exception):
+    pass
+
+
+def WaitFor(condition, timeout_s, action_on_timeout=None, resolution=0.0001):
+    now = Clock()
+    next_log = now + 1
+    until = now + timeout_s
+    while now < until:
+        now = Clock()
+        if now > next_log:
+            next_log = Clock() + 1
+            log.debug("Still waiting for %r...", condition)
+
+        if condition():
+            break
+        time.sleep(resolution)
+
+    else:
+        if action_on_timeout:
+            action_on_timeout()
+        else:
+            raise Timeout("Timed out waiting for %r" % condition)

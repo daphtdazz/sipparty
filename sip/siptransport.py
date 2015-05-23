@@ -23,6 +23,7 @@ import prot
 import transport
 import message
 import collections
+import vb
 
 log = logging.getLogger(__name__)
 

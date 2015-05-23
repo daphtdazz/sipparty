@@ -61,12 +61,13 @@ class Scenario(fsm.FSM):
 
         super(Scenario, cls).PopulateWithDefinition(definition_dict)
 
-    state = _util.DerivedProperty(get="_scn_state")
     actionCallback = _util.DerivedProperty("_scn_actionCallback")
 
     def __init__(self, transform=None, transitions=None, **kwargs):
         self._scn_actionCallback = None
         super(Scenario, self).__init__(**kwargs)
+        log.debug("Scenario using async timers: %r.",
+                  self._fsm_use_async_timers)
 
     def __getattr__(self, attr):
         log.debug("scenario getattr %r", attr)

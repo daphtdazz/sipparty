@@ -158,8 +158,7 @@ class RetryThread(threading.Thread):
                 try:
                     action()
                 except Exception as exc:
-                    log.debug("Exception doing action %r:",
-                              action, exc_info=True)
+                    log.exception("Exception doing action %r:", action)
 
                     # The exception holds onto information about the stack,
                     # which means holding onto some of the objects on the

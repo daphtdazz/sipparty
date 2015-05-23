@@ -25,6 +25,7 @@ import logging
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
 import unittest
+import _util
 import party
 import scenario
 
@@ -33,24 +34,6 @@ tks = scenario.TransitionKeys
 
 
 class TestParty(unittest.TestCase):
-
-    RClock = timeit.default_timer
-
-    def wait_for(self, func, timeout=2):
-        assert timeout > 0.05
-        now = self.RClock()
-        next_log = now + 1
-        until = now + timeout
-        while self.RClock() < until:
-            if func():
-                break
-            time.sleep(0.01)
-            if self.RClock() > next_log:
-                next_log = self.RClock() + 1
-                log.debug("Still waiting...")
-
-        else:
-            self.assertTrue(0, "Timed out waiting for %r" % func)
 
     def testBasicParty(self):
 
@@ -101,16 +84,13 @@ class TestParty(unittest.TestCase):
             SimpleParty.Scenario._fsm_definitionDictionary[
                 scenario.InitialStateKey])
         p1 = SimpleParty()
-        p1._pt_transport.listen()
-        return 0
         p2 = SimpleParty()
-
+        p2._pt_transport.listen()
         p1.sendInvite(p2)
 
         # Currently we don't get into the call because there's a parse error
         # of the invite.
-        # self.wait_for(p1.state == "in call")
-
+        _util.WaitFor(lambda: p1.state == "in call", 1)
 
 if __name__ == "__main__":
     unittest.main()

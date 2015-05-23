@@ -549,10 +549,11 @@ class FSM(object):
         log.debug("_fsm_hit %r %r %r", input, args, kwargs)
         trans = self._fsm_transitions[self._fsm_state]
         if input not in trans:
-            raise UnexpectedInput(
-                "Input %r to %r %r (current state %r)." %
-                (input, self.__class__.__name__, self._fsm_name,
-                 self._fsm_state))
+            msg = "Bad input %r to %r %r (current state %r)." % (
+                input, self.__class__.__name__, self._fsm_name,
+                self._fsm_state)
+            log.error(msg)
+            raise UnexpectedInput(msg)
         res = trans[input]
         log.debug("%r: %r -> %r", self._fsm_state, input, res)
 

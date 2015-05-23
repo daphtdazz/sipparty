@@ -66,6 +66,12 @@ class Party(vb.ValueBinder):
     """A party in a sip call, aka an endpoint, caller or callee etc.
     """
 
+    bindings = [
+        ("outBoundMessage.", "something_else")
+    ]
+    vb_dependencies = [
+        ("scenario", ["state"])]
+
     aor = _util.DerivedProperty("_pt_aor")
 
     def __init__(self, username=None, host=None, displayname=None):
@@ -168,7 +174,12 @@ class Party(vb.ValueBinder):
         msg.fromheader.field.value.uri.aor = copy.deepcopy(self.aor)
         msg.viaheader.field.transport = transport.SockTypeName(
             callee._pt_transport.type)
-        self._pt_transport.connect(callee._pt_transport.localAddress)
+        if self._pt_transport.state != self._pt_transport.States.connected:
+            self._pt_transport.connect(callee._pt_transport.localAddress)
+            _util.WaitFor(
+                lambda: (self._pt_transport.state ==
+                         self._pt_transport.States.connected),
+                1.0)
         self._pt_transport.send(str(msg))
 
     def _pt_reply(self, message_type, request):
