@@ -66,8 +66,9 @@ class Party(vb.ValueBinder):
     """A party in a sip call, aka an endpoint, caller or callee etc.
     """
 
-    bindings = [
-        ("outBoundMessage.", "something_else")
+    vb_bindings = [
+        ("aor",
+         "_pt_outboundMessage.ContactHeader.field.value.uri.aor")
     ]
     vb_dependencies = [
         ("scenario", ["state"])]
@@ -169,9 +170,13 @@ class Party(vb.ValueBinder):
         self.scenario.hit(message.type, message)
 
     def _pt_send(self, message_type, callee):
+        log.debug("Send message of type %r to %r.", message_type, callee)
         msg = getattr(Message, message_type)()
-        msg.startline.uri.aor = copy.deepcopy(callee.aor)
-        msg.fromheader.field.value.uri.aor = copy.deepcopy(self.aor)
+
+        self._pt_outboundMessage = msg
+        self._pt_outboundMessage = None
+
+        msg.startline.uri.aor = callee.aor
         msg.viaheader.field.transport = transport.SockTypeName(
             callee._pt_transport.type)
         if self._pt_transport.state != self._pt_transport.States.connected:

@@ -17,6 +17,7 @@ limitations under the License.
 import logging
 import six
 import re
+import weakref
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -53,7 +54,7 @@ class ValueBinder(object):
 
         for reqdattr in (
                 ("_vb_forwardbindings", {}), ("_vb_backwardbindings", {}),
-                ("_vb_bindingparent", None),
+                ("_vb_weakBindingParent", None),
                 ("_vb_leader_res", None),
                 ("_vb_followers", None),
                 ("_vb_delegate_attributes", {})):
@@ -130,7 +131,8 @@ class ValueBinder(object):
             log.debug("Passthrough delegate attr %r to %r", attr, deleattr)
             return setattr(deleattr, attr, val)
 
-        if attr not in set(("_vb_bindingparent", )) and hasattr(self, attr):
+        if (attr not in set(("_vb_weakBindingParent", )) and
+                hasattr(self, attr)):
             existing_val = getattr(self, attr)
         else:
             existing_val = None
@@ -328,9 +330,12 @@ class ValueBinder(object):
         bdict[ValueBinder.KeyTargetPath] = resolvedtopath
         bdict[ValueBinder.KeyTransformer] = transformer
 
-        currparent = self._vb_bindingparent
+        currparent = (
+            self._vb_weakBindingParent()
+            if self._vb_weakBindingParent is not None else None)
         assert currparent is None or currparent is parent
-        self._vb_bindingparent = parent
+        self._vb_weakBindingParent = (
+            weakref.ref(parent) if parent is not None else None)
 
         if fromattrattrs:
             # This is an indirect binding, so recurse if possible.
@@ -404,8 +409,9 @@ class ValueBinder(object):
         splitpath = self.VB_SplitPath(path)
         for nextattr in splitpath[0:-1]:
 
-            if len(nextattr) == 0:
-                nextattr = "_vb_bindingparent"
+            nalen = len(nextattr)
+            if nalen == 0:
+                nextattr = "_vb_weakBindingParent"
 
             log.debug("  try next attribute %r", nextattr)
             if not hasattr(nextobj, nextattr):
@@ -417,6 +423,14 @@ class ValueBinder(object):
                 break
 
             nextobj = getattr(nextobj, nextattr)
+            if nalen == 0:
+                # Parent object.
+                nextobj = nextobj()
+                if nextobj is None:
+                    # Parent has been tidied up.
+                    log.debug("  Parent has been garbage collected.")
+                    nextattr = None
+                    break
 
         else:
             nextattr = splitpath[-1]
