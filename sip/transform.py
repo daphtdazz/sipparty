@@ -24,7 +24,7 @@ KeyActAdd = "add"
 KeyActRemove = "remove"
 KeyActCopy = "copy"
 
-request = {
+default = {
     "INVITE": {
         200: {
             KeyActCopy: [

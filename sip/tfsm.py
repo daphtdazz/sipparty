@@ -288,13 +288,31 @@ class TestFSM(unittest.TestCase):
         nf.checkTimers()
         self.assertEqual(nf.retries, 4)
 
+        # The Inputs should be instance specific.
+        nf.addTransition("stopped", "error", "error")
+        self.assertEqual(_util.Enum(("start", "start_done", "stop")),
+                         nf.__class__.Inputs)
+        self.assertEqual(_util.Enum(("start", "start_done", "stop", "error")),
+                         nf.Inputs)
+
+        log.info("Test bad subclasses.")
+        # This subclass has actions defined which are not actions. Check that
+        # we handle this OK.
+
         class FSMTestBadSubclass(fsm.FSM):
             @classmethod
             def AddClassTransitions(cls):
                 log.debug("Test bad method.")
                 cls.addTimer("retry_start", "not-a-method",
-                             [1, 1, 1])
-        self.assertRaises(ValueError, lambda: FSMTestBadSubclass())
+                             [0])
+                cls.addTransition("initial", "go", "going",
+                                  start_timers=["retry_start"])
+
+        badFSM = FSMTestBadSubclass()
+        # We get a ValueError when we cause the thread to get started because
+        # the
+        self.assertRaises(ValueError,
+                          lambda: badFSM.hit(FSMTestBadSubclass.Inputs.go))
 
     def testFDSources(self):
 
@@ -359,7 +377,8 @@ class TestFSM(unittest.TestCase):
             nf.hit("start")
             nf.hit("jump")
             nf.hit("stop")
-        self.assertEqual(thr_res[0], 8 * 2)
+
+        self.wait_for(lambda: thr_res[0] == 8 * 2)
 
 if __name__ == "__main__":
     sys.exit(unittest.main())

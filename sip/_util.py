@@ -25,6 +25,7 @@ import timeit
 import logging
 import pdb
 import vb
+import weakref
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -64,7 +65,8 @@ class attributesubclassgen(type):
     def __getattr__(cls, name):
         if "types" not in cls.__dict__:
             raise AttributeError(
-                "{cls.__name__!r} needs a 'types' attribute.".format(
+                "{cls.__name__!r} needs a 'types' attribute (getting "
+                "attribute {name!r}).".format(
                     **locals()))
 
         # !!! Would be nice to implement "type_aliases" so that we can map
@@ -152,12 +154,13 @@ class Enum(set):
     def index(self, item):
         return self._en_list.index(item)
 
+    def add(self, item):
+        super(Enum, self).add(item)
+        self._en_list.append(item)
+
     def update(self, iterable):
-        super(Enum, self).update(iterable)
         for item in iterable:
-            if item in self._en_list:
-                continue
-            self._en_list.append(item)
+            self.add(item)
 
 
 class ClassType(object):
@@ -544,3 +547,26 @@ def TwoCompatibleThree(cls):
         cls.__str__ = BytesToStrDescriptor()
 
     return cls
+
+
+def WeakMethod(object, method, static_args=None, static_kwargs=None,
+               default_rc=None):
+    wr = weakref.ref(object)
+
+    static_args = static_args if static_args is not None else []
+    static_kwargs = static_kwargs if static_kwargs is not None else {}
+
+    def weak_method(*args, **kwargs):
+        log.debug("static_args: %r", static_args)
+        log.debug("args: %r", args)
+        sr = wr()
+        if sr is None:
+            return default_rc
+
+        pass_args = (list(static_args) + list(args))
+        log.debug("pass_args: %r", pass_args)
+        pass_kwargs = dict(static_kwargs)
+        pass_kwargs.update(kwargs)
+        return getattr(sr, method)(*pass_args, **pass_kwargs)
+
+    return weak_method

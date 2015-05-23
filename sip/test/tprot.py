@@ -109,7 +109,7 @@ class TestProtocol(unittest.TestCase):
         self.assertRaises(AttributeError, lambda: invite.notaheader)
 
         resp = sip.message.Response(200)
-        invite.applyTransform(resp, sip.transform.request[invite.type][200])
+        invite.applyTransform(resp, sip.transform.default[invite.type][200])
 
         self.assertTrue(re.match(
             "SIP/2.0 200 OK\r\n"

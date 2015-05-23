@@ -30,7 +30,10 @@ import defaults
 import request
 from message import (Message, Response)
 import transform
-import pdb
+import weakref
+import re
+import message
+import vb
 
 __all__ = ('Party',)
 
@@ -59,7 +62,7 @@ class PartyMetaclass(type):
 
 
 @six.add_metaclass(PartyMetaclass)
-class Party(object):
+class Party(vb.ValueBinder):
     """A party in a sip call, aka an endpoint, caller or callee etc.
     """
 
@@ -70,6 +73,8 @@ class Party(object):
         """
         super(Party, self).__init__()
 
+        self._pt_waitingMessage = None
+
         self.aor = NewAOR()
         if username is not None:
             self.aor.username = username
@@ -79,15 +84,45 @@ class Party(object):
         # Set up the transport.
         self._pt_transport = siptransport.SipTransportFSM()
 
-        # Set up the scenario.
-        self.scenario = self.Scenario()
+        # Currently don't do listen until required to.
+        # self._pt_transport.listen()
+        self._pt_transport.messageConsumer = _util.WeakMethod(
+            self, "_pt_messageConsumer")
 
-        # self._pt_transport.byteConsumer = self._pt_byteConsumer
+        # Set up the scenario.
+        if self.Scenario is not None:
+            self.scenario = self.Scenario(delegate=self)
+            self.scenario.actionCallback = _util.WeakMethod(
+                self, "scenarioActionCallback")
+
+        # Set up the transform.
+        if not hasattr(self, "transform"):
+            self.transform = transform.default
 
         # !!! Make a new SIPTransportFSM class to handle sip transport
         # !!! requirements?
 
     def __getattr__(self, attr):
+
+        if attr.startswith("send"):
+            message = attr.replace("send", "", 1)
+            try:
+                send_action = _util.WeakMethod(
+                    self, "_pt_send", static_args=[message])
+            except:
+                log.exception("")
+                raise
+            return send_action
+
+        if attr.startswith("reply"):
+            message = attr.replace("reply", "", 1)
+            try:
+                send_action = _util.WeakMethod(
+                    self, "_pt_reply", static_args=[message])
+            except:
+                log.exception("")
+                raise
+            return send_action
 
         if attr in request.Request.types:
             na = getattr(request.Request.types, attr)
@@ -104,56 +139,44 @@ class Party(object):
                 "{attr!r}."
                 "".format(**locals()))
 
-if 0:
-    def _sendinvite(self, callee):
-        """Start a call."""
-        invite = Message.invite()
-        invite.startline.uri.aor = copy.deepcopy(callee.aor)
-        invite.fromheader.field.value.uri.aor = copy.deepcopy(self.aor)
-        invite.viaheader.field.transport = transport.SockTypeName(
-            callee.socktype)
-        self.connect(
-            callee.address, callee.port, callee.sockfamily, callee.socktype)
-        self.active_socket.sendall(str(invite))
+    def scenarioActionCallback(self, message_type, *args, **kwargs):
+        log.debug("Message to send: %r.", message_type)
 
-    def receiveMessage(self):
-        if hasattr(self, "active_socket"):
-            sock = self.active_socket
+        if re.match("\d+", message_type):
+            msg = message.Response(int(message_type))
         else:
-            sock = self.passive_socket
+            msg = getattr(message.Message, message_type)
 
-        if sock.type == socket.SOCK_STREAM:
-            assert 0, "Stream sockets not yet supported."
+        if "message" in kwargs:
+            log.debug("  responding to a received message.")
+            rcvdMessage = kwargs[message]
+            rcvdMessage.applyTransform(msg, self.transform)
+            self._pt_transport.sendMessage(msg)
         else:
-            data, addr = sock.recvfrom(4096)
-
-        msg = Message.Parse(data)
-        log.debug("Received message %s", msg)
-        return msg
-
-    def _respond(self, code):
-        """Send a SIP response code."""
-        msg = self.receiveMessage()
-
-        if msg.isresponse():
-            raise prot.ProtocolError("Cannot respond to a response.")
-
-        try:
-            tform = transform.request[msg.type][code]
-        except KeyError:
-            log.error("No transformation for %d from %s", code, msg.type)
-
-        rsp = Response(code)
-        log.debug("Initial response:%r", str(rsp))
-        msg.applyTransform(rsp, tform)
-        log.debug("Proto-response: %s", rsp)
-
-    # Receiving methods.
-    def receive_response(self, code):
-        """Receive a response code after a request."""
+            self._pt_transport.sendMessage(msg)
 
     #
     # =================== INTERNAL ===========================================
     #
-    def _pt_byteConsumer(self, data):
-        return len(data)
+    def _pt_messageConsumer(self, message):
+        log.debug("Received a %r message.", message.type)
+        self.scenario.hit(message.type, message)
+
+    def _pt_send(self, message_type, callee):
+        msg = getattr(Message, message_type)()
+        msg.startline.uri.aor = copy.deepcopy(callee.aor)
+        msg.fromheader.field.value.uri.aor = copy.deepcopy(self.aor)
+        msg.viaheader.field.transport = transport.SockTypeName(
+            callee._pt_transport.type)
+        self._pt_transport.connect(callee._pt_transport.localAddress)
+        self._pt_transport.send(str(msg))
+
+    def _pt_reply(self, message_type, request):
+        if re.match("\d+$", message_type):
+            msg = message.Response(code=int(message_type))
+        else:
+            msg = getattr(message.Message, message_type)
+
+        request.applyTransform(msg, self.transform)
+
+        self.active_socket.sendall(str(msg))

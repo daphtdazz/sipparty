@@ -136,7 +136,7 @@ class TransportFSM(fsm.FSM):
         Add(S.connecting, I.connected, S.connected,
             action=A.becomesConnected)
 
-        # Transitions when being connected to.
+        # Transitions when listening.
         Add(S.disconnected, I.listen, S.startListen,
             action=A.createListen,
             start_threads=[A.startListening])
@@ -241,7 +241,7 @@ class TransportFSM(fsm.FSM):
     #
     def createConnect(self, addr_tuple):
 
-        log.debug("Create connect socket destined for %r.", addr_tuple)
+        log.info("Connect to %r.", addr_tuple)
 
         fam = self.family
         typ = self.type
@@ -290,7 +290,8 @@ class TransportFSM(fsm.FSM):
 
     def becomesConnected(self):
         "Called when the transport becomes connected"
-        self.addFDSource(self._tfsm_activeSck, self._tfsm_dataAvailable)
+        self.addFDSource(self._tfsm_activeSck,
+                         _util.WeakMethod(self, "_tfsm_dataAvailable"))
 
     def becomesDisconnected(self):
         "Called when the transport goes down."
@@ -332,7 +333,7 @@ class TransportFSM(fsm.FSM):
     #
     def attemptConnect(self):
         "Attempt to connect out."
-
+        log.debug("Attempt to connect to %r.", self._tfsm_remoteAddressTuple)
         sck = self._tfsm_activeSck
         if sck is None:
             log.debug("Create socket failed, so nothing to do.")
@@ -343,8 +344,6 @@ class TransportFSM(fsm.FSM):
         address = self._tfsm_localAddress
         remote_address = self._tfsm_remoteAddressTuple
 
-        # Finish the connect out FSM side, and move on to the accept.
-
         try:
             self._tfsm_activeSck.connect(self._tfsm_remoteAddressTuple)
         except Exception as exc:
@@ -354,45 +353,46 @@ class TransportFSM(fsm.FSM):
                 (self._tfsm_remoteAddressTuple, exc))
             return
 
+        log.debug("Attempt connect done.")
         self.hit(self.Inputs.connected)
 
     def startListening(self):
 
         log.debug("STREAM socket so block to accept a connection.")
-
         startListen = _util.Clock()
         nextLog = startListen + 1
 
-        while True:
-            lsck = self._tfsm_listenSck
+        lsck = self._tfsm_listenSck
 
-            if lsck is None:
-                log.debug("Listen has been cancelled.")
-                break
+        if lsck is None:
+            log.debug("Listen has been cancelled.")
+            return
 
-            if lsck.type == socket.SOCK_DGRAM:
-                raise ValueError("DGRAM socket (UDP) support not "
-                                 "implemented.")
+        if lsck.type == socket.SOCK_DGRAM:
+            raise ValueError("DGRAM socket (UDP) support not "
+                             "implemented.")
 
-            now = _util.Clock()
-            if now > nextLog:
-                log.debug("Still waiting to accept...")
-                nextLog = now + 1
+        now = _util.Clock()
+        if now > nextLog:
+            log.debug("Still waiting on %r to accept...",
+                      self.localAddress)
+            nextLog = now + 1
 
-            try:
-                conn, addr = lsck.accept()
-                log.debug("Connection accepted from %r.", addr)
-                self._tfsm_activeSck = conn
-                self.hit(self.Inputs.connected)
-                break
-            except socket.timeout:
-
-                continue
-            except Exception as exc:
-                log.debug("Exception selecting listen socket", exc_info=True)
-                self.hit(self.Inputs.error,
-                         "Exception selecting listen socket %r." % exc)
-                break
+        try:
+            conn, addr = lsck.accept()
+            log.debug("Connection accepted from %r.", addr)
+            self._tfsm_activeSck = conn
+            self.hit(self.Inputs.connected)
+            return
+        except socket.timeout:
+            # In this case we are going to try again straight away.
+            log.debug("Socket timeout")
+            return 0
+        except Exception as exc:
+            log.debug("Exception selecting listen socket", exc_info=True)
+            self.hit(self.Inputs.error,
+                     "Exception selecting listen socket %r." % exc)
+            return
 
         log.debug("Start listening done.")
 

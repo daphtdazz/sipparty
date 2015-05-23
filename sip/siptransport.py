@@ -17,12 +17,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import six
-import weakref
 import logging
 import _util
 import prot
 import transport
 import message
+import collections
 
 log = logging.getLogger(__name__)
 
@@ -44,27 +44,19 @@ class SipTransportFSM(transport.TransportFSM):
     #
     # =================== INSTANCE INTERFACE =================================
     #
+    messages = _util.DerivedProperty("_tsipfsm_messages")
+    messageConsumer = _util.DerivedProperty(
+        "_tsipfsm_messageConsumer",
+        lambda val: isinstance(val, collections.Callable))
+
     def __init__(self):
         super(SipTransportFSM, self).__init__()
 
+        self._tsipfsm_messageConsumer = None
         self._tsipfsm_messages = []
 
-        # Use a weak reference to set up our consuming method as else we will
-        # retain ourselves.
-        weak_self = weakref.ref(self)
-
-        def siptfsm_consumer(data):
-            strong_self = weak_self()
-            if strong_self is None:
-                return 0
-            return strong_self._tsfsm_consumeBytes(data)
-
-        self.byteConsumer = siptfsm_consumer
-
-    messages = _util.DerivedProperty("_tsipfsm_messages")
-    messageConsumer = _util.DerivedProperty(
-        "_tsipfsm_byteConsumer",
-        lambda val: isinstance(val, collections.Callable))
+        self.byteConsumer = _util.WeakMethod(
+            self, "_tsfsm_consumeBytes", default_rc=0)
 
     def sendMessage(self, message):
         self.hit(self.Inputs.send, six.binary_type(message))
@@ -91,9 +83,8 @@ class SipTransportFSM(transport.TransportFSM):
         newmessage = message.Message.Parse(data)
         message_end = eoleol_index + len(eoleol)
 
-        # !!! Look at content length header / stream type (if available) and
-        # use that to burn the remaining data.
-
         self.messages.append(newmessage)
+        if self.messageConsumer is not None:
+            self.messageConsumer(newmessage)
 
         return message_end

@@ -35,6 +35,7 @@ import time
 import threading
 import socket
 import select
+import sys
 import logging
 import _util
 
@@ -103,7 +104,7 @@ class RetryThread(threading.Thread):
         self._rthr_cancelled = False
         self._rthr_retryTimes = []
         self._rthr_nextTimesLock = threading.Lock()
-        self._rthr_noWorkWait = 3600
+        self._rthr_noWorkWait = 5
 
         self._rthr_fdSources = {}
 
@@ -127,7 +128,7 @@ class RetryThread(threading.Thread):
         wait = self._rthr_noWorkWait
         while not self._rthr_cancelled:
             rsrcs = self._rthr_fdSources.keys()
-            log.debug("Thread not cancelled, next retry times: %r, wait: %d"
+            log.debug("Thread not cancelled, next retry times: %r, wait: %d "
                       "on %r.",
                       self._rthr_retryTimes, wait, rsrcs)
 
@@ -159,6 +160,14 @@ class RetryThread(threading.Thread):
                 except Exception as exc:
                     log.debug("Exception doing action %r:",
                               action, exc_info=True)
+
+                    # The exception holds onto information about the stack,
+                    # which means holding onto some of the objects on the
+                    # stack. However we don't want that to happen or else
+                    # resource tidy-up won't happen correctly which means we
+                    # may never get cancelled (if the cancel is in the __del__
+                    # of one of the objects on the exception stack).
+                    sys.exc_clear()
 
             # Immediately respin since we haven't checked the next timer yet.
             wait = 0

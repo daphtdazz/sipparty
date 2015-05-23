@@ -49,6 +49,22 @@ class TestSIPTransport(unittest.TestCase):
         else:
             self.assertTrue(0, "Timed out waiting for %r" % func)
 
+    def testConnectedTidyUp(self):
+
+        S = siptransport.SipTransportFSM.States
+        I = siptransport.SipTransportFSM.Inputs
+
+        t1 = siptransport.SipTransportFSM()
+        t2 = siptransport.SipTransportFSM()
+
+        t1.listen()
+        log.debug("t1.localAddress: %r", t1.localAddress)
+
+        t2.hit(I.connect, t1.localAddress)
+
+        self.wait_for(lambda: t2.state == S.connected)
+        self.wait_for(lambda: t1.state == S.connected)
+
     def testBasicSIPTransport(self):
 
         S = siptransport.SipTransportFSM.States
@@ -59,6 +75,7 @@ class TestSIPTransport(unittest.TestCase):
 
         t1.listen()
         log.debug("t1.localAddress: %r", t1.localAddress)
+
         t2.hit(I.connect, t1.localAddress)
 
         self.wait_for(lambda: t2.state == S.connected)
@@ -70,13 +87,15 @@ class TestSIPTransport(unittest.TestCase):
         inv.toHeader.field.value.uri.aor = components.AOR("bob", "biloxi.com")
         inv.contactHeader.field.value.uri.aor.username = "alice"
         inv.contactHeader.field.value.uri.aor.host = t1.localAddressHost
+
         t1.sendMessage(inv)
 
         self.wait_for(lambda: len(t2.messages) > 0)
 
         rx = t2.messages.pop()
         resp = message.Response(200)
-        rx.applyTransform(resp, transform.request[rx.type][200])
+        log.debug("t1 state: %r, t2 state: %r.", t1.state, t2.state)
+        rx.applyTransform(resp, transform.default[rx.type][200])
 
         t2.sendMessage(resp)
 

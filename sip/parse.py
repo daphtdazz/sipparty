@@ -22,7 +22,7 @@ import logging
 import six
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.DEBUG)
+log.setLevel(logging.INFO)
 
 
 class ParseError(Exception):

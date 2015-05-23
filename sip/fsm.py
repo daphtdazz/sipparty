@@ -24,6 +24,7 @@ import timeit
 import threading
 import Queue
 import weakref
+import copy
 import logging
 import _util
 import retrythread
@@ -55,7 +56,8 @@ def block_until_states(states):
     def buse_desc(method):
         def block_until_states_wrapper(self, *args, **kwargs):
             state_now = self.state
-            log.debug("Block %r until %r.", method.__name__, states)
+            log.debug("Block after %r for %.2f secs until %r.",
+                      method.__name__, self._tfsm_timeout, states)
             method(self, *args, **kwargs)
 
             end_states = states
@@ -63,10 +65,12 @@ def block_until_states(states):
             time_now = time_start
             while self.state not in end_states:
                 if time_now - time_start > self._tfsm_timeout:
+                    log.error(
+                        "Timeout (after %f seconds) waiting for states %r",
+                        self._tfsm_timeout, states)
                     self.hit(self.States.error)
                     new_end_states = (self.States.error,)
                     if end_states == new_end_states:
-                        # Ahh must do proper exceptions!
                         raise FSMError(
                             "help failed to enter error state.")
                     end_states = new_end_states
@@ -76,7 +80,6 @@ def block_until_states(states):
                 time_now = _util.Clock()
 
             if self.state not in end_states:
-                # Ahh must do proper exceptions!
                 raise FSMTimeout("Timeout reaching end state.")
         return block_until_states_wrapper
     return buse_desc
@@ -102,7 +105,9 @@ class FSMClassInitializer(type):
             # Add any predefined transitions.
             self.AddClassTransitions()
             log.debug("FSMClass states after AddClassTransitions: %r",
-                      None if not hasattr(self, "States") else self.States)
+                      self.States)
+            log.debug("FSMClass inputs after AddClassTransitions: %r",
+                      self.Inputs)
 
 
 @six.add_metaclass(
@@ -151,7 +156,20 @@ class FSM(object):
     Inputs = _util.Enum(tuple())
     Actions = _util.Enum(tuple())
 
-    def __init__(self, name=None, asynchronous_timers=False):
+    @property
+    def delegate(self):
+        if self._fsm_weakDelegate is None:
+            return None
+        return self._fsm_weakDelegate()
+
+    @delegate.setter
+    def delegate(self, val):
+        if val is None:
+            self._fsm_weakDelegate = None
+        else:
+            self._fsm_weakDelegate = weakref.ref(val)
+
+    def __init__(self, name=None, asynchronous_timers=False, delegate=None):
         """name: a name for this FSM for debugging purposes.
         """
         log.debug("FSM init")
@@ -163,12 +181,15 @@ class FSM(object):
 
         self._fsm_name = name
         self._fsm_use_async_timers = asynchronous_timers
+        self._fsm_weakDelegate = None
+        self.delegate = delegate
 
         # Need to learn configuration from the class.
         class_transitions = self._fsm_transitions
         self._fsm_transitions = {}
         class_timers = self._fsm_timers
         self._fsm_timers = {}
+        self.Inputs = copy.copy(self.Inputs)
 
         self._fsm_state = self._fsm_state
 
@@ -198,9 +219,13 @@ class FSM(object):
             weak_self = weakref.ref(self)
 
             def check_weak_self_timers():
-                strong_self = weak_self()
-                if strong_self is not None:
-                    strong_self._fsm_backgroundTimerPop()
+                self = weak_self()
+                if self is None:
+                    log.debug("Weak check timers has been released.")
+                    return
+                log.debug("Weak check timers has not been released.")
+
+                self._fsm_backgroundTimerPop()
 
             self._fsm_thread = retrythread.RetryThread(
                 action=check_weak_self_timers)
@@ -325,6 +350,13 @@ class FSM(object):
         state_trans[input] = result
         trans_dict[old_state] = state_trans
 
+        if input not in self.Inputs:
+            self.Inputs.add(input)
+
+        for state in (old_state, new_state):
+            if state not in self.States:
+                self.States.add(state)
+
         # For convenience assume that the first transition set tells us the
         # initial state.
         if not self_is_class and self._fsm_state is None:
@@ -380,7 +412,9 @@ class FSM(object):
     def checkTimers(self):
         "Check all the timers that are running."
         for name, timer in six.iteritems(self._fsm_timers):
-            if timer.isRunning:
+            isRunning = timer.isRunning
+            log.debug("Check timer %r (isRunning: %r).", name, isRunning)
+            if isRunning:
                 timer.check()
                 if self._fsm_use_async_timers:
                     self._fsm_thread.addRetryTime(timer.nextPopTime)
@@ -422,56 +456,83 @@ class FSM(object):
         if not isinstance(action, str):
             raise ValueError("Action %r not a callable nor a method name." %
                              (action,))
-        if not hasattr(self, action):
-            raise ValueError(
-                "Action %r is not a callable or a method on %r object." %
-                (action, self.__class__.__name__))
-
-        # Have to be careful not to retain ourselves, so use weak references.
-        new_action = getattr(self, action)
-        if not isinstance(new_action, collections.Callable):
-            raise ValueError(
-                "Action %r is not a callable or a method on %r object." %
-                (action, self.__class__.__name__))
 
         weak_self = weakref.ref(self)
 
         def weak_action(*args, **kwargs):
-            strong_self = weak_self()
-            if strong_self is not None:
-                getattr(strong_self, action)(*args, **kwargs)
+            log.info("Weak action sleep")
+            self = weak_self()
+            if self is None:
+                return None
+
+            if hasattr(self, "delegate"):
+                dele = getattr(self, "delegate")
+                if dele is not None:
+                    del self
+                    method = getattr(dele, action)
+                    return method(*args, **kwargs)
+
+            if hasattr(self, action):
+                func = getattr(self, action)
+                if isinstance(func, collections.Callable):
+                    del self
+                    return func(*args, **kwargs)
+
+            raise ValueError(
+                "Action %r is not a callable or a method on %r object or "
+                "its delegate %r." %
+                (action, self.__class__.__name__,
+                 self.delegate
+                 if hasattr(self, "delegate") else None))
 
         return weak_action
 
     @_util.class_or_instance_method
     def _fsm_makeThreadAction(self, action):
 
-        made_action = self._fsm_makeAction(action)
+        weak_method = self._fsm_makeAction(action)
         if isinstance(self, type):
             # Delay deciding whether the action is appropriate because we
             # can't bind the action name to a method at this point as we are
             # the class not the instance.
-            return made_action
+            return weak_method
 
         weak_self = weakref.ref(self)
 
-        def thread_action():
-            self = weak_self()
-            if self is None:
-                return
+        def fsmThread():
+            cthr = threading.currentThread()
+            log.debug("FSM Thread %r in.", cthr.name)
+            while True:
+                self = weak_self()
+                log.debug("Self is %r.", self)
+                del self
+                try:
+                    wait = weak_method()
+                except Exception as exc:
+                    log.exception("Exception in %r thread.", cthr.name)
+                    break
 
-            try:
-                made_action()
-            finally:
-                cthr = threading.currentThread()
+                if wait is None:
+                    break
+
+                log.debug("Thread %r wants to try again in %02f seconds.",
+                          cthr.name, wait)
+                time.sleep(wait)
+
+            self = weak_self()
+            if self is not None:
                 log.debug(
-                    "Thread %r finishing, put self on old thread queue.",
+                    "Thread %r finishing, put on FSM's old thread queue.",
                     cthr.name)
                 self._fsm_oldThreadQueue.put(cthr)
-                self._fsm_popTimerNow()
+                # Do not pop the timer now, because this could attempt to
+                # garbage collect another thread also attempting to garbage
+                # collect, leading to a deadlock.
+                # self._fsm_popTimerNow()
+            log.debug("FSM Thread %r out.", cthr.name)
 
-        thread_action.name = str(action)
-        return thread_action
+        fsmThread.name = str(action)
+        return fsmThread
 
     @_util.OnlyWhenLocked
     def _fsm_hit(self, input, *args, **kwargs):
@@ -535,30 +596,28 @@ class FSM(object):
 
         while not self._fsm_inputQueue.empty():
             input, args, kwargs = self._fsm_inputQueue.get()
+            log.debug("Process input %r.", input)
             try:
                 self._fsm_hit(input, *args, **kwargs)
             finally:
                 self._fsm_inputQueue.task_done()
+                log.debug("Items left on queue: %d",
+                          self._fsm_inputQueue.qsize())
 
         self.checkTimers()
         self._fsm_garbageCollect()
 
     def _fsm_garbageCollect(self):
 
-        collecting_self = False
         selfthr = threading.currentThread()
         while not self._fsm_oldThreadQueue.empty():
             thr = self._fsm_oldThreadQueue.get()
-            if thr is selfthr:
-                collecting_self = True
-                continue
+
+            # Garbage collection from the garbage collectable FSM threads is
+            # illegal as that can cause deadlocks between two separate FSM
+            # threads attempting to collect each other.
+            assert thr is not selfthr
 
             log.debug("Joining thread %r", thr.name)
             thr.join()
             log.debug("Joined thread %r", thr.name)
-
-        if collecting_self:
-            # We avoided joining ourself, so put us back on the queue for
-            # another thread to collect, we'll be exiting imminently.
-            log.debug("Attempt to collect current thread skipped.")
-            self._fsm_oldThreadQueue.put(selfthr)
