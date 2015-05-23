@@ -50,7 +50,7 @@ class TestParty(unittest.TestCase):
                     }
                 },
                 "invite sent": {
-                    "4xx": {
+                    4: {
                         tks.NewState: scenario.InitialStateKey
                     },
                     200: {
@@ -86,11 +86,10 @@ class TestParty(unittest.TestCase):
         p1 = SimpleParty()
         p2 = SimpleParty()
         p2._pt_transport.listen()
-        p1.sendInvite(p2)
+        p1.hit("sendInvite", p2)
 
-        # Currently we don't get into the call because there's a parse error
-        # of the invite.
         _util.WaitFor(lambda: p1.state == "in call", 1)
+        _util.WaitFor(lambda: p2.state == "in call", 1)
 
 if __name__ == "__main__":
     unittest.main()

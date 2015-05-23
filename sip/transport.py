@@ -430,7 +430,6 @@ class TransportFSM(fsm.FSM):
         be called when there is data available on the socket.
         """
         bytes, address = sck.recvfrom(self._tfsm_receiveSize)
-        return len(bytes)
         byteslen = len(bytes)
 
         if byteslen > 0:

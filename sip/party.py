@@ -68,7 +68,11 @@ class Party(vb.ValueBinder):
 
     vb_bindings = [
         ("aor",
-         "_pt_outboundMessage.ContactHeader.field.value.uri.aor")
+         "_pt_outboundMessage.FromHeader.field.value.uri.aor"),
+        ("_pt_transport.localAddressHost",
+         "_pt_outboundMessage.ContactHeader.field.value.uri.aor.host"),
+        ("_pt_transport.localAddressPort",
+         "_pt_outboundMessage.ContactHeader.field.value.uri.aor.port")
     ]
     vb_dependencies = [
         ("scenario", ["state"])]
@@ -106,8 +110,8 @@ class Party(vb.ValueBinder):
         if not hasattr(self, "transform"):
             self.transform = transform.default
 
-        # !!! Make a new SIPTransportFSM class to handle sip transport
-        # !!! requirements?
+    def hit(self, input, *args, **kwargs):
+        self.scenario.hit(input, *args, **kwargs)
 
     def __getattr__(self, attr):
 
@@ -171,28 +175,31 @@ class Party(vb.ValueBinder):
 
     def _pt_send(self, message_type, callee):
         log.debug("Send message of type %r to %r.", message_type, callee)
-        msg = getattr(Message, message_type)()
-
-        self._pt_outboundMessage = msg
-        self._pt_outboundMessage = None
-
-        msg.startline.uri.aor = callee.aor
-        msg.viaheader.field.transport = transport.SockTypeName(
-            callee._pt_transport.type)
         if self._pt_transport.state != self._pt_transport.States.connected:
             self._pt_transport.connect(callee._pt_transport.localAddress)
             _util.WaitFor(
                 lambda: (self._pt_transport.state ==
                          self._pt_transport.States.connected),
                 1.0)
+
+        msg = getattr(Message, message_type)()
+        self._pt_outboundMessage = msg
+
+        msg.startline.uri.aor = callee.aor
+        msg.viaheader.field.transport = transport.SockTypeName(
+            callee._pt_transport.type)
+
         self._pt_transport.send(str(msg))
 
     def _pt_reply(self, message_type, request):
+        log.debug("Reply to %r with %r.", request.type, message_type)
         if re.match("\d+$", message_type):
-            msg = message.Response(code=int(message_type))
+            message_type = int(message_type)
+            msg = message.Response(code=message_type)
         else:
             msg = getattr(message.Message, message_type)
 
-        request.applyTransform(msg, self.transform)
+        tform = self.transform[request.type][message_type]
+        request.applyTransform(msg, tform)
 
-        self.active_socket.sendall(str(msg))
+        self._pt_transport.send(str(msg))

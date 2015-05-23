@@ -110,14 +110,18 @@ class Message(vb.ValueBinder):
             # !!! TODO: This is highly suboptimal; must come back and fix the
             # parsing so that requests and responses are parsed more
             # equivocally.
+            log.debug("Attempt Message Parse of %r as a request.", startline)
             requestline = request.Request.Parse(startline)
             message = getattr(Message, requestline.type)(
                 startline=requestline, autofillheaders=False)
             log.debug("Message is of type %r", message.type)
         except parse.ParseError:
             # Try response...
+            log.debug("Attempt Message Parse of %r as a response.", startline)
             reqline = response.Response.Parse(startline)
+            log.debug(reqline)
             message = Response(startline=reqline)
+            log.debug("Success. Type: %r.", message.type)
 
         for line, ln in zip(lines, range(1, len(lines) + 1)):
             if len(line) == 0:
@@ -309,6 +313,10 @@ class Response(Message):
     NB this overrides the metaclass of Message as we don't want to attempt to
     generate subclasses from our type, which we don't have."""
 
+    @property
+    def type(self):
+        return self.startline.code
+
     def __init__(self, code=None, **kwargs):
 
         if code is not None:
@@ -327,6 +335,8 @@ class InviteMessage(Message):
         ("startline.uri", "ToHeader.field.uri"),
         ("startline.protocol", "ViaHeader.field.protocol"),
         ("startline", "ViaHeader.field.parameters.branch.startline"),
+        ("FromHeader.field.value.uri.aor.username",
+         "ContactHeader.field.value.uri.aor.username"),
         ("ContactHeader.field.value.uri.aor.host",
          "ViaHeader.field.host.host"),
         ("startline.type", "CseqHeader.field.reqtype")]

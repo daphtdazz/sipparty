@@ -460,7 +460,6 @@ class FSM(object):
         weak_self = weakref.ref(self)
 
         def weak_action(*args, **kwargs):
-            log.info("Weak action sleep")
             self = weak_self()
             if self is None:
                 return None
