@@ -40,7 +40,7 @@ import logging
 import _util
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.INFO)
+log.setLevel(logging.DEBUG)
 
 
 class _FDSource(object):
@@ -82,7 +82,7 @@ class _FDSource(object):
 
 class RetryThread(threading.Thread):
 
-    def __init__(self, action=None, **kwargs):
+    def __init__(self, action=None, master_thread=None, **kwargs):
         """Callers must be careful that they do not hold references to the
         thread and pass in actions that hold references to themselves, which
         leads to a retain deadlock (each hold the other so neither are ever
@@ -104,9 +104,14 @@ class RetryThread(threading.Thread):
         self._rthr_cancelled = False
         self._rthr_retryTimes = []
         self._rthr_nextTimesLock = threading.Lock()
-        self._rthr_noWorkWait = 5
+        self._rthr_noWorkWait = 0.01
+        self._rthr_noWorkSequence = 0
 
         self._rthr_fdSources = {}
+
+        if master_thread is None:
+            master_thread = threading.currentThread()
+        self._rthr_masterThread = master_thread
 
         # Set up the trigger mechanism.
         self._rthr_triggerRunFD, output = socket.socketpair()
@@ -126,11 +131,21 @@ class RetryThread(threading.Thread):
         owner's `__del__` method.
         """
         wait = self._rthr_noWorkWait
-        while not self._rthr_cancelled:
+        while not self._rthr_cancelled and self._rthr_masterThread.isAlive():
             rsrcs = self._rthr_fdSources.keys()
-            log.debug("Thread not cancelled, next retry times: %r, wait: %d "
-                      "on %r.",
-                      self._rthr_retryTimes, wait, rsrcs)
+            log.debug("Thread not cancelled, next retry times: %r, wait: %f "
+                      "on %r. Master thread is alive: %r.",
+                      self._rthr_retryTimes, wait, rsrcs,
+                      self._rthr_masterThread.isAlive())
+
+            if self._rthr_cancelled:
+                log.debug("Thread %r cancelled.")
+                break
+
+            if (self._rthr_masterThread is not None and
+                    not self._rthr_masterThread.isAlive()):
+                log.debug("Master thread no longer alive.")
+                break
 
             rfds, wfds, efds = select.select(rsrcs, [], rsrcs, wait)
             self._rthr_processSelectedReadFDs(rfds)
@@ -139,7 +154,12 @@ class RetryThread(threading.Thread):
             with self._rthr_nextTimesLock:
                 numrts = len(self._rthr_retryTimes)
                 if numrts == 0:
-                    wait = self._rthr_noWorkWait
+                    # Initial no work wait is small, but do exponential
+                    # backoff until the wait is over 10 seconds.
+                    if wait < 10:
+                        wait = (self._rthr_noWorkWait *
+                                pow(2, self._rthr_noWorkSequence))
+                    self._rthr_noWorkSequence += 1
                     continue
 
                 next = self._rthr_retryTimes[0]
@@ -152,6 +172,7 @@ class RetryThread(threading.Thread):
 
                 del self._rthr_retryTimes[0]
 
+            # We have some work to do.
             log.debug("Retrying as next %r <= now %r", next, now)
             action = self._rthr_action
             if action is not None:
@@ -170,6 +191,7 @@ class RetryThread(threading.Thread):
 
             # Immediately respin since we haven't checked the next timer yet.
             wait = 0
+            self._rthr_noWorkSequence = 0
 
         log.debug("Thread exiting.")
 
