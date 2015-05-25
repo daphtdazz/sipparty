@@ -35,6 +35,7 @@ if __name__ == "__main__":
     log = logging.getLogger()
 else:
     log = logging.getLogger(__name__)
+    log.setLevel(logging.INFO)
 
 
 class FSMError(Exception):
@@ -460,23 +461,37 @@ class FSM(object):
         weak_self = weakref.ref(self)
 
         def weak_action(*args, **kwargs):
+            log.debug("Weak action %r.", action)
             self = weak_self()
             if self is None:
                 return None
 
+            run_delegate = False
+            run_self = False
+            if hasattr(self, action):
+                log.debug("  Self has %r.", action)
+                func = getattr(self, action)
+                if isinstance(func, collections.Callable):
+                    run_self = True
+                    srv = func(*args, **kwargs)
+
             if hasattr(self, "delegate"):
                 dele = getattr(self, "delegate")
                 if dele is not None:
-                    del self
-                    method = getattr(dele, action)
-                    return method(*args, **kwargs)
+                    if hasattr(dele, action):
+                        log.debug("  delegate has %r.", action)
+                        method = getattr(dele, action)
+                        run_delegate = True
+                        drv = method(*args, **kwargs)
 
-            if hasattr(self, action):
-                func = getattr(self, action)
-                if isinstance(func, collections.Callable):
-                    del self
-                    return func(*args, **kwargs)
+            if run_self:
+                del self
+                return srv
+            if run_delegate:
+                del self
+                return drv
 
+            # Else the action could not be resolved.
             raise ValueError(
                 "Action %r is not a callable or a method on %r object or "
                 "its delegate %r." %

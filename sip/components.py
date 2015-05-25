@@ -30,8 +30,7 @@ class Host(Parser, vb.ValueBinder):
 
     parseinfo = {
         Parser.Pattern:
-            "({host})"
-            "(?:{COLON}({port}))?$"
+            "({host})(?:{COLON}({port}))?$"
             "".format(**prot.__dict__),
         Parser.Mappings:
             [("host",),
@@ -42,6 +41,13 @@ class Host(Parser, vb.ValueBinder):
         super(Host, self).__init__()
         self.host = host
         self.port = port
+
+    def addrTuple(self):
+        addrHost = "" if self.host is None else self.host
+        addrPort = defaults.port if self.port is None else self.port
+        addrFlowInfo = 0
+        addrScopeID = 0
+        return (addrHost, addrPort, addrFlowInfo, addrScopeID)
 
     def __bytes__(self):
 
@@ -77,12 +83,13 @@ class AOR(Parser, vb.ValueBinder):
              ("host", Host)],
     }
 
-    def __init__(self, username=None, host=None, port=None):
+    def __init__(self, username=None, host=None, **kwargs):
         super(AOR, self).__init__()
-        for prop in dict(locals()):
-            if prop == "self":
-                continue
-            setattr(self, prop, locals()[prop])
+        self.username = username
+        self.host = (
+            host
+            if host is not None and not isinstance(host, str) else
+            Host(host=host, **kwargs))
 
     def __bytes__(self):
         if self.username and self.host:
@@ -92,6 +99,12 @@ class AOR(Parser, vb.ValueBinder):
             return "{host}".format(**self.__dict__)
 
         return ""
+
+    def __repr__(self):
+        return (
+            "{self.__class__.__name__}(username={self.username!r}, "
+            "host={self.host!r})"
+            "".format(self=self))
 
 
 @_util.TwoCompatibleThree

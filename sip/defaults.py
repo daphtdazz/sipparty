@@ -28,8 +28,10 @@ scheme = "sip"
 max_forwards = 70
 
 AORs = [
-    components.AOR("alice", "atlanta.com"),
-    components.AOR("bob", "biloxi.com"),
-    components.AOR("charlotte", "charlesville.com"),
-    components.AOR("darren", "denver.com")
+    components.AOR(username=un, host=ho)
+    for un, ho in (
+        ("alice", "atlanta.com"),
+        ("bob", "biloxi.com"),
+        ("charlotte", "charlesville.com"),
+        ("darren", "denver.com"))
 ]

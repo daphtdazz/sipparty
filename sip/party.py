@@ -20,6 +20,8 @@ import six
 import socket
 import logging
 import copy
+import weakref
+import re
 import _util
 import transport
 import siptransport
@@ -30,15 +32,23 @@ import defaults
 import request
 from message import (Message, Response)
 import transform
-import weakref
-import re
 import message
 import vb
+import parse
 
 __all__ = ('Party',)
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
+
+
+class PartyException(Exception):
+    "Generic party exception."
+
+
+class NoConnection(PartyException):
+    """Exception raised when the connection cannot be created to a remote
+    contact, or it is lost."""
 
 
 def NewAOR():
@@ -50,15 +60,10 @@ def NewAOR():
 class PartyMetaclass(type):
     def __init__(cls, name, bases, dict):
             super(PartyMetaclass, cls).__init__(name, bases, dict)
-            log.debug("PartyMetaclass init")
 
             # Add any predefined transitions.
-            cls.Scenario = (
-                None if not hasattr(cls, "ScenarioDefinitions") else
-                scenario.ScenarioClassWithDefinition(
-                    name, cls.ScenarioDefinitions))
-
-            log.debug("PartyMetaclass init done.")
+            if hasattr(cls, "ScenarioDefinitions"):
+                cls.SetScenario(cls.ScenarioDefinitions)
 
 
 @six.add_metaclass(PartyMetaclass)
@@ -66,6 +71,9 @@ class Party(vb.ValueBinder):
     """A party in a sip call, aka an endpoint, caller or callee etc.
     """
 
+    #
+    # =================== CLASS INTERFACE ====================================
+    #
     vb_bindings = [
         ("aor",
          "_pt_outboundMessage.FromHeader.field.value.uri.aor"),
@@ -75,8 +83,22 @@ class Party(vb.ValueBinder):
          "_pt_outboundMessage.ContactHeader.field.value.uri.aor.port")
     ]
     vb_dependencies = [
-        ("scenario", ["state"])]
+        ("scenario", ["state"]),
+        ("_pt_transport", ["localAddress"])]
 
+    Scenario = None
+
+    @classmethod
+    def SetScenario(cls, scenario_definition):
+        if cls.Scenario is not None:
+            raise AttributeError(
+                "Scenario for class %r is already set." % (cls.__name__,))
+        cls.Scenario = scenario.ScenarioClassWithDefinition(
+            cls.__name__, scenario_definition)
+
+    #
+    # =================== INSTANCE INTERFACE =================================
+    #
     aor = _util.DerivedProperty("_pt_aor")
 
     def __init__(self, username=None, host=None, displayname=None):
@@ -113,6 +135,9 @@ class Party(vb.ValueBinder):
     def hit(self, input, *args, **kwargs):
         self.scenario.hit(input, *args, **kwargs)
 
+    #
+    # =================== INTERNAL ===========================================
+    #
     def __getattr__(self, attr):
 
         if attr.startswith("send"):
@@ -150,44 +175,56 @@ class Party(vb.ValueBinder):
                 "{attr!r}."
                 "".format(**locals()))
 
-    def scenarioActionCallback(self, message_type, *args, **kwargs):
-        log.debug("Message to send: %r.", message_type)
-
-        if re.match("\d+", message_type):
-            msg = message.Response(int(message_type))
-        else:
-            msg = getattr(message.Message, message_type)
-
-        if "message" in kwargs:
-            log.debug("  responding to a received message.")
-            rcvdMessage = kwargs[message]
-            rcvdMessage.applyTransform(msg, self.transform)
-            self._pt_transport.sendMessage(msg)
-        else:
-            self._pt_transport.sendMessage(msg)
-
-    #
-    # =================== INTERNAL ===========================================
-    #
     def _pt_messageConsumer(self, message):
         log.debug("Received a %r message.", message.type)
         self.scenario.hit(message.type, message)
 
-    def _pt_send(self, message_type, callee):
+    def _pt_send(self, message_type, callee, contactAddress=None):
         log.debug("Send message of type %r to %r.", message_type, callee)
+
+        # Callee can be overridden with various different types of object.
+        if isinstance(callee, components.AOR):
+            calleeAOR = callee
+        elif hasattr(callee, "aor"):
+            calleeAOR = callee.aor
+        else:
+            calleeAOR = callee
+
+        if contactAddress is None:
+            if hasattr(callee, "localAddress"):
+                contactAddress = callee.localAddress
+            else:
+                contactAddress = calleeAOR.host.addrTuple()
+
+        if not isinstance(calleeAOR, components.AOR):
+            # Perhaps we can make an AOR out of it?
+            try:
+                calleeAOR = components.AOR.Parse(calleeAOR)
+                log.debug("Callee: %r, host: %r.", calleeAOR, calleeAOR.host)
+            except TypeError, parse.ParseError:
+                raise ValueError(
+                    "Message recipient is not an AOR: %r." % callee)
+
         if self._pt_transport.state != self._pt_transport.States.connected:
-            self._pt_transport.connect(callee._pt_transport.localAddress)
+            self._pt_transport.connect(contactAddress)
             _util.WaitFor(
-                lambda: (self._pt_transport.state ==
-                         self._pt_transport.States.connected),
-                1.0)
+                lambda:
+                    self._pt_transport.state in
+                    (self._pt_transport.States.connected,
+                     self._pt_transport.States.error),
+                10.0)
+
+        if self._pt_transport.state == self._pt_transport.States.error:
+            raise NoConnection(
+                "Got an error attempting to connect to %r @ %r." % (
+                    calleeAOR, contactAddress))
 
         msg = getattr(Message, message_type)()
         self._pt_outboundMessage = msg
 
-        msg.startline.uri.aor = callee.aor
+        msg.startline.uri.aor = calleeAOR
         msg.viaheader.field.transport = transport.SockTypeName(
-            callee._pt_transport.type)
+            self._pt_transport.type)
 
         self._pt_transport.send(str(msg))
 
@@ -203,3 +240,6 @@ class Party(vb.ValueBinder):
         request.applyTransform(msg, tform)
 
         self._pt_transport.send(str(msg))
+
+    def _pt_transportError(self):
+        log.debug("Transport error.")

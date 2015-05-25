@@ -17,12 +17,10 @@ limitations under the License.
 import prot
 import components
 import defaults
-from request import Request
-from header import Header
-from message import Message
+from request import (Request,)
+from header import (Header,)
+from message import (Message,)
+from party import (Party, NoConnection)
 import sdp
 import scenario
 import party
-from party import *
-
-__all__ = (("defaults", "Request", "Header", "Message") + party.__all__)

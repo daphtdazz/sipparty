@@ -48,6 +48,7 @@ class Scenario(fsm.FSM):
 
     @classmethod
     def PopulateWithDefinition(cls, definition_dict):
+        log.debug("Populate scenario with definition.")
         new_dict = dict(definition_dict)
 
         # Normalize message names in the dictionary and add action based on
@@ -56,43 +57,13 @@ class Scenario(fsm.FSM):
             for name, val in six.iteritems(dict(stdict)):
                 if name in request.Request.types:
                     nn = getattr(request.Request.types, name)
-                    stdict[nn] = val
-                    del stdict[name]
+                    if nn != name:
+                        stdict[nn] = val
+                        del stdict[name]
 
         super(Scenario, cls).PopulateWithDefinition(definition_dict)
 
-    actionCallback = _util.DerivedProperty("_scn_actionCallback")
-
     def __init__(self, transform=None, transitions=None, **kwargs):
-        self._scn_actionCallback = None
         super(Scenario, self).__init__(**kwargs)
         log.debug("Scenario using async timers: %r.",
                   self._fsm_use_async_timers)
-
-    def __getattr__(self, attr):
-        log.debug("scenario getattr %r", attr)
-
-        if attr.startswith("_scn_action"):
-
-            message = attr.replace("_scn_action", "", 1)
-
-            try:
-                scn_action = _util.WeakMethod(
-                    self, "_scn_action", static_args=[message],
-                    default_rc=None)
-            except:
-                log.exception("")
-                raise
-            log.debug("Return scn_action")
-            return scn_action
-
-        if not hasattr(super(Scenario, self), attr):
-            raise AttributeError(
-                "{self.__class__!r} instance has no attribute {attr!r}."
-                "".format(**locals()))
-
-    def _scn_action(self, message, *args, **kwargs):
-        log.debug("Scenario action for message %r.", message)
-        cbk = self.actionCallback
-        if cbk is not None:
-            cbk(message, *args, **kwargs)

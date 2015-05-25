@@ -22,12 +22,16 @@ import re
 import timeit
 import time
 import logging
+import weakref
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
 import unittest
-import _util
+
+import sip
+from sip import _util
 import party
 import scenario
+import sipscenarios
 
 log = logging.getLogger()
 tks = scenario.TransitionKeys
@@ -35,44 +39,23 @@ tks = scenario.TransitionKeys
 
 class TestParty(unittest.TestCase):
 
+    def testIncompleteParty(self):
+        sipclient = sipscenarios.SimpleParty()
+        tp = weakref.ref(sipclient._pt_transport)
+        self.assertIsNotNone(tp())
+        del sipclient
+        _util.WaitFor(lambda: tp() is None, 2)
+        self.assertIsNone(tp())
+
     def testBasicParty(self):
 
-        class SimpleParty(party.Party):
-            ScenarioDefinitions = {
-                scenario.InitialStateKey: {
-                    "sendInvite": {
-                        tks.NewState: "invite sent",
-                        tks.Action: "sendInvite"
-                    },
-                    "invite": {
-                        tks.NewState: "in call",
-                        tks.Action: "reply200"
-                    }
-                },
-                "invite sent": {
-                    4: {
-                        tks.NewState: scenario.InitialStateKey
-                    },
-                    200: {
-                        tks.NewState: "in call"
-                    }
-                },
-                "in call": {
-                    "send bye": {
-                        tks.NewState: "bye sent"
-                    },
-                    "bye": {
-                        tks.NewState: scenario.InitialStateKey
-                    }
-                },
-                "bye sent": {
-                    200: {
-                        tks.NewState: scenario.InitialStateKey
-                    }
-                }
-            }
+        class SimpleParty(sip.party.Party):
+            pass
+
+        SimpleParty.SetScenario(sipscenarios.Simple)
 
         self.assertEqual(SimpleParty.Scenario.__name__, "SimplePartyScenario")
+        log.info(SimpleParty.Scenario._fsm_definitionDictionary)
         self.assertTrue(
             'INVITE' in
             SimpleParty.Scenario._fsm_definitionDictionary[

@@ -117,7 +117,7 @@ class TransportFSM(fsm.FSM):
         ("createConnect", "attemptConnect",
          "createListen", "startListening", "becomesConnected",
          "connectedSend",
-         "becomesDisconnected", "error"))
+         "becomesDisconnected", "transportError"))
 
     @classmethod
     def AddClassTransitions(cls):
@@ -132,7 +132,7 @@ class TransportFSM(fsm.FSM):
             action=A.createConnect,
             start_threads=[A.attemptConnect])
         Add(S.connecting, I.error, S.error,
-            action=A.error)
+            action=A.transportError)
         Add(S.connecting, I.connected, S.connected,
             action=A.becomesConnected)
 
@@ -142,7 +142,7 @@ class TransportFSM(fsm.FSM):
             start_threads=[A.startListening])
         Add(S.startListen, I.listenup, S.listening)
         Add(S.listening, I.error, S.error,
-            action=A.error)
+            action=A.transportError)
         Add(S.listening, I.connected, S.connected,
             action=A.becomesConnected)
 
@@ -174,7 +174,7 @@ class TransportFSM(fsm.FSM):
         self._tfsm_type = socket.SOCK_STREAM
 
         la = self.__dict__["_tfsm_localAddress"] = [None, 0, 0, 0]
-        self._tfsm_remoteAddress = None
+        self._tfsm_remoteAddressTuple = None
 
         self._tfsm_receiveSize = 4096
         self._tfsm_timeout = 2
@@ -313,7 +313,7 @@ class TransportFSM(fsm.FSM):
             self.error("Failed to send %d bytes of data." %
                        (datalen - sent_bytes))
 
-    def error(self, msg="unknown error"):
+    def transportError(self, msg="unknown error"):
         "We've hit an error."
         self._tfsm_errormsg = msg
         if self._tfsm_listenSck is not None:
