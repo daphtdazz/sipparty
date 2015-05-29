@@ -144,6 +144,9 @@ class FSM(object):
     manually if asynchronous_timers are not in use.
     """
 
+    #
+    # =================== CLASS INTERFACE ====================================
+    #
     KeyNewState = "new state"
     KeyAction = "action"
     KeyStartTimers = "start timers"
@@ -156,100 +159,6 @@ class FSM(object):
     States = _util.Enum(tuple())
     Inputs = _util.Enum(tuple())
     Actions = _util.Enum(tuple())
-
-    @property
-    def delegate(self):
-        if self._fsm_weakDelegate is None:
-            return None
-        return self._fsm_weakDelegate()
-
-    @delegate.setter
-    def delegate(self, val):
-        if val is None:
-            self._fsm_weakDelegate = None
-        else:
-            self._fsm_weakDelegate = weakref.ref(val)
-
-    def __init__(self, name=None, asynchronous_timers=False, delegate=None):
-        """name: a name for this FSM for debugging purposes.
-        """
-        log.debug("FSM init")
-        super(FSM, self).__init__()
-
-        if name is None:
-            name = str(self.__class__.NextFSMNum)
-            self.__class__.NextFSMNum += 1
-
-        self._fsm_name = name
-        self._fsm_use_async_timers = asynchronous_timers
-        self._fsm_weakDelegate = None
-        self.delegate = delegate
-
-        # Need to learn configuration from the class.
-        class_transitions = self._fsm_transitions
-        self._fsm_transitions = {}
-        class_timers = self._fsm_timers
-        self._fsm_timers = {}
-        self.Inputs = copy.copy(self.Inputs)
-
-        self._fsm_state = self._fsm_state
-
-        # If the class had any pre-set transitions or timers, set them up now.
-        for timer_name, (action, retryer) in six.iteritems(class_timers):
-            self.addTimer(timer_name, action, retryer)
-
-        # Ditto for transitions.
-        for os, inp, ns, act, start_tmrs, stop_tmrs, strt_thrs in [
-                (os, inp, result[self.KeyNewState],
-                 result[self.KeyAction],
-                 result[self.KeyStartTimers], result[self.KeyStopTimers],
-                 result[self.KeyStartThreads])
-                for os, state_trans in six.iteritems(class_transitions)
-                for inp, result in six.iteritems(state_trans)]:
-            self.addTransition(
-                os, inp, ns, self._fsm_makeAction(act), start_tmrs, stop_tmrs,
-                strt_thrs)
-
-        self._fsm_inputQueue = Queue.Queue()
-        self._fsm_oldThreadQueue = Queue.Queue()
-
-        if asynchronous_timers:
-            # If we pass ourselves directly to the RetryThread, then we'll get
-            # a retain deadlock so neither us nor the thread can be freed.
-            # Fortunately python 2.7 has a nice weak references module.
-            weak_self = weakref.ref(self)
-
-            def check_weak_self_timers():
-                self = weak_self()
-                if self is None:
-                    log.debug("Weak check timers has been released.")
-                    return
-                log.debug("Weak check timers has not been released.")
-
-                self._fsm_backgroundTimerPop()
-
-            self._fsm_thread = retrythread.RetryThread(
-                action=check_weak_self_timers)
-
-            # Initialize support for the _util.OnlyWhenLocked decorator.
-            self._lock = threading.RLock()
-            self._lock_holdingThread = None
-
-            self._fsm_thread.start()
-
-    def __del__(self):
-        log.debug("Deleting FSM")
-        if self._fsm_use_async_timers:
-            self._fsm_thread.cancel()
-            if self._fsm_thread is not threading.currentThread():
-                self._fsm_thread.join()
-
-    def __str__(self):
-        return "\n".join([line for line in self._fsm_strgen()])
-
-    @property
-    def state(self):
-        return self._fsm_state
 
     @classmethod
     def PopulateWithDefinition(cls, definition_dict):
@@ -288,6 +197,9 @@ class FSM(object):
         """
         pass
 
+    #
+    # =================== CLASS OR INSTANCE INTERFACE ========================
+    #
     @_util.class_or_instance_method
     def addTransition(self, old_state, input, new_state, action=None,
                       start_timers=None, stop_timers=None,
@@ -391,6 +303,93 @@ class FSM(object):
                 self._fsm_name, state)
         self._fsm_state = state
 
+    #
+    # =================== INSTANCE INTERFACE =================================
+    #
+    @property
+    def state(self):
+        return self._fsm_state
+
+    @property
+    def delegate(self):
+        if self._fsm_weakDelegate is None:
+            return None
+        return self._fsm_weakDelegate()
+
+    @delegate.setter
+    def delegate(self, val):
+        if val is None:
+            self._fsm_weakDelegate = None
+        else:
+            self._fsm_weakDelegate = weakref.ref(val)
+
+    def __init__(self, name=None, asynchronous_timers=False, delegate=None):
+        """name: a name for this FSM for debugging purposes.
+        """
+        log.debug("FSM init")
+        super(FSM, self).__init__()
+
+        if name is None:
+            name = str(self.__class__.NextFSMNum)
+            self.__class__.NextFSMNum += 1
+
+        self._fsm_name = name
+        self._fsm_use_async_timers = asynchronous_timers
+        self._fsm_weakDelegate = None
+        self.delegate = delegate
+
+        # Need to learn configuration from the class.
+        class_transitions = self._fsm_transitions
+        self._fsm_transitions = {}
+        class_timers = self._fsm_timers
+        self._fsm_timers = {}
+        self.Inputs = copy.copy(self.Inputs)
+
+        self._fsm_state = self._fsm_state
+
+        # If the class had any pre-set transitions or timers, set them up now.
+        for timer_name, (action, retryer) in six.iteritems(class_timers):
+            self.addTimer(timer_name, action, retryer)
+
+        # Ditto for transitions.
+        for os, inp, ns, act, start_tmrs, stop_tmrs, strt_thrs in [
+                (os, inp, result[self.KeyNewState],
+                 result[self.KeyAction],
+                 result[self.KeyStartTimers], result[self.KeyStopTimers],
+                 result[self.KeyStartThreads])
+                for os, state_trans in six.iteritems(class_transitions)
+                for inp, result in six.iteritems(state_trans)]:
+            self.addTransition(
+                os, inp, ns, self._fsm_makeAction(act), start_tmrs, stop_tmrs,
+                strt_thrs)
+
+        self._fsm_inputQueue = Queue.Queue()
+        self._fsm_oldThreadQueue = Queue.Queue()
+
+        if asynchronous_timers:
+            # If we pass ourselves directly to the RetryThread, then we'll get
+            # a retain deadlock so neither us nor the thread can be freed.
+            # Fortunately python 2.7 has a nice weak references module.
+            weak_self = weakref.ref(self)
+
+            def check_weak_self_timers():
+                self = weak_self()
+                if self is None:
+                    log.debug("Weak check timers has been released.")
+                    return
+                log.debug("Weak check timers has not been released.")
+
+                self._fsm_backgroundTimerPop()
+
+            self._fsm_thread = retrythread.RetryThread(
+                action=check_weak_self_timers)
+
+            # Initialize support for the _util.OnlyWhenLocked decorator.
+            self._lock = threading.RLock()
+            self._lock_holdingThread = None
+
+            self._fsm_thread.start()
+
     def addFDSource(self, fd, action):
         if not self._fsm_use_async_timers:
             raise AttributeError(
@@ -427,20 +426,8 @@ class FSM(object):
                     self._fsm_thread.addRetryTime(timer.nextPopTime)
 
     #
-    # ======================= INTERNAL METHODS FOLLOW. =======================
+    # ======================= INTERNAL METHODS ===============================
     #
-    def _fsm_strgen(self):
-        yield "{0!r} {1!r}:".format(self.__class__.__name__, self._fsm_name)
-        if len(self._fsm_transitions) == 0:
-            yield "  (No states or transitions.)"
-        for old_state, transitions in six.iteritems(self._fsm_transitions):
-            yield "  {0!r}:".format(old_state)
-            for input, result in six.iteritems(transitions):
-                yield "    {0!r} -> {1!r}".format(
-                    input, result[self.KeyNewState])
-            yield ""
-        yield "Current state: %r" % self._fsm_state
-
     @_util.class_or_instance_method
     def _fsm_makeAction(self, action):
         """action is either a callable, which is called directly, or it is a
@@ -553,6 +540,28 @@ class FSM(object):
 
         fsmThread.name = str(action)
         return fsmThread
+
+    def __del__(self):
+        log.debug("Deleting FSM")
+        if self._fsm_use_async_timers:
+            self._fsm_thread.cancel()
+            if self._fsm_thread is not threading.currentThread():
+                self._fsm_thread.join()
+
+    def __str__(self):
+        return "\n".join([line for line in self._fsm_strgen()])
+
+    def _fsm_strgen(self):
+        yield "{0!r} {1!r}:".format(self.__class__.__name__, self._fsm_name)
+        if len(self._fsm_transitions) == 0:
+            yield "  (No states or transitions.)"
+        for old_state, transitions in six.iteritems(self._fsm_transitions):
+            yield "  {0!r}:".format(old_state)
+            for input, result in six.iteritems(transitions):
+                yield "    {0!r} -> {1!r}".format(
+                    input, result[self.KeyNewState])
+            yield ""
+        yield "Current state: %r" % self._fsm_state
 
     @_util.OnlyWhenLocked
     def _fsm_hit(self, input, *args, **kwargs):
