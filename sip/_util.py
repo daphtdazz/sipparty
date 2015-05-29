@@ -29,7 +29,7 @@ import vb
 import weakref
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.INFO)
+log.setLevel(logging.DEBUG)
 
 # The clock. Defined here so that it can be overridden in the testbed.
 Clock = timeit.default_timer
@@ -135,7 +135,9 @@ class Enum(set):
             nn = self.normalize(val)
         else:
             nn = val
-        return super(Enum, self).__contains__(nn)
+        rb = super(Enum, self).__contains__(nn)
+        # log.debug("%r in %r: %r", nn, self, rb)
+        return rb
 
     def __getattr__(self, name):
         if self.normalize:

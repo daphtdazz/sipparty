@@ -25,31 +25,32 @@ isk = sip.scenario.InitialStateKey
 Simple = {
     isk: {
         "sendInvite": {
-            tks.NewState: "invite sent",
-            tks.Action: "sendInvite"
+            tks.NewState: "InviteSent",
+            tks.Action: "_sendInvite"
         },
         "invite": {
-            tks.NewState: "in call",
-            tks.Action: "reply200"
+            tks.NewState: "InCall",
+            tks.Action: "_reply200"
         }
     },
-    "invite sent": {
+    "InviteSent": {
         4: {
             tks.NewState: isk
         },
         200: {
-            tks.NewState: "in call"
+            tks.NewState: "InCall"
         }
     },
-    "in call": {
-        "send bye": {
-            tks.NewState: "bye sent"
+    "InCall": {
+        "sendBye": {
+            tks.NewState: "ByeSent",
+            tks.Action: "_sendBye"
         },
         "bye": {
             tks.NewState: isk
         }
     },
-    "bye sent": {
+    "ByeSent": {
         200: {
             tks.NewState: isk
         }

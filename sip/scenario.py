@@ -67,3 +67,7 @@ class Scenario(fsm.FSM):
         super(Scenario, self).__init__(**kwargs)
         log.debug("Scenario using async timers: %r.",
                   self._fsm_use_async_timers)
+
+    def reset(self):
+        """Reset the scenario to the initial state. No actions are called."""
+        self.setState(InitialStateKey)

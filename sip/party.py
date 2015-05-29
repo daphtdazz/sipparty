@@ -22,6 +22,7 @@ import logging
 import copy
 import weakref
 import re
+import time
 import _util
 import transport
 import siptransport
@@ -49,6 +50,14 @@ class PartyException(Exception):
 class NoConnection(PartyException):
     """Exception raised when the connection cannot be created to a remote
     contact, or it is lost."""
+
+
+class UnexpectedState(PartyException):
+    "The party entered an unexpected state."
+
+
+class Timeout(PartyException):
+    "Timeout waiting for something to happen."
 
 
 def NewAOR():
@@ -135,13 +144,50 @@ class Party(vb.ValueBinder):
     def hit(self, input, *args, **kwargs):
         self.scenario.hit(input, *args, **kwargs)
 
+    def waitUntilState(self, state,
+                       error_state=None, timeout=None, poll_interval=0.001):
+        for check_state in (state, error_state):
+            if check_state is not None and check_state not in self.States:
+                raise AttributeError(
+                    "%r instance has no state %r." % (
+                        self.__class__.__name__, check_state))
+
+        start_time = time.time()
+        while True:
+            state_now = self.state
+            if state_now == state:
+                return
+
+            if error_state is not None and state_now == error_state:
+                raise UnexpectedState(
+                    "%r instance has entered the error state %r while "
+                    "waiting for state %r." % (
+                        self.__class__.__name__, error_state, state))
+
+            if timeout is not None and (time.time() - start_time > timeout):
+                raise Timeout(
+                    "%r instance has timed out (waited %r seconds) while "
+                    "waiting for state %r." % (
+                        self.__class__.__name__, timeout, state))
+            time.sleep(poll_interval)
+
     #
     # =================== INTERNAL ===========================================
     #
     def __getattr__(self, attr):
 
-        if attr.startswith("send"):
-            message = attr.replace("send", "", 1)
+        if attr == "States":
+            try:
+                return getattr(self.Scenario, attr)
+            except AttributeError:
+                raise AttributeError(
+                    "%r instance has no attribute %r as it is not "
+                    "configured with a Scenario." % (
+                        self.__class__.__name__, attr))
+
+        internalSendPrefix = "_send"
+        if attr.startswith(internalSendPrefix):
+            message = attr.replace(internalSendPrefix, "", 1)
             try:
                 send_action = _util.WeakMethod(
                     self, "_pt_send", static_args=[message])
@@ -150,8 +196,9 @@ class Party(vb.ValueBinder):
                 raise
             return send_action
 
-        if attr.startswith("reply"):
-            message = attr.replace("reply", "", 1)
+        internalReplyPrefix = "_reply"
+        if attr.startswith(internalReplyPrefix):
+            message = attr.replace(internalReplyPrefix, "", 1)
             try:
                 send_action = _util.WeakMethod(
                     self, "_pt_reply", static_args=[message])
@@ -160,16 +207,22 @@ class Party(vb.ValueBinder):
                 raise
             return send_action
 
-        if attr in request.Request.types:
-            na = getattr(request.Request.types, attr)
-
-            def scenario_input(*args, **kwargs):
-                self.scenario.hit(na, *args, **kwargs)
-            return scenario_input
+        scn = self.scenario
+        if scn is not None and attr in scn.Inputs:
+            try:
+                scn_action = _util.WeakMethod(
+                    scn, "hit", static_args=[attr])
+                return scn_action
+            except:
+                log.exception("")
+                raise
 
         try:
             return super(Party, self).__getattr__(attr)
         except AttributeError:
+            log.debug(
+                "scenario inputs: %r",
+                scn.Inputs if scn is not None else None)
             raise AttributeError(
                 "{self.__class__.__name__!r} instance has no attribute "
                 "{attr!r}."
@@ -188,7 +241,8 @@ class Party(vb.ValueBinder):
         elif hasattr(callee, "aor"):
             calleeAOR = callee.aor
         else:
-            calleeAOR = callee
+            calleeAOR = components.AOR.Parse(callee)
+        log.debug("calleeAOR: %r", calleeAOR)
 
         if contactAddress is None:
             if hasattr(callee, "localAddress"):
@@ -215,6 +269,9 @@ class Party(vb.ValueBinder):
                 10.0)
 
         if self._pt_transport.state == self._pt_transport.States.error:
+            scn = self.scenario
+            if scn is not None:
+                scn.reset()
             raise NoConnection(
                 "Got an error attempting to connect to %r @ %r." % (
                     calleeAOR, contactAddress))
@@ -240,6 +297,3 @@ class Party(vb.ValueBinder):
         request.applyTransform(msg, tform)
 
         self._pt_transport.send(str(msg))
-
-    def _pt_transportError(self):
-        log.debug("Transport error.")

@@ -264,6 +264,12 @@ class FSM(object):
                         "input {input!r} into state {old_state!r} doesn't "
                         "have a {ns!r} value."
                         "".format(ns=TransitionKeys.NewState, **locals()))
+                if ns not in definition_dict:
+                    raise KeyError(
+                        "NewState %r for input %r to state %r for "
+                        "transitions definition dictionary for class %r "
+                        "has not been declared in the dictionary." % (
+                            ns, input, old_state, cls.__name__))
                 action = (
                     transdef[TransitionKeys.Action]
                     if TransitionKeys.Action in transdef else

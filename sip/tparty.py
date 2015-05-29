@@ -71,8 +71,8 @@ class TestParty(unittest.TestCase):
         p2._pt_transport.listen()
         p1.hit("sendInvite", p2)
 
-        _util.WaitFor(lambda: p1.state == "in call", 1)
-        _util.WaitFor(lambda: p2.state == "in call", 1)
+        _util.WaitFor(lambda: p1.state == p1.States.InCall, 1)
+        _util.WaitFor(lambda: p2.state == p2.States.InCall, 1)
 
 if __name__ == "__main__":
     unittest.main()

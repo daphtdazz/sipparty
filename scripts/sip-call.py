@@ -47,6 +47,8 @@ args = SipCallArgs().parse_args()
 
 sipclient = sipscenarios.SimpleParty()
 
-sipclient.hit("sendInvite", args.aor)
+sipclient.sendInvite(args.aor)
+sipclient.waitUntilState(sipclient.States.InCall,
+                         error_state=sipclient.States.Initial)
 
 log.info("Finished.")
