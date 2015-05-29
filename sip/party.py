@@ -102,8 +102,16 @@ class Party(vb.ValueBinder):
         if cls.Scenario is not None:
             raise AttributeError(
                 "Scenario for class %r is already set." % (cls.__name__,))
-        cls.Scenario = scenario.ScenarioClassWithDefinition(
+        SClass = scenario.ScenarioClassWithDefinition(
             cls.__name__, scenario_definition)
+
+        for input in SClass.Inputs:
+            if isinstance(input, six.binary_type) and hasattr(cls, input):
+                raise KeyError(
+                    "Invalid input %r in scenario: class %r uses that as an "
+                    "attribute!" % (
+                        input, cls.__name__))
+        cls.Scenario = SClass
 
     #
     # =================== INSTANCE INTERFACE =================================

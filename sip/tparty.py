@@ -76,18 +76,25 @@ class TestParty(unittest.TestCase):
 
     def testDudParty(self):
 
-        class TestParty(sip.party.Party):
-            pass
-
         self.assertRaises(
             KeyError,
-            lambda: TestParty.SetScenario({
+            lambda: type("TestParty", (sip.party.Party,), {}).SetScenario({
                 "state": {
                     "input": {
                         tks.NewState: "not declared!"
                     }
                 }
             }))
+        for bad_input in ("waitUntilState", "_sendInvite"):
+            self.assertRaises(
+                KeyError,
+                lambda: type("TestParty", (sip.party.Party,), {}).SetScenario({
+                    "first_state": {
+                        bad_input: {
+                            tks.NewState: "first_state"
+                        }
+                    }
+                }))
 
 if __name__ == "__main__":
     unittest.main()
