@@ -141,9 +141,6 @@ class Party(vb.ValueBinder):
         if not hasattr(self, "transform"):
             self.transform = transform.default
 
-    def hit(self, input, *args, **kwargs):
-        self.scenario.hit(input, *args, **kwargs)
-
     def waitUntilState(self, state,
                        error_state=None, timeout=None, poll_interval=0.001):
         for check_state in (state, error_state):
