@@ -36,6 +36,7 @@ import transform
 import message
 import vb
 import parse
+import param
 
 __all__ = ('Party',)
 
@@ -90,8 +91,8 @@ class Party(vb.ValueBinder):
          "_pt_outboundMessage.ContactHeader.field.value.uri.aor.host"),
         ("_pt_transport.localAddressPort",
          "_pt_outboundMessage.ContactHeader.field.value.uri.aor.port"),
-        ("calleeAOR",
-         "_pt_outboundMessage.startline.uri.aor")
+        ("calleeAOR", "_pt_outboundMessage.startline.uri.aor"),
+        ("myTag", "_pt_outboundMessage.FromHeader.field.parameters.tag")
     ]
     vb_dependencies = [
         ("scenario", ["state"]),
@@ -127,6 +128,8 @@ class Party(vb.ValueBinder):
 
         self._pt_waitingMessage = None
         self.calleeAOR = None
+        self.myTag = None
+        self.theirTag = None
 
         self.aor = NewAOR()
         if username is not None:
@@ -178,6 +181,14 @@ class Party(vb.ValueBinder):
                     "waiting for state %r." % (
                         self.__class__.__name__, timeout, state))
             time.sleep(poll_interval)
+
+    #
+    # =================== DELEGATE IMPLEMENTATIONS ===========================
+    #
+    def scenarioDelegateReset(self):
+        log.debug("Resetting after scenario reset.")
+        self.myTag = None
+        self.theirTag = None
 
     #
     # =================== INTERNAL ===========================================
@@ -238,10 +249,16 @@ class Party(vb.ValueBinder):
 
     def _pt_messageConsumer(self, message):
         log.debug("Received a %r message.", message.type)
+        if self.theirTag is None:
+            log.debug(message.FromHeader.field.parameters)
+            self.theirTag = message.FromHeader.field.parameters.tag
         self.scenario.hit(message.type, message)
 
     def _pt_send(self, message_type, callee=None, contactAddress=None):
         log.debug("Send message of type %r to %r.", message_type, callee)
+
+        if self.myTag is None:
+            self.myTag = param.TagParam()
 
         if callee is not None:
             # Callee can be overridden with various different types of object.
@@ -312,6 +329,10 @@ class Party(vb.ValueBinder):
 
     def _pt_reply(self, message_type, request):
         log.debug("Reply to %r with %r.", request.type, message_type)
+
+        if self.myTag is None:
+            self.myTag = param.TagParam()
+
         if re.match("\d+$", message_type):
             message_type = int(message_type)
             msg = message.Response(code=message_type)
@@ -321,7 +342,10 @@ class Party(vb.ValueBinder):
         tform = self.transform[request.type][message_type]
         request.applyTransform(msg, tform)
 
+        self._pt_outboundMessage = msg
+
         self._pt_transport.send(str(msg))
+        del msg
 
     def _pt_stateError(self, message):
         if self.scenario is not None:

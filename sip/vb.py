@@ -20,7 +20,7 @@ import re
 import weakref
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.DEBUG)
+log.setLevel(logging.INFO)
 
 
 class BindingException(Exception):

@@ -79,6 +79,11 @@ class TestParty(unittest.TestCase):
         _util.WaitFor(lambda: p1.state == p1.States.InCall, 1)
         _util.WaitFor(lambda: p2.state == p2.States.InCall, 1)
 
+        self.assertIsNotNone(p1.myTag)
+        self.assertIsNotNone(p1.theirTag)
+        self.assertEqual(p1.myTag, p2.theirTag)
+        self.assertEqual(p1.theirTag, p2.myTag)
+
         p1.sendBye()
 
     def testDudParty(self):

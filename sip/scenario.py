@@ -46,6 +46,8 @@ def ScenarioClassWithDefinition(name, defn):
 
 class Scenario(fsm.FSM):
 
+    DelegateResetMethod = "scenarioDelegateReset"
+
     @classmethod
     def PopulateWithDefinition(cls, definition_dict):
         log.debug("Populate scenario with definition.")
@@ -71,3 +73,6 @@ class Scenario(fsm.FSM):
     def reset(self):
         """Reset the scenario to the initial state. No actions are called."""
         self.setState(InitialStateKey)
+        dele = self.delegate
+        if dele is not None and hasattr(dele, Scenario.DelegateResetMethod):
+            getattr(dele, Scenario.DelegateResetMethod)()

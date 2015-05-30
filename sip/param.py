@@ -29,7 +29,8 @@ log.setLevel(logging.DEBUG)
 
 
 class Parameters(Parser, vb.ValueBinder, dict):
-
+    """Class representing a list of parameters on a header or other object.
+    """
     parseinfo = {
         Parser.Pattern: "^(.*)$"
     }
@@ -42,6 +43,20 @@ class Parameters(Parser, vb.ValueBinder, dict):
         super(Parameters, self).__setattr__(attr, val)
         if attr in Param.types:
             self[attr] = val
+
+    def __getattr__(self, attr):
+
+        if attr in self:
+            return self[attr]
+
+        sp = super(Parameters, self)
+        try:
+            return sp.__getattr__(attr)
+        except AttributeError:
+            raise AttributeError(
+                "%r instance has no attribute %r: parameters contained are "
+                "%r.", (
+                    self.__class__.__name__, attr, self.keys()))
 
     def parsecust(self, string, mo):
 
