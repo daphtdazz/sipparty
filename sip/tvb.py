@@ -46,12 +46,12 @@ class TestVB(unittest.TestCase):
         self.assertEqual(a.x, 1)
         a.bind("y", "x")
         self.assertEqual(a.x, 2)
-        a.unbind("x")
+        a.unbind("x", "y")
         a.x = 4
         self.assertEqual(a.y, 2)
         a.y = 3
         self.assertEqual(a.x, 3)
-        a.unbind("y")
+        a.unbind("y", "x")
 
         a.bind("x", "b.y")
         a.b = b
@@ -59,7 +59,7 @@ class TestVB(unittest.TestCase):
         self.assertEqual(a.b.y, 5)
         a.b.y = 6
         self.assertEqual(a.x, 5)
-        a.unbind("x")
+        a.unbind("x", "b.y")
         a.x = 7
         self.assertEqual(a.x, 7)
         self.assertEqual(a.b.y, 6)
@@ -75,10 +75,10 @@ class TestVB(unittest.TestCase):
         b.x = 7
         self.assertEqual(a.b.x, 7)
         self.assertEqual(c.x, 7)
-        self.assertRaises(sip.vb.NoSuchBinding, lambda: a.unbind("b"))
+        self.assertRaises(sip.vb.NoSuchBinding, lambda: a.unbind("b", "b.x"))
         self.assertRaises(sip.vb.BindingAlreadyExists,
-                          lambda: a.bind("b.x", "b.c.d.x"))
-        a.unbind("b.x")
+                          lambda: a.bind("b.x", "b.c.x"))
+        a.unbind("b.x", "b.c.x")
 
         del b.x
         a.b.c.x = 7
@@ -135,13 +135,13 @@ class TestVB(unittest.TestCase):
         self.assertEqual(a.d, 9)
         self.assertEqual(b.c, 9)
 
-        a.unbind("c")
+        a.unbind("c", "d")
         a.e = 10
         self.assertEqual(a.c, 10)
         self.assertEqual(b.c, 10)
         self.assertEqual(a.d, 9)
 
-        a.unbind("e")
+        a.unbind("e", "c")
         for vb in (a, b, bb):
             self.assertEqual(len(vb._vb_backwardbindings), 0)
             self.assertEqual(len(vb._vb_forwardbindings), 0)
@@ -149,7 +149,7 @@ class TestVB(unittest.TestCase):
     def testOrphans(self):
         """Test that when a parent is deleted, the children can be rebound.
         """
-        a, b, c, d, e, f = [sip.vb.ValueBinder() for ii in range(6)]
+        a, b, c = [sip.vb.ValueBinder() for ii in range(3)]
 
         a.bind("b.val", "val")
         c.bind("b.val", "val")
@@ -163,6 +163,17 @@ class TestVB(unittest.TestCase):
         # Now reassign b to c.
         c.b = b
         self.assertEqual(c.val, 2)
+
+    def testMultipleBindings(self):
+        """Test that we can bind something to more than one thing."""
+        a = sip.vb.ValueBinder()
+
+        a.bind("val", "val1")
+        a.bind("val", "val2")
+
+        a.val = 5
+        self.assertEqual(a.val1, 5)
+        self.assertEqual(a.val2, 5)
 
 if __name__ == "__main__":
     sys.exit(unittest.main())

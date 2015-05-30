@@ -46,7 +46,6 @@ class ValueBinder(object):
     PathSeparator = "."
     PS = PathSeparator
 
-    KeyTargetPath = "targetpath"
     KeyTransformer = "transformer"
 
     VB_Forward = 'forward'
@@ -114,17 +113,14 @@ class ValueBinder(object):
         self._vb_binddirection(
             topath, frompath, None, transformer, self.VB_Backward)
 
-    def unbind(self, frompath):
+    def unbind(self, frompath, topath):
         """Unbind a binding. Raises NoSuchBinding() if the binding does not
         exist."""
-        resolvedfrompath = self._vb_resolveFromPath(frompath)
 
-        log.debug("Unbind %r (%r)", resolvedfrompath, frompath)
-        _, _, _, _, bd = self._vb_bindingdicts(resolvedfrompath,
-                                               self.VB_Forward)
-        topath = bd[self.KeyTargetPath]
-        self._vb_unbinddirection(frompath, self.VB_Forward)
-        self._vb_unbinddirection(topath, self.VB_Backward)
+        log.debug("Unbind %r -> %r", frompath, topath)
+
+        self._vb_unbinddirection(frompath, topath, self.VB_Forward)
+        self._vb_unbinddirection(topath, frompath, self.VB_Backward)
 
     #
     # =================== INTERNAL ===========================================
@@ -182,27 +178,27 @@ class ValueBinder(object):
             for direction in self.VB_Directions:
                 _, _, _, bs, _ = self._vb_bindingdicts(attr, direction,
                                                        all=True)
-                for subpath, bdict in six.iteritems(bs):
+                for subpath, bds in six.iteritems(bs):
                     if len(subpath) == 0:
                         continue
-                    topath = bdict[self.KeyTargetPath]
-                    subtopath = self.VB_PrependParent(topath)
-                    tf = bdict[self.KeyTransformer]
-                    log.debug("%r bind new value %r to %r", direction,
-                              subpath, subtopath)
-                    val._vb_binddirection(subpath, subtopath, self, tf,
-                                          direction)
+                    for topath, bd in six.iteritems(bds):
+                        subtopath = self.VB_PrependParent(topath)
+                        tf = bd[self.KeyTransformer]
+                        log.debug("%r bind new value %r to %r", direction,
+                                  subpath, subtopath)
+                        val._vb_binddirection(subpath, subtopath, self, tf,
+                                              direction)
 
         # If this attribute is forward bound, push the value out.
         _, _, _, fbds, _ = self._vb_bindingdicts(attr, self.VB_Forward,
                                                  all=True)
 
-        for fromattrattrs, bdict in six.iteritems(fbds):
+        for fromattrattrs, bds in six.iteritems(fbds):
             if len(fromattrattrs) == 0:
-                topath = bdict[ValueBinder.KeyTargetPath]
-                log.debug("Push %s.%s to %s", attr, fromattrattrs,
-                          topath)
-                self._vb_push_value_to_target(val, topath)
+                for topath, bd in six.iteritems(bds):
+                    log.debug("Push %s.%s to %s", attr, fromattrattrs,
+                              topath)
+                    self._vb_push_value_to_target(val, topath)
 
     def __del__(self):
         """We need to remove all our bindings."""
@@ -218,15 +214,15 @@ class ValueBinder(object):
                 _, _, _, bs, _ = self._vb_bindingdicts(
                     attr, direction, all=True)
                 log.debug("  %d bindings through %r", len(bs), attr)
-                for subpath, bdict in six.iteritems(dict(bs)):
-                    topath = bdict[self.KeyTargetPath]
-                    toattr, _ = self.VB_PartitionPath(topath)
-                    log.debug("  binding %r %r -> %r", attr, subpath,
-                              toattr)
-                    if condition(attr, toattr):
-                        log.debug("  unbind.")
-                        path = self.VB_JoinPath((attr, subpath))
-                        self._vb_unbinddirection(path, direction)
+                for subpath, bds in six.iteritems(dict(bs)):
+                    for topath, bd in six.iteritems(dict(bds)):
+                        toattr, _ = self.VB_PartitionPath(topath)
+                        log.debug("  binding %r %r -> %r", attr, subpath,
+                                  toattr)
+                        if condition(attr, toattr):
+                            log.debug("  unbind.")
+                            path = self.VB_JoinPath((attr, subpath))
+                            self._vb_unbinddirection(path, topath, direction)
 
     def _vb_unbindAllParent(self):
         return self._vb_unbindAllCondition(
@@ -292,12 +288,8 @@ class ValueBinder(object):
 
         # Resolve the attrdict.
         if create:
-            if attrattrs in attrdict:
-                raise(BindingAlreadyExists(
-                    "{0!r} attribute of {3!r} instance is in {2!r} binding "
-                    "dict {1!r}".format(
-                        path, bindings, direction, self.__class__.__name__)))
-            attrdict[attrattrs] = {}
+            if attrattrs not in attrdict:
+                attrdict[attrattrs] = {}
 
         if all:
             return bindings, attr, attrattrs, attrdict, None
@@ -341,10 +333,16 @@ class ValueBinder(object):
         resolvedtopath = self._vb_resolveFromPath(topath)
 
         # Make the attribute binding dictionary if it doesn't already exist.
-        _, fromattr, fromattrattrs, _, bdict = self._vb_bindingdicts(
+        _, fromattr, fromattrattrs, _, bds = self._vb_bindingdicts(
             resolvedfrompath, direction, create=True)
-        bdict[ValueBinder.KeyTargetPath] = resolvedtopath
-        bdict[ValueBinder.KeyTransformer] = transformer
+        if resolvedtopath in bds:
+            raise BindingAlreadyExists(
+                "Attribute path %r of %r instance already bound to %r." % (
+                    resolvedfrompath, self.__class__.__name__,
+                    resolvedtopath))
+        bds[resolvedtopath] = {
+            ValueBinder.KeyTransformer: transformer
+        }
 
         currparent = (
             self._vb_weakBindingParent()
@@ -388,32 +386,37 @@ class ValueBinder(object):
                   direction,
                   self._vb_bindingsForDirection(self.VB_Forward))
 
-    def _vb_unbinddirection(self, frompath, direction):
+    def _vb_unbinddirection(self, frompath, topath, direction):
         """Unbind a particular path.
 
         Say "c.d" is bound forward to ".e.f" on b (the parent of b is a).
 
-        b._vb_unbinddirection("c.d", VB_Forward)
+        b._vb_unbinddirection("c.d", ".e.f", VB_Forward)
 
         would undo this, and recurse to do:
-        b.c._vb_unbinddirection("d", VB_Forward)
+        b.c._vb_unbinddirection("d", "..e.f", VB_Forward)
         """
         log.debug("  %r bindings before unbind %r",
                   direction,
                   self._vb_bindingsForDirection(direction))
 
         resolvedfrompath = self._vb_resolveFromPath(frompath)
+        resolvedtopath = self._vb_resolveFromPath(topath)
 
         bindings, fromattr, fromattrattrs, attrbindings, _ = (
             self._vb_bindingdicts(resolvedfrompath, direction, create=False))
 
         if len(fromattrattrs) > 0 and hasattr(self, fromattr):
-            getattr(self, fromattr)._vb_unbinddirection(fromattrattrs,
-                                                        direction)
+            attrtopath = self.VB_PrependParent(resolvedtopath)
+            getattr(self, fromattr)._vb_unbinddirection(
+                fromattrattrs, attrtopath, direction)
 
-        del attrbindings[fromattrattrs]
-        if len(attrbindings) == 0:
-            del bindings[fromattr]
+        frompathbds = attrbindings[fromattrattrs]
+        del frompathbds[resolvedtopath]
+        if len(frompathbds) == 0:
+            del attrbindings[fromattrattrs]
+            if len(attrbindings) == 0:
+                del bindings[fromattr]
 
         log.debug("  %r bindings after unbind %r",
                   direction,
