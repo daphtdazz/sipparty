@@ -25,7 +25,7 @@ import prot
 from parse import Parser
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.DEBUG)
+log.setLevel(logging.INFO)
 
 
 class Parameters(Parser, vb.ValueBinder, dict):
@@ -42,7 +42,11 @@ class Parameters(Parser, vb.ValueBinder, dict):
     def __setattr__(self, attr, val):
         super(Parameters, self).__setattr__(attr, val)
         if attr in Param.types:
-            self[attr] = val
+            if val is None:
+                if attr in self:
+                    del self[attr]
+            else:
+                self[attr] = val
 
     def __getattr__(self, attr):
 

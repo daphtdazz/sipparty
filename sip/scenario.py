@@ -26,12 +26,8 @@ import request
 import weakref
 import collections
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
-    log = logging.getLogger()
-else:
-    log = logging.getLogger(__name__)
-    log.setLevel(logging.DEBUG)
+log = logging.getLogger(__name__)
+log.setLevel(logging.INFO)
 
 TransitionKeys = copy.copy(fsm.TransitionKeys)
 tks = TransitionKeys  # Short alias

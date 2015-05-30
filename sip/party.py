@@ -41,7 +41,6 @@ import param
 __all__ = ('Party',)
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.DEBUG)
 
 
 class PartyException(Exception):
@@ -86,13 +85,16 @@ class Party(vb.ValueBinder):
     #
     vb_bindings = [
         ("aor",
-         "_pt_outboundMessage.FromHeader.field.value.uri.aor"),
+         "_pt_outboundRequest.FromHeader.field.value.uri.aor"),
         ("_pt_transport.localAddressHost",
-         "_pt_outboundMessage.ContactHeader.field.value.uri.aor.host"),
+         "_pt_outboundRequest.ContactHeader.field.value.uri.aor.host"),
         ("_pt_transport.localAddressPort",
-         "_pt_outboundMessage.ContactHeader.field.value.uri.aor.port"),
-        ("calleeAOR", "_pt_outboundMessage.startline.uri.aor"),
-        ("myTag", "_pt_outboundMessage.FromHeader.field.parameters.tag")
+         "_pt_outboundRequest.ContactHeader.field.value.uri.aor.port"),
+        ("calleeAOR", "_pt_outboundRequest.startline.uri.aor"),
+        ("myTag", "_pt_outboundRequest.FromHeader.field.parameters.tag"),
+        ("theirTag", "_pt_outboundRequest.ToHeader.field.parameters.tag"),
+        ("myTag", "_pt_outboundResponse.ToHeader.field.parameters.tag"),
+        ("theirTag", "_pt_outboundResponse.FromHeader.field.parameters.tag"),
     ]
     vb_dependencies = [
         ("scenario", ["state"]),
@@ -127,6 +129,8 @@ class Party(vb.ValueBinder):
         super(Party, self).__init__()
 
         self._pt_waitingMessage = None
+        self._pt_outboundRequest = None
+        self._pt_outboundResponse = None
         self.calleeAOR = None
         self.myTag = None
         self.theirTag = None
@@ -250,8 +254,10 @@ class Party(vb.ValueBinder):
     def _pt_messageConsumer(self, message):
         log.debug("Received a %r message.", message.type)
         if self.theirTag is None:
-            log.debug(message.FromHeader.field.parameters)
-            self.theirTag = message.FromHeader.field.parameters.tag
+            if message.isrequest():
+                self.theirTag = message.FromHeader.field.parameters.tag
+            else:
+                self.theirTag = message.ToHeader.field.parameters.tag
         self.scenario.hit(message.type, message)
 
     def _pt_send(self, message_type, callee=None, contactAddress=None):
@@ -312,7 +318,7 @@ class Party(vb.ValueBinder):
 
         # Hook it onto the outbound message. This does all the work of setting
         # attributes from ourselve as per our bindings.
-        self._pt_outboundMessage = msg
+        self._pt_outboundRequest = msg
 
         msg.viaheader.field.transport = transport.SockTypeName(
             self._pt_transport.type)
@@ -324,7 +330,7 @@ class Party(vb.ValueBinder):
             # properties, and we will have binding conflicts with later
             # messages if it is not released now.
             log.debug("Delete outbound message.")
-            self._pt_outboundMessage = None
+            self._pt_outboundRequest = None
             del msg
 
     def _pt_reply(self, message_type, request):
@@ -342,10 +348,13 @@ class Party(vb.ValueBinder):
         tform = self.transform[request.type][message_type]
         request.applyTransform(msg, tform)
 
-        self._pt_outboundMessage = msg
+        self._pt_outboundResponse = msg
 
-        self._pt_transport.send(str(msg))
-        del msg
+        try:
+            self._pt_transport.send(str(msg))
+        finally:
+            self._pt_outboundResponse = None
+            del msg
 
     def _pt_stateError(self, message):
         if self.scenario is not None:

@@ -1,4 +1,4 @@
-"""tpart.py
+"""tparty.py
 
 Unit tests for a SIP party.
 
@@ -23,16 +23,19 @@ import timeit
 import time
 import logging
 import weakref
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
 import unittest
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.WARNING)
+    log = logging.getLogger()
+else:
+    log = logging.getLogger(__name__)
 
 import sip
 from sip import _util
 import scenario
 import sipscenarios
 
-log = logging.getLogger()
 tks = scenario.TransitionKeys
 
 
@@ -79,12 +82,22 @@ class TestParty(unittest.TestCase):
         _util.WaitFor(lambda: p1.state == p1.States.InCall, 1)
         _util.WaitFor(lambda: p2.state == p2.States.InCall, 1)
 
-        self.assertIsNotNone(p1.myTag)
-        self.assertIsNotNone(p1.theirTag)
-        self.assertEqual(p1.myTag, p2.theirTag)
-        self.assertEqual(p1.theirTag, p2.myTag)
+        p1tag = p1.myTag
+        p2tag = p2.myTag
+        self.assertIsNotNone(p1tag)
+        self.assertIsNotNone(p2tag)
+        self.assertEqual(p1tag, p2.theirTag)
+        self.assertEqual(p2tag, p1.theirTag)
 
         p1.sendBye()
+
+        _util.WaitFor(lambda: p1.state == p1.States.CallEnded, 1)
+        _util.WaitFor(lambda: p2.state == p2.States.CallEnded, 1)
+
+        self.assertEqual(p1tag, p1.myTag)
+        self.assertEqual(p2tag, p1.theirTag)
+        self.assertEqual(p1tag, p2.theirTag)
+        self.assertEqual(p2tag, p2.myTag)
 
     def testDudParty(self):
 

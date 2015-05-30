@@ -31,7 +31,7 @@ import pdb
 # More imports at end of file.
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.DEBUG)
+log.setLevel(logging.INFO)
 
 
 @six.add_metaclass(_util.CCPropsFor(("delegateattributes", "parseinfo")))

@@ -47,14 +47,16 @@ Simple = {
             tks.Action: "_sendBye"
         },
         "bye": {
-            tks.NewState: isk
+            tks.NewState: "CallEnded",
+            tks.Action: "_reply200"
         }
     },
     "ByeSent": {
         200: {
-            tks.NewState: isk
+            tks.NewState: "CallEnded"
         }
-    }
+    },
+    "CallEnded": {}
 }
 
 

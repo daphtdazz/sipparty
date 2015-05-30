@@ -26,7 +26,6 @@ import _util
 import fsm
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.DEBUG)
 
 
 class BadNetwork(Exception):

@@ -39,5 +39,18 @@ default = {
                 ("ToHeader.field.parameters.tag", param.Param.tag)
             ]
         }
-    }
+    },
+    "BYE": {
+        200: {
+            KeyActCopy: [
+                ("FromHeader",),
+                ("ToHeader",),
+                ("ViaHeader",),
+                ("Call_IdHeader",),
+                ("CseqHeader",),
+                ("startline.protocol",)
+            ]
+        }
+    },
+
 }

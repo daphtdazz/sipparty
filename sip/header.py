@@ -30,6 +30,7 @@ import field
 import pdb
 
 log = logging.getLogger(__name__)
+log.setLevel(logging.INFO)
 
 
 @six.add_metaclass(

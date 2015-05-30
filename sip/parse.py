@@ -22,7 +22,6 @@ import logging
 import six
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.INFO)
 
 
 class ParseError(Exception):
@@ -130,7 +129,7 @@ class Parser(object):
 
     @classmethod
     def ParseFail(cls, string, *args, **kwargs):
-        log.warning("Parse failure of message %r", string)
+        log.debug("Parse failure of message %r", string)
         for key, val in six.iteritems(kwargs):
             log.debug("%r=%r", key, val)
         raise ParseError(
