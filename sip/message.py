@@ -172,6 +172,66 @@ class Message(vb.ValueBinder):
             self.autofillheaders()
         self._establishbindings()
 
+    def addHeader(self, hdr):
+        new_headers = []
+        for oh in self.headers:
+            if hdr is not None and hdr.type == oh.type:
+                new_headers.append(hdr)
+                hdr = None
+            new_headers.append(oh)
+        if hdr is not None:
+            new_headers.append(hdr)
+        self.headers = new_headers
+
+    def autofillheaders(self):
+        for hdr in self.mandatoryheaders:
+            if hdr not in [_hdr.type for _hdr in self.headers]:
+                self.addHeader(getattr(Header, hdr)())
+
+        for mheader_name, mparams in six.iteritems(self.mandatoryparameters):
+            mheader = getattr(self, mheader_name + "Header")
+            for param_name in mparams:
+                setattr(
+                    mheader.field.parameters, param_name,
+                    getattr(Param, param_name)())
+
+    def applyTransform(self, targetmsg, tform):
+        copylist = tform[transform.KeyActCopy]
+
+        def setattratpath(obj, path, val):
+            nextobj = obj
+            tocomponents = path.split(".")
+            for to in tocomponents[:-1]:
+                nextobj = getattr(nextobj, to)
+            to_target = nextobj
+
+            setattr(to_target, tocomponents[-1], val)
+
+        for copy_tuple in copylist:
+            frmattr = copy_tuple[0]
+            if len(copy_tuple) > 1:
+                toattr = copy_tuple[1]
+            else:
+                toattr = frmattr
+            log.debug("Copy %r to %r", frmattr, toattr)
+
+            nextobj = self
+            for fm in frmattr.split("."):
+                nextobj = getattr(nextobj, fm)
+            from_attribute = nextobj
+
+            setattratpath(targetmsg, toattr, from_attribute)
+
+        addlist = tform.get(transform.KeyActAdd, [])
+        for add_tuple in addlist:
+            tpath = add_tuple[0]
+            new_obj = add_tuple[1]()
+            log.debug("Adding %r at path %r", new_obj, tpath)
+            setattratpath(targetmsg, tpath, new_obj)
+
+    #
+    # =================== INTERNAL METHODS ===================================
+    #
     def __bytes__(self):
 
         log.debug(
@@ -240,6 +300,9 @@ class Message(vb.ValueBinder):
 
         super(Message, self).__setattr__(attr, val)
 
+    def __del__(self):
+        log.debug("Deleting %r instance.", self.__class__.__name__)
+
     def _establishbindings(self):
         for binding in self.bindings:
             if len(binding) > 2:
@@ -247,63 +310,6 @@ class Message(vb.ValueBinder):
             else:
                 transformer = None
             self.bind(binding[0], binding[1], transformer)
-
-    def addHeader(self, hdr):
-        new_headers = []
-        for oh in self.headers:
-            if hdr is not None and hdr.type == oh.type:
-                new_headers.append(hdr)
-                hdr = None
-            new_headers.append(oh)
-        if hdr is not None:
-            new_headers.append(hdr)
-        self.headers = new_headers
-
-    def autofillheaders(self):
-        for hdr in self.mandatoryheaders:
-            if hdr not in [_hdr.type for _hdr in self.headers]:
-                self.addHeader(getattr(Header, hdr)())
-
-        for mheader_name, mparams in six.iteritems(self.mandatoryparameters):
-            mheader = getattr(self, mheader_name + "Header")
-            for param_name in mparams:
-                setattr(
-                    mheader.field.parameters, param_name,
-                    getattr(Param, param_name)())
-
-    def applyTransform(self, targetmsg, tform):
-        copylist = tform[transform.KeyActCopy]
-
-        def setattratpath(obj, path, val):
-            nextobj = obj
-            tocomponents = path.split(".")
-            for to in tocomponents[:-1]:
-                nextobj = getattr(nextobj, to)
-            to_target = nextobj
-
-            setattr(to_target, tocomponents[-1], val)
-
-        for copy_tuple in copylist:
-            frmattr = copy_tuple[0]
-            if len(copy_tuple) > 1:
-                toattr = copy_tuple[1]
-            else:
-                toattr = frmattr
-            log.debug("Copy %r to %r", frmattr, toattr)
-
-            nextobj = self
-            for fm in frmattr.split("."):
-                nextobj = getattr(nextobj, fm)
-            from_attribute = nextobj
-
-            setattratpath(targetmsg, toattr, from_attribute)
-
-        addlist = tform.get(transform.KeyActAdd, [])
-        for add_tuple in addlist:
-            tpath = add_tuple[0]
-            new_obj = add_tuple[1]()
-            log.debug("Adding %r at path %r", new_obj, tpath)
-            setattratpath(targetmsg, tpath, new_obj)
 
 
 @six.add_metaclass(type)
@@ -330,6 +336,28 @@ class Response(Message):
 
 class InviteMessage(Message):
     """An INVITE."""
+
+    bindings = [
+        ("startline.uri", "ToHeader.field.uri"),
+        ("startline.protocol", "ViaHeader.field.protocol"),
+        ("startline", "ViaHeader.field.parameters.branch.startline"),
+        ("FromHeader.field.value.uri.aor.username",
+         "ContactHeader.field.value.uri.aor.username"),
+        ("ContactHeader.field.value.uri.aor.host",
+         "ViaHeader.field.host.host"),
+        ("startline.type", "CseqHeader.field.reqtype")]
+
+    mandatoryheaders = [
+        Header.types.Contact]
+
+    mandatoryparameters = {
+        Header.types.From: [Param.types.tag],
+        Header.types.Via: [Param.types.branch]
+    }
+
+
+class ByeMessage(Message):
+    """An BYE."""
 
     bindings = [
         ("startline.uri", "ToHeader.field.uri"),

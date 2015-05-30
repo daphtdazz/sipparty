@@ -89,7 +89,9 @@ class Party(vb.ValueBinder):
         ("_pt_transport.localAddressHost",
          "_pt_outboundMessage.ContactHeader.field.value.uri.aor.host"),
         ("_pt_transport.localAddressPort",
-         "_pt_outboundMessage.ContactHeader.field.value.uri.aor.port")
+         "_pt_outboundMessage.ContactHeader.field.value.uri.aor.port"),
+        ("calleeAOR",
+         "_pt_outboundMessage.startline.uri.aor")
     ]
     vb_dependencies = [
         ("scenario", ["state"]),
@@ -124,6 +126,7 @@ class Party(vb.ValueBinder):
         super(Party, self).__init__()
 
         self._pt_waitingMessage = None
+        self.calleeAOR = None
 
         self.aor = NewAOR()
         if username is not None:
@@ -237,20 +240,30 @@ class Party(vb.ValueBinder):
         log.debug("Received a %r message.", message.type)
         self.scenario.hit(message.type, message)
 
-    def _pt_send(self, message_type, callee, contactAddress=None):
+    def _pt_send(self, message_type, callee=None, contactAddress=None):
         log.debug("Send message of type %r to %r.", message_type, callee)
 
-        # Callee can be overridden with various different types of object.
-        if isinstance(callee, components.AOR):
-            calleeAOR = callee
-        elif hasattr(callee, "aor"):
-            calleeAOR = callee.aor
+        if callee is not None:
+            # Callee can be overridden with various different types of object.
+            if isinstance(callee, components.AOR):
+                calleeAOR = callee
+            elif hasattr(callee, "aor"):
+                calleeAOR = callee.aor
+            else:
+                calleeAOR = components.AOR.Parse(callee)
+            log.debug("calleeAOR: %r", calleeAOR)
+            self.calleeAOR = calleeAOR
         else:
-            calleeAOR = components.AOR.Parse(callee)
-        log.debug("calleeAOR: %r", calleeAOR)
+            if self.calleeAOR is None:
+                self.scenario.reset()
+                self._pt_stateError(
+                    "Send message for %r instance (aor: %s) passed no "
+                    "aor." % (
+                        self.__class__.__name__, self.aor))
+            calleeAOR = self.calleeAOR
 
         if contactAddress is None:
-            if hasattr(callee, "localAddress"):
+            if callee is not None and hasattr(callee, "localAddress"):
                 contactAddress = callee.localAddress
             else:
                 contactAddress = calleeAOR.host.addrTuple()
@@ -274,21 +287,28 @@ class Party(vb.ValueBinder):
                 10.0)
 
         if self._pt_transport.state == self._pt_transport.States.error:
-            scn = self.scenario
-            if scn is not None:
-                scn.reset()
-            raise NoConnection(
+            self._pt_stateError(
                 "Got an error attempting to connect to %r @ %r." % (
                     calleeAOR, contactAddress))
 
         msg = getattr(Message, message_type)()
+
+        # Hook it onto the outbound message. This does all the work of setting
+        # attributes from ourselve as per our bindings.
         self._pt_outboundMessage = msg
 
-        msg.startline.uri.aor = calleeAOR
         msg.viaheader.field.transport = transport.SockTypeName(
             self._pt_transport.type)
 
-        self._pt_transport.send(str(msg))
+        try:
+            self._pt_transport.send(str(msg))
+        finally:
+            # Important to delete the message because it is bound to our
+            # properties, and we will have binding conflicts with later
+            # messages if it is not released now.
+            log.debug("Delete outbound message.")
+            self._pt_outboundMessage = None
+            del msg
 
     def _pt_reply(self, message_type, request):
         log.debug("Reply to %r with %r.", request.type, message_type)
@@ -302,3 +322,8 @@ class Party(vb.ValueBinder):
         request.applyTransform(msg, tform)
 
         self._pt_transport.send(str(msg))
+
+    def _pt_stateError(self, message):
+        if self.scenario is not None:
+            self.scenario.reset()
+        raise UnexpectedState(message)

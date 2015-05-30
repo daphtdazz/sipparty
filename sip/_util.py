@@ -29,7 +29,7 @@ import vb
 import weakref
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.DEBUG)
+log.setLevel(logging.INFO)
 
 # The clock. Defined here so that it can be overridden in the testbed.
 Clock = timeit.default_timer

@@ -29,7 +29,6 @@ import unittest
 
 import sip
 from sip import _util
-import party
 import scenario
 import sipscenarios
 
@@ -67,12 +66,20 @@ class TestParty(unittest.TestCase):
             SimpleParty.Scenario._fsm_definitionDictionary[
                 scenario.InitialStateKey])
         p1 = SimpleParty()
+        p1.sendInvite()
+        self.assertRaises(
+            sip.party.UnexpectedState,
+            lambda: p1.waitUntilState(
+                p1.States.InCall,
+                error_state=p1.States.Initial))
         p2 = SimpleParty()
         p2._pt_transport.listen()
         p1.sendInvite(p2)
 
         _util.WaitFor(lambda: p1.state == p1.States.InCall, 1)
         _util.WaitFor(lambda: p2.state == p2.States.InCall, 1)
+
+        p1.sendBye()
 
     def testDudParty(self):
 

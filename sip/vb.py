@@ -20,7 +20,7 @@ import re
 import weakref
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.INFO)
+log.setLevel(logging.DEBUG)
 
 
 class BindingException(Exception):
@@ -40,6 +40,9 @@ class BindingAlreadyExists(BindingException):
 class ValueBinder(object):
     """This mixin class provides a way to bind values to one another."""
 
+    #
+    # =================== CLASS INTERFACE ====================================
+    #
     PathSeparator = "."
     PS = PathSeparator
 
@@ -50,6 +53,28 @@ class ValueBinder(object):
     VB_Backward = 'backward'
     VB_Directions = (VB_Forward, VB_Backward)
 
+    @classmethod
+    def VB_SplitPath(cls, path):
+        return path.split(cls.PS)
+
+    @classmethod
+    def VB_PartitionPath(cls, path):
+        first, sep, rest = path.partition(cls.PS)
+        return first, rest
+
+    @classmethod
+    def VB_JoinPath(cls, path):
+        return cls.PS.join(path)
+
+    @classmethod
+    def VB_PrependParent(cls, path):
+        lp = [path]
+        lp.insert(0, '')
+        return cls.VB_JoinPath(lp)
+
+    #
+    # =================== INSTANCE INTERFACE =================================
+    #
     def __init__(self, *args, **kwargs):
 
         for reqdattr in (
@@ -101,6 +126,9 @@ class ValueBinder(object):
         self._vb_unbinddirection(frompath, self.VB_Forward)
         self._vb_unbinddirection(topath, self.VB_Backward)
 
+    #
+    # =================== INTERNAL ===========================================
+    #
     def __getattr__(self, attr):
         """If the attribute is a delegated attribute, gets the attribute from
         the delegate, else calls super."""
@@ -176,34 +204,17 @@ class ValueBinder(object):
                           topath)
                 self._vb_push_value_to_target(val, topath)
 
-    @classmethod
-    def VB_SplitPath(cls, path):
-        return path.split(cls.PS)
+    def __del__(self):
+        """We need to remove all our bindings."""
+        sp = super(ValueBinder, self)
+        if hasattr(sp, "__del__"):
+            sp.__del__()
+        self._vb_unbindAllCondition(lambda attr, toattr: True)
 
-    @classmethod
-    def VB_PartitionPath(cls, path):
-        first, sep, rest = path.partition(cls.PS)
-        return first, rest
-
-    @classmethod
-    def VB_JoinPath(cls, path):
-        return cls.PS.join(path)
-
-    @classmethod
-    def VB_PrependParent(cls, path):
-        lp = [path]
-        lp.insert(0, '')
-        return cls.VB_JoinPath(lp)
-
-    #
-    # =================== INTERNAL ===========================================
-    #
-    def _vb_unbindAllParent(self):
+    def _vb_unbindAllCondition(self, condition):
         for direction in self.VB_Directions:
-            abds = self._vb_bindingsForDirection(direction)
-            log.debug("unbind any parent bindings in %d %r bindings (%r)",
-                      len(abds), direction, abds)
-            for attr in dict(abds):
+            attr_bd = self._vb_bindingsForDirection(direction)
+            for attr in dict(attr_bd):
                 _, _, _, bs, _ = self._vb_bindingdicts(
                     attr, direction, all=True)
                 log.debug("  %d bindings through %r", len(bs), attr)
@@ -212,10 +223,14 @@ class ValueBinder(object):
                     toattr, _ = self.VB_PartitionPath(topath)
                     log.debug("  binding %r %r -> %r", attr, subpath,
                               toattr)
-                    if len(toattr) == 0:
-                        log.debug("Unbind parent binding.")
+                    if condition(attr, toattr):
+                        log.debug("  unbind.")
                         path = self.VB_JoinPath((attr, subpath))
                         self._vb_unbinddirection(path, direction)
+
+    def _vb_unbindAllParent(self):
+        return self._vb_unbindAllCondition(
+            lambda attr, toattr: len(toattr) == 0)
 
     def _vb_resolveFromPath(self, path):
         """Returns the actual binding path, rather than one that might be
@@ -279,8 +294,9 @@ class ValueBinder(object):
         if create:
             if attrattrs in attrdict:
                 raise(BindingAlreadyExists(
-                    "{0!r} is in {2!r} binding dict {1!r}".format(
-                        path, bindings, direction)))
+                    "{0!r} attribute of {3!r} instance is in {2!r} binding "
+                    "dict {1!r}".format(
+                        path, bindings, direction, self.__class__.__name__)))
             attrdict[attrattrs] = {}
 
         if all:
