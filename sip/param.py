@@ -27,6 +27,8 @@ from parse import Parser
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
 
+bytes = six.binary_type
+
 
 class Parameters(Parser, vb.ValueBinder, dict):
     """Class representing a list of parameters on a header or other object.
@@ -135,11 +137,12 @@ class BranchParam(Param):
                 "{self.__class__.__name__!r} needs attributes 'startline' and "
                 "'branch_num' to autogenerate 'value'."
                 "".format(**locals()))
-        str_to_hash = "{0}-{1}".format(str(self.startline), self.branch_num)
+        str_to_hash = b"{0}-{1}".format(
+            bytes(self.startline), self.branch_num)
         the_hash = hash(str_to_hash)
         if the_hash < 0:
             the_hash = - the_hash
-        nv = "{0}{1:x}".format(prot.BranchMagicCookie, the_hash)
+        nv = b"{0}{1:x}".format(prot.BranchMagicCookie, the_hash)
         log.debug("New %r value %r", self.__class__.__name__, nv)
         return nv
     value = _util.GenerateIfNotSet("value")

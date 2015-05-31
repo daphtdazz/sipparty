@@ -31,6 +31,7 @@ class SDPNoSuchDescription(Exception):
 
 
 @six.add_metaclass(_util.attributesubclassgen)
+@_util.TwoCompatibleThree
 class Line(Parser):
     types = _util.Enum((
         "v", "o", "s", "i", "u", "e", "p", "c", "b", "t", "z", "k", "a", "m"))
@@ -69,10 +70,11 @@ class Line(Parser):
         Parser.Repeats: True
     }
 
-    def __str__(self):
-        return "{self.type}={self.value}".format(self=self)
+    def __bytes__(self):
+        return b"{self.type}={self.value}".format(self=self)
 
 
+@_util.TwoCompatibleThree
 class Body(Parser, vb.ValueBinder):
     """SDP is a thankfully tightly defined protocol, allowing this parser to
     be much more explicit. The main point is that there are 3 sections:
@@ -97,36 +99,36 @@ class Body(Parser, vb.ValueBinder):
             [("lines", Line)]
     }
 
-    ZeroOrOne = "?"
-    ZeroPlus = "*"
-    OnePlus = "+"
+    ZeroOrOne = b"?"
+    ZeroPlus = b"*"
+    OnePlus = b"+"
     validorder = (
         # Defines the order of SDP, and how many of each type there can be.
         # Note that for the time and media lines, there are subsidiary fields
         # which may follow, and the number of times they may follow are
         # denoted by the next flag in the tuple.
-        ("v", 1),
-        ("o", 1),
-        ("s", 1),
-        ("i", ZeroOrOne),  # Info line.
-        ("u", ZeroOrOne),
-        ("e", ZeroOrOne),
-        ("p", ZeroOrOne),
-        ("c", ZeroOrOne),
-        ("b", ZeroOrOne),
-        ("z", ZeroOrOne),  # Timezone
-        ("k", ZeroOrOne),  # Encryption key
-        ("a", ZeroPlus),  # Zero or more attributes.
-        ("tr", 1, ZeroPlus),  # Time descriptions followed by repeats.
+        (b"v", 1),
+        (b"o", 1),
+        (b"s", 1),
+        (b"i", ZeroOrOne),  # Info line.
+        (b"u", ZeroOrOne),
+        (b"e", ZeroOrOne),
+        (b"p", ZeroOrOne),
+        (b"c", ZeroOrOne),
+        (b"b", ZeroOrOne),
+        (b"z", ZeroOrOne),  # Timezone
+        (b"k", ZeroOrOne),  # Encryption key
+        (b"a", ZeroPlus),  # Zero or more attributes.
+        (b"tr", 1, ZeroPlus),  # Time descriptions followed by repeats.
         # Zero or more media descriptions, and they may have attributes.
-        ("micbka", ZeroPlus, ZeroOrOne, ZeroOrOne, ZeroOrOne, ZeroOrOne,
+        (b"micbka", ZeroPlus, ZeroOrOne, ZeroOrOne, ZeroOrOne, ZeroOrOne,
          ZeroPlus)
     )
 
-    def __str__(self):
+    def __bytes__(self):
 
         all_lines = []
         for line in self.lines:
-            all_lines.append(str(line))
-        all_lines.append("")  # Always need an extra newline.
+            all_lines.append(bytes(line))
+        all_lines.append(b"")  # Always need an extra newline.
         return prot.EOL.join(all_lines)

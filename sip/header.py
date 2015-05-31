@@ -32,6 +32,8 @@ import pdb
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
 
+bytes = six.binary_type
+
 
 @six.add_metaclass(
     # The FSM type needs both the attributesubclassgen and the cumulative
@@ -121,8 +123,8 @@ class Header(Parser, vb.ValueBinder):
         self.fields = fields
 
     def __bytes__(self):
-        return "{0}: {1}".format(
-            self.type, ",".join([str(v) for v in self.fields]))
+        return b"{0}: {1}".format(
+            self.type, ",".join([bytes(v) for v in self.fields]))
 
 
 class FieldDelegateHeader(Header):

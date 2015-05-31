@@ -33,6 +33,8 @@ import pdb
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
 
+bytes = six.binary_type
+
 
 @six.add_metaclass(_util.CCPropsFor(("delegateattributes", "parseinfo")))
 @_util.TwoCompatibleThree
@@ -67,7 +69,7 @@ class Field(parse.Parser, vb.ValueBinder):
         rs = b"{self.value}".format(**locals())
         rslist = [rs]
         rslist.extend(
-            [str(val) for val in self.parameters.itervalues()])
+            [bytes(val) for val in self.parameters.itervalues()])
         log.debug(";.join(%r)", rslist)
         rs = b";".join(rslist)
         return rs
@@ -148,7 +150,7 @@ class ViaField(Field):
 
         if self.host is not None:
             log.debug("Viaheader host is %r %s.", self.host, self.host)
-            hoststr = str(self.host)
+            hoststr = bytes(self.host)
             if len(hoststr) == 0:
                 hoststr = None
 

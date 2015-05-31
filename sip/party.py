@@ -361,7 +361,7 @@ class Party(vb.ValueBinder):
         self._pt_outboundResponse = msg
 
         try:
-            self._pt_transport.send(str(msg))
+            self._pt_transport.send(bytes(msg))
         finally:
             self._pt_outboundResponse = None
             del msg

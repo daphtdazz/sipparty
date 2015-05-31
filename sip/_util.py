@@ -30,6 +30,7 @@ import weakref
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
+bytes = six.binary_type
 
 # The clock. Defined here so that it can be overridden in the testbed.
 Clock = timeit.default_timer
@@ -486,7 +487,7 @@ class DerivedProperty(object):
             return val
 
         # Get might be a method name...
-        if isinstance(gt, six.binary_type) and hasattr(target, gt):
+        if isinstance(gt, bytes) and hasattr(target, gt):
             meth = getattr(target, gt)
             if not isinstance(meth, collections.Callable):
                 raise ValueError(
@@ -517,7 +518,7 @@ class DerivedProperty(object):
             log.debug("Set %r to %r.", pname, value)
             log.debug("Self: %r.", self)
             setattr(obj, pname, value)
-        elif isinstance(st, six.binary_type) and hasattr(obj, st):
+        elif isinstance(st, bytes) and hasattr(obj, st):
             meth = getattr(obj, st)
             if not isinstance(meth, collections.Callable):
                 raise ValueError(

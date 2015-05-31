@@ -22,11 +22,10 @@ import os
 import re
 import logging
 import unittest
-import pdb
 
-# Get the root logger.
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger()
+bytes = six.binary_type
 
 # Hack so we can always import the code we're testing.
 sys.path.append(os.path.join(os.pardir, os.pardir))
@@ -42,8 +41,8 @@ class TestProtocol(unittest.TestCase):
     cseq_num_pattern = "\d{1,10}"
 
     def assertEqualMessages(self, msga, msgb):
-        stra = str(msga)
-        strb = str(msgb)
+        stra = bytes(msga)
+        strb = bytes(msgb)
         self.assertEqual(
             stra, strb, "\n{0!r}\nvs\n{1!r}\n---OR---\n{0}\nvs\n{1}"
             "".format(stra, strb))
@@ -51,14 +50,14 @@ class TestProtocol(unittest.TestCase):
     def testGeneral(self):
 
         aliceAOR = sip.components.AOR("alice", "atlanta.com")
-        self.assertEqual(str(aliceAOR), "alice@atlanta.com")
+        self.assertEqual(bytes(aliceAOR), "alice@atlanta.com")
         bobAOR = sip.components.AOR("bob", "baltimore.com")
 
         self.assertRaises(AttributeError, lambda: sip.Request.notareq)
 
         inviteRequest = sip.Request.invite(bobAOR)
         self.assertEqual(
-            str(inviteRequest), "INVITE bob@baltimore.com SIP/2.0")
+            bytes(inviteRequest), "INVITE bob@baltimore.com SIP/2.0")
 
         self.assertRaises(AttributeError, lambda: sip.Message.notareg)
 
@@ -73,8 +72,8 @@ class TestProtocol(unittest.TestCase):
             "Max-Forwards: 70\r\n".format(
                 TestProtocol.call_id_pattern, TestProtocol.branch_pattern,
                 TestProtocol.cseq_num_pattern, TestProtocol.tag_pattern),
-            str(invite)), "%r\n--OR--\n%s" % (str(invite), invite))
-        old_branch = str(invite.viaheader.parameters.branch)
+            bytes(invite)), "%r\n--OR--\n%s" % (bytes(invite), invite))
+        old_branch = bytes(invite.viaheader.parameters.branch)
         invite.startline.uri = sip.components.URI(aor=bobAOR)
 
         # Ideally just changing the URI should be enough to regenerate the
@@ -85,7 +84,7 @@ class TestProtocol(unittest.TestCase):
         sline = invite.startline
         invite.startline = None
         invite.startline = sline
-        new_branch = str(invite.viaheader.parameters.branch)
+        new_branch = bytes(invite.viaheader.parameters.branch)
         self.assertNotEqual(old_branch, new_branch)
         invite.fromheader.field.value.uri.aor.username = "alice"
         invite.fromheader.field.value.uri.aor.host = "atlanta.com"
@@ -101,11 +100,12 @@ class TestProtocol(unittest.TestCase):
             "Max-Forwards: 70\r\n".format(
                 TestProtocol.call_id_pattern, TestProtocol.branch_pattern,
                 TestProtocol.cseq_num_pattern, TestProtocol.tag_pattern),
-            str(invite)), repr(str(invite)))
+            bytes(invite)), repr(bytes(invite)))
 
-        self.assertEqual(str(invite.toheader), "To: sip:bob@baltimore.com")
+        self.assertEqual(bytes(invite.toheader), "To: sip:bob@baltimore.com")
         self.assertEqual(
-            str(invite.call_idheader), str(getattr(invite, "Call_IdHeader")))
+            bytes(invite.call_idheader),
+            bytes(getattr(invite, "Call_IdHeader")))
         self.assertRaises(AttributeError, lambda: invite.notaheader)
 
         resp = sip.message.Response(200)
@@ -121,7 +121,7 @@ class TestProtocol(unittest.TestCase):
             "CSeq: {2} INVITE\r\n".format(
                 TestProtocol.call_id_pattern, TestProtocol.branch_pattern,
                 TestProtocol.cseq_num_pattern, TestProtocol.tag_pattern),
-            str(resp)), str(resp))
+            bytes(resp)), bytes(resp))
 
         sdp = sip.sdp
 
@@ -137,7 +137,7 @@ class TestProtocol(unittest.TestCase):
         log.debug("Set via header host.")
         invite.viaheader.field.host.host = "127.0.0.1"
         invite.viaheader.field.host.port = "5060"
-        invite_str = str(invite)
+        invite_str = bytes(invite)
         log.debug("Invite to stringify and parse: %r", invite_str)
 
         new_inv = sip.message.Message.Parse(invite_str)
@@ -163,7 +163,7 @@ class TestProtocol(unittest.TestCase):
             "Max-Forwards: 70\r\n".format(
                 TestProtocol.call_id_pattern, TestProtocol.branch_pattern,
                 TestProtocol.cseq_num_pattern, TestProtocol.tag_pattern),
-            str(new_inv)), repr(str(new_inv)))
+            bytes(new_inv)), repr(bytes(new_inv)))
 
     def testCall(self):
 
@@ -193,7 +193,7 @@ class TestProtocol(unittest.TestCase):
         )
 
         sdp = sip.sdp.Body.Parse(sdpdata)
-        self.assertEqual(str(sdp), sdpdata)
+        self.assertEqual(bytes(sdp), sdpdata)
         # !!! self.assertEqual(sdp.version, 0)
 
     def testEnum(self):

@@ -28,15 +28,17 @@ import vb
 import pdb
 
 log = logging.getLogger(__name__)
+bytes = six.binary_type
 
 
 @six.add_metaclass(_util.attributesubclassgen)
+@_util.TwoCompatibleThree
 class Request(parse.Parser, vb.ValueBinder):
     """Enumeration class generator"""
 
     types = _util.Enum(
         ("ACK", "BYE", "CANCEL", "INVITE", "OPTIONS", "REGISTER"),
-        normalize=lambda x: str(x).upper())
+        normalize=lambda x: bytes(x).upper())
 
     # "type" is a descriptor that returns the type (e.g. ACK or BYE) based on
     # the class type, i.e. by removing "Request" from the class type.
@@ -59,7 +61,7 @@ class Request(parse.Parser, vb.ValueBinder):
              ("protocol",)],
     }
 
-    def __str__(self):
+    def __bytes__(self):
         return "{self.type} {self.uri} {self.protocol}".format(self=self)
 
     def __init__(self, uri=None, protocol=defaults.sipprotocol, autofill=True):

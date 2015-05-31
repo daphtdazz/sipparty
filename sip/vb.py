@@ -21,6 +21,7 @@ import weakref
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
+bytes = six.binary_type
 
 
 class BindingException(Exception):
@@ -254,7 +255,7 @@ class ValueBinder(object):
             return getattr(self, "_vb_%sbindings" % direction)
         except AttributeError as exc:
             raise AttributeError(
-                str(exc) +
+                bytes(exc) +
                 " Are you sure you called super().__init__() for this class?")
 
     def _vb_bindingdicts(self, path, direction, create=False, all=False):

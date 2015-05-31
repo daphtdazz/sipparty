@@ -23,6 +23,7 @@ import socket
 import threading
 import logging
 import unittest
+import six
 import _util
 import fsm
 import retrythread
@@ -30,6 +31,7 @@ import fsmtimer
 
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
+bytes = six.binary_type
 
 
 class TestFSM(unittest.TestCase):
@@ -71,7 +73,7 @@ class TestFSM(unittest.TestCase):
     def testSimple(self):
         nf = fsm.FSM(name="testfsm")
         self.assertEqual(
-            str(nf),
+            bytes(nf),
             "'FSM' 'testfsm':\n"
             "  (No states or transitions.)\n"
             "Current state: None")
@@ -83,7 +85,7 @@ class TestFSM(unittest.TestCase):
         nf.addTransition("stopping", "stop", "stopping")
         nf.addTransition("stopping", "stop_done", "initial")
         self.assertEqual(
-            str(nf),
+            bytes(nf),
             "'FSM' 'testfsm':\n"
             "  'stopping':\n"
             "    'stop_done' -> 'initial'\n"

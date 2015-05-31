@@ -30,12 +30,10 @@ import _util
 import retrythread
 import fsmtimer
 
-if __name__ == "__main__":
-    logging.basicConfig()
-    log = logging.getLogger()
-else:
-    log = logging.getLogger(__name__)
-    log.setLevel(logging.INFO)
+log = logging.getLogger(__name__)
+log.setLevel(logging.INFO)
+
+bytes = six.binary_type
 
 
 class FSMError(Exception):
@@ -330,7 +328,7 @@ class FSM(object):
         super(FSM, self).__init__()
 
         if name is None:
-            name = self._fsm_name + six.binary_type(self.__class__.NextFSMNum)
+            name = self._fsm_name + bytes(self.__class__.NextFSMNum)
             self.__class__.NextFSMNum += 1
 
         self._fsm_name = name
@@ -492,7 +490,7 @@ class FSM(object):
                  self.delegate
                  if hasattr(self, "delegate") else None))
 
-        weak_action.__name__ = "weak_action_" + six.binary_type(action)
+        weak_action.__name__ = "weak_action_" + bytes(action)
         return weak_action
 
     @_util.class_or_instance_method
@@ -539,7 +537,7 @@ class FSM(object):
                 # self._fsm_popTimerNow()
             log.debug("FSM Thread %r out.", cthr.name)
 
-        fsmThread.name = str(action)
+        fsmThread.name = bytes(action)
         return fsmThread
 
     def __del__(self):

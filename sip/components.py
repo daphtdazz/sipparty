@@ -19,10 +19,13 @@ limitations under the License.
 # We import defaults at the bottom, since defaults uses these classes, and so
 # they must always be declared before defaults is.
 # import defaults
+import six
 import prot
 import _util
 import vb
 from parse import Parser
+
+bytes = six.binary_type
 
 
 @_util.TwoCompatibleThree
@@ -58,15 +61,15 @@ class Host(Parser, vb.ValueBinder):
             port = defaults.port
 
         if host and port:
-            return "{host}:{port}".format(**locals())
+            return b"{host}:{port}".format(**locals())
 
         if self.host:
-            return "{host}".format(**locals())
+            return b"{host}".format(**locals())
 
-        return ""
+        return b""
 
     def __repr__(self):
-        return "Host(host={host}, port={port})".format(**self.__dict__)
+        return b"Host(host={host}, port={port})".format(**self.__dict__)
 
 
 @_util.TwoCompatibleThree
@@ -93,12 +96,12 @@ class AOR(Parser, vb.ValueBinder):
 
     def __bytes__(self):
         if self.username and self.host:
-            return "{username}@{host}".format(**self.__dict__)
+            return b"{username}@{host}".format(**self.__dict__)
 
         if self.host:
-            return "{host}".format(**self.__dict__)
+            return b"{host}".format(**self.__dict__)
 
-        return ""
+        return b""
 
     def __repr__(self):
         return (
@@ -193,11 +196,11 @@ class DNameURI(Parser, vb.ValueBinder):
 
     def __bytes__(self):
         if self.dname and self.uri:
-            return("\"{self.dname}\" <{self.uri}>".format(**locals()))
+            return(b"\"{self.dname}\" <{self.uri}>".format(**locals()))
 
         if self.uri:
-            return(str(self.uri))
+            return(bytes(self.uri))
 
-        return ""
+        return b""
 
 import defaults
