@@ -387,8 +387,10 @@ class TransportFSM(fsm.FSM):
 
         try:
             conn, addr = lsck.accept()
-            log.debug("Connection accepted from %r.", addr)
             self._tfsm_activeSck = conn
+            self._tfsm_remoteAddressTuple = addr
+            log.info("Connection accepted from %r.",
+                     self._tfsm_remoteAddressTuple)
             self.hit(self.Inputs.connected)
             return
         except socket.timeout:
@@ -437,6 +439,8 @@ class TransportFSM(fsm.FSM):
         be called when there is data available on the socket.
         """
         bytes, address = sck.recvfrom(self._tfsm_receiveSize)
+        address = (
+            address if address is not None else self._tfsm_remoteAddressTuple)
         byteslen = len(bytes)
 
         if byteslen > 0:

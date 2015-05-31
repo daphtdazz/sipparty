@@ -123,7 +123,7 @@ class ValueBinder(object):
         self._vb_unbinddirection(topath, frompath, self.VB_Backward)
 
     #
-    # =================== INTERNAL ===========================================
+    # =================== MAGIC METHODS ======================================
     #
     def __getattr__(self, attr):
         """If the attribute is a delegated attribute, gets the attribute from
@@ -205,9 +205,12 @@ class ValueBinder(object):
         sp = super(ValueBinder, self)
         if hasattr(sp, "__del__"):
             sp.__del__()
-        self._vb_unbindAllCondition(lambda attr, toattr: True)
+        self._vb_unbindAllCondition()
 
-    def _vb_unbindAllCondition(self, condition):
+    #
+    # =================== INTERNAL METHODS ===================================
+    #
+    def _vb_unbindAllCondition(self, condition=None):
         for direction in self.VB_Directions:
             attr_bd = self._vb_bindingsForDirection(direction)
             for attr in dict(attr_bd):
@@ -219,7 +222,7 @@ class ValueBinder(object):
                         toattr, _ = self.VB_PartitionPath(topath)
                         log.debug("  binding %r %r -> %r", attr, subpath,
                                   toattr)
-                        if condition(attr, toattr):
+                        if condition is None or condition(attr, toattr):
                             log.debug("  unbind.")
                             path = self.VB_JoinPath((attr, subpath))
                             self._vb_unbinddirection(path, topath, direction)
@@ -408,8 +411,14 @@ class ValueBinder(object):
 
         if len(fromattrattrs) > 0 and hasattr(self, fromattr):
             attrtopath = self.VB_PrependParent(resolvedtopath)
-            getattr(self, fromattr)._vb_unbinddirection(
-                fromattrattrs, attrtopath, direction)
+            child = getattr(self, fromattr)
+
+            # If the child doesn't support ValueBinding, then it is a bit late
+            # to do anything about this now! This will have been logged when
+            # we attempted to set the binding on it, so just ignore it now.
+            if hasattr(child, "_vb_unbinddirection"):
+                child._vb_unbinddirection(
+                    fromattrattrs, attrtopath, direction)
 
         frompathbds = attrbindings[fromattrattrs]
         del frompathbds[resolvedtopath]

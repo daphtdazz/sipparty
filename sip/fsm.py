@@ -330,7 +330,7 @@ class FSM(object):
         super(FSM, self).__init__()
 
         if name is None:
-            name = str(self.__class__.NextFSMNum)
+            name = self._fsm_name + six.binary_type(self.__class__.NextFSMNum)
             self.__class__.NextFSMNum += 1
 
         self._fsm_name = name
@@ -585,13 +585,16 @@ class FSM(object):
             log.error(msg)
             raise UnexpectedInput(msg)
         res = trans[input]
-        log.debug("%r: %r -> %r", self._fsm_state, input, res)
+        new_state = res[self.KeyNewState]
+        log.info(
+            "FSM: %r; Input: %r; State Change: %r -> %r.",
+            self._fsm_name, input, self._fsm_state, new_state)
 
         for st in res[self.KeyStopTimers]:
             log.debug("Stop timer %r", st.name)
             st.stop()
 
-        self._fsm_state = res[self.KeyNewState]
+        self._fsm_state = new_state
 
         action = res[self.KeyAction]
         if action is not None:
