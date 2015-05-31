@@ -23,6 +23,7 @@ import time
 import timeit
 import logging
 import unittest
+import six
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
@@ -88,7 +89,7 @@ class TestSIPTransport(unittest.TestCase):
         inv.contactHeader.field.value.uri.aor.username = "alice"
         inv.contactHeader.field.value.uri.aor.host = t1.localAddressHost
 
-        t1.sendMessage(inv)
+        t1.send(six.binary_type(inv))
 
         self.wait_for(lambda: len(t2.messages) > 0)
 
@@ -97,7 +98,7 @@ class TestSIPTransport(unittest.TestCase):
         log.debug("t1 state: %r, t2 state: %r.", t1.state, t2.state)
         rx.applyTransform(resp, transform.default[rx.type][200])
 
-        t2.sendMessage(resp)
+        t2.send(six.binary_type(resp))
 
         self.wait_for(lambda: len(t1.messages) > 0)
 

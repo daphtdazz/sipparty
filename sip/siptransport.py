@@ -59,9 +59,6 @@ class SipTransportFSM(transport.TransportFSM):
         self.byteConsumer = _util.WeakMethod(
             self, "_tsfsm_consumeBytes", default_rc=0)
 
-    def sendMessage(self, message):
-        self.hit(self.Inputs.send, six.binary_type(message))
-
     #
     # =================== INTERNAL ===========================================
     #
