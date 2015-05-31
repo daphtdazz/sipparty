@@ -31,7 +31,7 @@ logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
 
-class TestFSM(unittest.TestCase):
+class TestTransportFSM(unittest.TestCase):
 
     def wait_for(self, func, timeout=2):
         assert timeout > 0.05
@@ -53,6 +53,12 @@ class TestFSM(unittest.TestCase):
         retrythread.RetryThread.Clock = self.clock
         self.retry = 0
         self.cleanup = 0
+
+        self._ttf_logLevel = transport.log.level
+        transport.log.setLevel(logging.DEBUG)
+
+    def tearDown(self):
+        transport.log.setLevel(self._ttf_logLevel)
 
     def testValues(self):
         t1 = transport.TransportFSM()
@@ -76,31 +82,54 @@ class TestFSM(unittest.TestCase):
 
         log.debug("Check listen can be cancelled.")
         t1.family = socket.AF_INET
-        t1.type = socket.SOCK_STREAM
+        t1.socketType = socket.SOCK_STREAM
         t1.listen()
         self.assertEqual(t1.state, t1.States.listening)
         t1.hit(t1.Inputs.error, "user cancelled")
         self.wait_for(lambda: t1.state == t1.States.error)
         t1.reset()
 
-    def testSimpleTransport(self):
+    def testSimpleTransportStream(self):
+        self.subTestSimpleTransport(socketType=socket.SOCK_STREAM)
+
+    def testSimpleTransportDatagram(self):
+        self.subTestSimpleTransport(socketType=socket.SOCK_DGRAM)
+
+    def subTestSimpleTransport(self, socketType):
 
         log.debug("Listen")
-        t1 = transport.TransportFSM()
+        t1 = transport.TransportFSM(socketType=socketType)
         t1.listen()
 
         log.debug("Connect to %r", t1.localAddress)
-        t2 = transport.TransportFSM()
+        t2 = transport.TransportFSM(socketType=socketType)
         t2.connect(t1.localAddress)
         self.wait_for(lambda: t2.state == t2.States.connected)
-        self.wait_for(lambda: t1.state == t1.States.connected)
+
+        if socketType == socket.SOCK_STREAM:
+            # Stream connections, actually having a connection, connect both
+            # sides together. Datagrams won't connect until after the first
+            # data is received.
+            self.wait_for(lambda: t1.state == t1.States.connected)
 
         log.debug("Send some data.")
-        t1.send("hello world")
         t2.send("hello you")
+
+        # For datagram streams, there is no real connection, so we must wait
+        # until we receive some data before latching and connecting to the
+        # first address that called us.
+        self.wait_for(lambda: t1.state == t1.States.connected)
+
+        t1.send("hello world")
 
         t1.disconnect()
         self.wait_for(lambda: t1.state == t1.States.disconnected)
+
+        if socketType == socket.SOCK_DGRAM:
+            # Stream connections will tear both sides down, but datagram ones
+            # are oblivious.
+            t2.disconnect()
+
         self.wait_for(lambda: t2.state == t2.States.disconnected)
 
         log.debug("Handle data.")
@@ -120,7 +149,9 @@ class TestFSM(unittest.TestCase):
         t1.listen()
         t2.connect(t1.localAddress)
         self.wait_for(lambda: t2.state == t2.States.connected)
-        self.wait_for(lambda: t1.state == t1.States.connected)
+
+        if socketType == socket.SOCK_STREAM:
+            self.wait_for(lambda: t1.state == t1.States.connected)
 
         log.debug("Send a message and a bit.")
         expected_bytes[0] = "hello "
@@ -129,14 +160,19 @@ class TestFSM(unittest.TestCase):
             lambda: received_bytes[0] == bytearray("hello "),
             timeout=10)
 
+        self.wait_for(lambda: t1.state == t1.States.connected)
+
         log.debug("Send the rest of it.")
         expected_bytes[0] = "boss "
         t2.send("oss ")
         self.wait_for(lambda: received_bytes == [bytearray("boss ")])
 
         t2.disconnect()
-        self.wait_for(lambda: t1.state == t1.States.disconnected)
         self.wait_for(lambda: t2.state == t2.States.disconnected)
+
+        if socketType == socket.SOCK_DGRAM:
+            t1.disconnect()
+        self.wait_for(lambda: t1.state == t1.States.disconnected)
 
         log.debug("Done.")
 

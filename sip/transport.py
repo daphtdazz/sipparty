@@ -22,6 +22,7 @@ import threading
 import time
 import collections
 import logging
+import select
 import _util
 import fsm
 
@@ -170,8 +171,8 @@ class TransportFSM(fsm.FSM):
     #
     family = _util.DerivedProperty(
         "_tfsm_family", lambda val: val in (socket.AF_INET, socket.AF_INET6))
-    type = _util.DerivedProperty(
-        "_tfsm_type",
+    socketType = _util.DerivedProperty(
+        "_tfsm_socketType",
         lambda val: val in (socket.SOCK_STREAM, socket.SOCK_DGRAM))
 
     localAddress = _util.DerivedProperty("_tfsm_localAddress")
@@ -184,7 +185,7 @@ class TransportFSM(fsm.FSM):
         lambda val: isinstance(val, collections.Callable))
     remoteAddress = _util.DerivedProperty("_tfsm_remoteAddressTuple")
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, socketType=socket.SOCK_STREAM, **kwargs):
 
         # The transport FSM is a root level independent FSM that schedules
         # its own work on a background thread, and to do this it uses the
@@ -192,10 +193,10 @@ class TransportFSM(fsm.FSM):
         assert ("asynchronous_timers" not in kwargs or
                 kwargs["asynchronous_timers"])
         kwargs["asynchronous_timers"] = True
-        super(TransportFSM, self).__init__(*args, **kwargs)
+        super(TransportFSM, self).__init__(**kwargs)
 
         self._tfsm_family = socket.AF_INET
-        self._tfsm_type = socket.SOCK_STREAM
+        self.socketType = socketType
 
         la = self.__dict__["_tfsm_localAddress"] = [None, 0, 0, 0]
         self._tfsm_remoteAddressTuple = None
@@ -212,10 +213,14 @@ class TransportFSM(fsm.FSM):
         # call on a socket if you close it from a different thread. So need
         # to use non-blocking sockets so that the accept loop can keep
         # checking whether the socket is still valid.
+        #
+        # This is also used for Datagram (UDP) sockets which use select to
+        # wait for connections.
         self._tfsm_acceptSocketTimeout = 0.1
 
     # !!! These could be improved.
-    @fsm.block_until_states((States.error, States.listening))
+    @fsm.block_until_states((
+        States.error, States.listening, States.connected))
     def listen(self, address=None, port=None):
         if address is not None:
             self.localAddress = address
@@ -254,7 +259,7 @@ class TransportFSM(fsm.FSM):
         log.info("Connect to %r.", addr_tuple)
 
         fam = self.family
-        typ = self.type
+        typ = self.socketType
         adr = self._tfsm_localAddress
         prt = self._tfsm_localAddressPort
 
@@ -278,7 +283,7 @@ class TransportFSM(fsm.FSM):
     def createListen(self):
         try:
             self._tfsm_listenSck = GetBoundSocket(
-                self.family, self.type, self._tfsm_localAddress)
+                self.family, self.socketType, self._tfsm_localAddress)
         except Exception as exc:
             log.exception("Exception getting passive socket.")
             self.hit(self.Inputs.error,
@@ -318,6 +323,7 @@ class TransportFSM(fsm.FSM):
         sck = self._tfsm_activeSck
 
         log.info("send\n>>>>>\n%s\n>>>>>", data)
+
         sent_bytes = sck.send(data)
         if sent_bytes != datalen:
             self.error("Failed to send %d bytes of data." %
@@ -350,7 +356,7 @@ class TransportFSM(fsm.FSM):
             return
 
         family = self.family
-        sck_type = self.type
+        sck_type = self.socketType
         address = self._tfsm_localAddress
         remote_address = self._tfsm_remoteAddressTuple
 
@@ -368,25 +374,35 @@ class TransportFSM(fsm.FSM):
 
     def startListening(self):
 
-        log.debug("STREAM socket so block to accept a connection.")
-        startListen = _util.Clock()
-        nextLog = startListen + 1
-
         lsck = self._tfsm_listenSck
 
         if lsck is None:
             log.debug("Listen has been cancelled.")
             return
 
+        # UDP socket.
         if lsck.type == socket.SOCK_DGRAM:
-            raise ValueError("DGRAM socket (UDP) support not "
-                             "implemented.")
+            log.debug("Datagram socket; wait for data on the socket.")
 
-        now = _util.Clock()
-        if now > nextLog:
-            log.debug("Still waiting on %r to accept...",
-                      self.localAddress)
-            nextLog = now + 1
+            fd = lsck.fileno()
+            rsrcs, _, esrcs = select.select(
+                [fd], [], [fd], self._tfsm_acceptSocketTimeout)
+            if len(esrcs):
+                self.hit(self.Inputs.error,
+                         "Socket error on Datagram listen socket.")
+                return
+
+            if len(rsrcs) == 0:
+                log.debug("No datagram yet, go around.")
+                return 0
+
+            log.debug("Data! We can get connected.")
+            self._tfsm_activeSck = self._tfsm_listenSck
+            self.hit(self.Inputs.connected)
+            return
+
+        # TCP socket.
+        log.debug("Stream sockets: try and accept.")
 
         try:
             conn, addr = lsck.accept()
@@ -473,6 +489,13 @@ class TransportFSM(fsm.FSM):
         address = (
             address if address is not None else self._tfsm_remoteAddressTuple)
         byteslen = len(bytes)
+
+        if self._tfsm_remoteAddressTuple is None:
+            # We have not yet learnt our interlocutor's address because we
+            # are using datagram transport. Learn it.
+            assert self.socketType == socket.SOCK_DGRAM
+            sck.connect(address)
+            self._tfsm_remoteAddressTuple = address
 
         if byteslen > 0:
             log.info(" received from %r\n<<<<<\n%s\n<<<<<", address, bytes)

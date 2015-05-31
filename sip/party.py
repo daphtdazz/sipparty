@@ -326,7 +326,7 @@ class Party(vb.ValueBinder):
         self._pt_outboundRequest = msg
 
         msg.viaheader.field.transport = transport.SockTypeName(
-            tp.type)
+            tp.socketType)
 
         try:
             tp.send(str(msg))
