@@ -130,6 +130,8 @@ class TransportFSM(fsm.FSM):
         A = cls.Actions
         Add = cls.addTransition
 
+        Add(S.disconnected, I.disconnect, S.disconnected)
+
         # Transitions when connecting out.
         Add(S.disconnected, I.connect, S.connecting,  # Start connecting.
             action=A.createConnect,
@@ -404,6 +406,34 @@ class TransportFSM(fsm.FSM):
             return
 
         log.debug("Start listening done.")
+
+    #
+    # =================== MAGIC METHODS ======================================
+    #
+    def __del__(self):
+
+        self.hit(self.Inputs.disconnect)
+        acts = self._tfsm_activeSck
+
+        scks = (acts, self._tfsm_listenSck)
+        scks = [sck for sck in scks if sck is not None]
+        for sck in scks:
+            try:
+                sck.shutdown(socket.SHUT_RDWR)
+            except socket.error:
+                pass
+        for sck in scks:
+            try:
+                sck.close()
+            except socket.error:
+                pass
+
+        sp = super(TransportFSM, self)
+        if hasattr(sp, "__del__"):
+            try:
+                sp.__del__()
+            except NameError:
+                log.exception("NameError calling super.__del__.")
 
     #
     # =================== INTERNAL ===========================================

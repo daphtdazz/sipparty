@@ -196,7 +196,7 @@ class Party(vb.ValueBinder):
         self.theirTag = None
 
     #
-    # =================== INTERNAL ===========================================
+    # =================== MAGIC METHODS ======================================
     #
     def __getattr__(self, attr):
 
@@ -252,6 +252,9 @@ class Party(vb.ValueBinder):
                 "{attr!r}."
                 "".format(**locals()))
 
+    #
+    # =================== INTERNAL METHODS ===================================
+    #
     def _pt_messageConsumer(self, message):
         log.debug("Received a %r message.", message.type)
         if self.theirTag is None:
@@ -317,7 +320,7 @@ class Party(vb.ValueBinder):
         msg = getattr(Message, message_type)()
 
         # Hook it onto the outbound message. This does all the work of setting
-        # attributes from ourselve as per our bindings.
+        # attributes from ourself as per our bindings.
         self._pt_outboundRequest = msg
 
         msg.viaheader.field.transport = transport.SockTypeName(
@@ -357,6 +360,10 @@ class Party(vb.ValueBinder):
             del msg
 
     def _pt_stateError(self, message):
+        self._pt_reset()
+        raise UnexpectedState(message)
+
+    def _pt_reset(self):
+        self._pt_transport.disconnect()
         if self.scenario is not None:
             self.scenario.reset()
-        raise UnexpectedState(message)

@@ -202,10 +202,10 @@ class ValueBinder(object):
 
     def __del__(self):
         """We need to remove all our bindings."""
+        self._vb_unbindAllCondition()
         sp = super(ValueBinder, self)
         if hasattr(sp, "__del__"):
             sp.__del__()
-        self._vb_unbindAllCondition()
 
     #
     # =================== INTERNAL METHODS ===================================

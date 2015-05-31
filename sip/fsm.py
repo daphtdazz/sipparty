@@ -549,6 +549,10 @@ class FSM(object):
             if self._fsm_thread is not threading.currentThread():
                 self._fsm_thread.join()
 
+        sp = super(FSM, self)
+        if hasattr(sp, "__del__"):
+            sp.__del__()
+
     def __str__(self):
         return "\n".join([line for line in self._fsm_strgen()])
 

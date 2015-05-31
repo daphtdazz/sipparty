@@ -38,6 +38,7 @@ import select
 import sys
 import logging
 import _util
+import sip
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -49,7 +50,7 @@ class _FDSource(object):
         if not (isinstance(selectable, int) or hasattr(selectable, "fileno")):
             raise ValueError(
                 "FD object %r is not selectable (is an int or implements "
-                "fileno())." % fd)
+                "fileno())." % selectable)
 
         super(_FDSource, self).__init__()
         self._fds_selectable = selectable
@@ -131,26 +132,54 @@ class RetryThread(threading.Thread):
         owner's `__del__` method.
         """
         wait = self._rthr_noWorkWait
-        while not self._rthr_cancelled and self._rthr_masterThread.isAlive():
-            rsrcs = self._rthr_fdSources.keys()
-            log.debug("Thread not cancelled, next retry times: %r, wait: %f "
-                      "on %r. Master thread is alive: %r.",
-                      self._rthr_retryTimes, wait, rsrcs,
+        select_bad_fd_count = 0
+        while self._rthr_shouldKeepRunning():
+
+            log.debug("%s not cancelled, next retry times: %r, wait: %f. "
+                      "Master thread is alive: %r.",
+                      self, self._rthr_retryTimes, wait,
                       self._rthr_masterThread.isAlive())
 
             if self._rthr_cancelled:
-                log.debug("Thread %r cancelled.")
+                log.debug("%s cancelled.", self)
                 break
 
             if (self._rthr_masterThread is not None and
                     not self._rthr_masterThread.isAlive()):
-                log.debug("Master thread no longer alive.")
+                log.debug("%s's master thread no longer alive.", self)
                 break
 
-            rfds, wfds, efds = select.select(rsrcs, [], rsrcs, wait)
-            self._rthr_processSelectedReadFDs(rfds)
+            rsrcs = dict(self._rthr_fdSources)
+            rsrckeys = rsrcs.keys()
+            log.debug("%s wait on %r.", self, rsrckeys)
+            try:
+                rfds, wfds, efds = select.select(
+                    rsrckeys, [], rsrckeys, wait)
+                select_bad_fd_count = 0
+            except select.error:
+                # One of the FDs is bad... in general users should remove file
+                # descriptors before shutting them down, and we can't tell
+                # which has failed anyway, so we should just be able to
+                # continue and find that the FD has been removed from the
+                # list.
+                log.debug(
+                    "%s one of %r is a bad file descriptor.", self, rsrckeys)
+                select_bad_fd_count += 1
+                if select_bad_fd_count > 10:
+                    # Doesn't seem to be clearing, stop.
+                    raise
+
+                if select_bad_fd_count == 5:
+                    log.warning(
+                        "%s one of %r is a bad file descriptor: error hit %r "
+                        "times in a row...", select_bad_fd_count, rsrckeys)
+                continue
+
+            log.debug("%s process %r, %r, %r", self, rfds, wfds, efds)
+            self._rthr_processSelectedReadFDs(rfds, rsrcs)
 
             # Check timers.
+            log.debug("%s check timers", self)
             with self._rthr_nextTimesLock:
                 numrts = len(self._rthr_retryTimes)
                 if numrts == 0:
@@ -167,19 +196,20 @@ class RetryThread(threading.Thread):
 
                 if next > now:
                     wait = next - now
-                    log.debug("Next try in %r seconds", wait)
+                    log.debug("%s next try in %r seconds", self, wait)
                     continue
 
                 del self._rthr_retryTimes[0]
 
             # We have some work to do.
-            log.debug("Retrying as next %r <= now %r", next, now)
+            log.debug("%s retrying as next %r <= now %r", self, next, now)
             action = self._rthr_action
             if action is not None:
                 try:
                     action()
                 except Exception as exc:
-                    log.exception("Exception doing action %r:", action)
+                    log.exception(
+                        "%s exception doing action %r:", self, action)
 
                     # The exception holds onto information about the stack,
                     # which means holding onto some of the objects on the
@@ -193,7 +223,7 @@ class RetryThread(threading.Thread):
             wait = 0
             self._rthr_noWorkSequence = 0
 
-        log.debug("Thread exiting.")
+        log.debug("%s thread exiting.", self)
 
     @_util.OnlyWhenLocked
     def addInputFD(self, fd, action):
@@ -215,6 +245,7 @@ class RetryThread(threading.Thread):
         if fd not in self._rthr_fdSources:
             raise ValueError(
                 "FD %r cannot be removed as it is not on the thread." % fd)
+        log.debug("RM FD %r", fd)
         del self._rthr_fdSources[fd]
         self._rthr_triggerSpin()
 
@@ -250,10 +281,14 @@ class RetryThread(threading.Thread):
     #
     # INTERNAL METHODS
     #
-    def _rthr_processSelectedReadFDs(self, rfds):
+    def _rthr_processSelectedReadFDs(self, rfds, rsrcs):
         for rfd in rfds:
-            fdsrc = self._rthr_fdSources[rfd]
+            fdsrc = rsrcs[rfd]
             fdsrc.newDataAvailable()
 
     def _rthr_triggerSpin(self):
+        log.debug("%r Trigger spin", self)
         self._rthr_triggerRunFD.send('1')
+
+    def _rthr_shouldKeepRunning(self):
+        return not self._rthr_cancelled and self._rthr_masterThread.isAlive()

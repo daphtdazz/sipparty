@@ -1,5 +1,11 @@
 # Programming with sipparty #
 
+## TODO ##
+
+-   Synchronous `hit` on asynchronous FSM. 
+-   Singletonise the retrythread. 
+-   ?? Make retry thread smarter about owning thread; allow it not to be owned.
+
 ## Message ##
 
 Access headers on a message using message.<type>Header.

@@ -44,6 +44,7 @@ class TestParty(unittest.TestCase):
     def setUp(self):
         self._tp_sipPartyLogLevel = sip.party.log.level
         sip.party.log.setLevel(logging.DEBUG)
+        sip.fsm.log.setLevel(logging.DEBUG)
 
     def tearDown(self):
         sip.party.log.setLevel(self._tp_sipPartyLogLevel)
@@ -76,20 +77,22 @@ class TestParty(unittest.TestCase):
             SimpleParty.Scenario._fsm_definitionDictionary[
                 scenario.InitialStateKey])
         p1 = SimpleParty()
+        wp1 = weakref.ref(p1)
 
         log.warning("{ EXPECTING EXCEPTION UnexpectedState")
         p1.sendInvite()
         self.assertRaises(
             sip.party.UnexpectedState,
-            lambda: p1.waitUntilState(
-                p1.States.InCall,
-                error_state=p1.States.Initial))
+            lambda: wp1().waitUntilState(
+                wp1().States.InCall,
+                error_state=wp1().States.Initial))
         log.warning("} EXPECTING EXCEPTION UnexpectedState")
         p2 = SimpleParty()
+        wp2 = weakref.ref(p2)
         p2.listen()
         p1.sendInvite(p2)
 
-        _util.WaitFor(lambda: p1.state == p1.States.InCall, 1)
+        _util.WaitFor(lambda: wp1().state == wp1().States.InCall, 1)
         _util.WaitFor(lambda: p2.state == p2.States.InCall, 1)
 
         p1tag = p1.myTag
@@ -101,13 +104,17 @@ class TestParty(unittest.TestCase):
 
         p1.sendBye()
 
-        _util.WaitFor(lambda: p1.state == p1.States.CallEnded, 1)
+        _util.WaitFor(lambda: wp1().state == wp1().States.CallEnded, 1)
         _util.WaitFor(lambda: p2.state == p2.States.CallEnded, 1)
 
         self.assertEqual(p1tag, p1.myTag)
         self.assertEqual(p2tag, p1.theirTag)
         self.assertEqual(p1tag, p2.theirTag)
         self.assertEqual(p2tag, p2.myTag)
+
+        wtp = weakref.ref(p1._pt_transport)
+        del p1
+        _util.WaitFor(lambda: wtp() is None, 1)
 
     def testDudParty(self):
 
