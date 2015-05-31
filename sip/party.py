@@ -187,6 +187,9 @@ class Party(vb.ValueBinder):
                         self.__class__.__name__, timeout, state))
             time.sleep(poll_interval)
 
+    def reset(self):
+        self._pt_reset()
+
     #
     # =================== DELEGATE IMPLEMENTATIONS ===========================
     #
@@ -260,12 +263,16 @@ class Party(vb.ValueBinder):
         if self.theirTag is None:
             if message.isrequest():
                 self.theirTag = message.FromHeader.field.parameters.tag
+                self.calleeAOR = message.FromHeader.field.value.uri.aor
             else:
                 self.theirTag = message.ToHeader.field.parameters.tag
+                self.calleeAOR = message.ToHeader.field.value.uri.aor
         self.scenario.hit(message.type, message)
 
     def _pt_send(self, message_type, callee=None, contactAddress=None):
         log.debug("Send message of type %r to %r.", message_type, callee)
+
+        tp = self._pt_transport
 
         if self.myTag is None:
             self.myTag = param.TagParam()
@@ -290,8 +297,15 @@ class Party(vb.ValueBinder):
 
         if contactAddress is None:
             if callee is not None and hasattr(callee, "localAddress"):
+                # Looks like we've been passed another sip party to connect
+                # to.
                 contactAddress = callee.localAddress
+            elif tp.state == tp.States.connected:
+                # We're already connected, so use the transport's remote
+                # address.
+                contactAddress = tp.remoteAddress
             else:
+                # Otherwise try and use the address from the AOR.
                 contactAddress = calleeAOR.host.addrTuple()
 
         if not isinstance(calleeAOR, components.AOR):
@@ -303,19 +317,7 @@ class Party(vb.ValueBinder):
                 raise ValueError(
                     "Message recipient is not an AOR: %r." % callee)
 
-        if self._pt_transport.state != self._pt_transport.States.connected:
-            self._pt_transport.connect(contactAddress)
-            _util.WaitFor(
-                lambda:
-                    self._pt_transport.state in
-                    (self._pt_transport.States.connected,
-                     self._pt_transport.States.error),
-                10.0)
-
-        if self._pt_transport.state == self._pt_transport.States.error:
-            self._pt_stateError(
-                "Got an error attempting to connect to %r @ %r." % (
-                    calleeAOR, contactAddress))
+        self._pt_connectTransport(contactAddress)
 
         msg = getattr(Message, message_type)()
 
@@ -324,10 +326,10 @@ class Party(vb.ValueBinder):
         self._pt_outboundRequest = msg
 
         msg.viaheader.field.transport = transport.SockTypeName(
-            self._pt_transport.type)
+            tp.type)
 
         try:
-            self._pt_transport.send(str(msg))
+            tp.send(str(msg))
         finally:
             # Important to delete the message because it is bound to our
             # properties, and we will have binding conflicts with later
@@ -367,3 +369,20 @@ class Party(vb.ValueBinder):
         self._pt_transport.disconnect()
         if self.scenario is not None:
             self.scenario.reset()
+
+    def _pt_connectTransport(self, remoteAddress):
+
+        tp = self._pt_transport
+        if tp.state != tp.States.connected:
+            tp.connect(remoteAddress)
+            _util.WaitFor(lambda: tp.state in (
+                tp.States.connected,
+                tp.States.error), 10.0)
+
+        assert tp.remoteAddress[:2] == remoteAddress[:2], (
+            "%r != %r" % (tp.remoteAddress, remoteAddress))
+
+        if tp.state == tp.States.error:
+            self._pt_stateError(
+                "Got an error attempting to connect to %r." % (
+                    remoteAddress))

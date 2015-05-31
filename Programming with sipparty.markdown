@@ -5,6 +5,7 @@
 -   Synchronous `hit` on asynchronous FSM. 
 -   Singletonise the retrythread. 
 -   ?? Make retry thread smarter about owning thread; allow it not to be owned.
+-   ?? FSM should probably not switch state if the action raises.
 
 ## Message ##
 

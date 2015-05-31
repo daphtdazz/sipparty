@@ -182,6 +182,7 @@ class TransportFSM(fsm.FSM):
     byteConsumer = _util.DerivedProperty(
         "_tfsm_byteConsumer",
         lambda val: isinstance(val, collections.Callable))
+    remoteAddress = _util.DerivedProperty("_tfsm_remoteAddressTuple")
 
     def __init__(self, *args, **kwargs):
 

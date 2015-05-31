@@ -116,6 +116,20 @@ class TestParty(unittest.TestCase):
         del p1
         _util.WaitFor(lambda: wtp() is None, 1)
 
+        # Test that we can re-use existing parties.
+        p2.reset()
+        p1 = SimpleParty()
+        wp1 = weakref.ref(p1)
+        p1.listen()
+        p2.sendInvite(p1)
+        _util.WaitFor(lambda: wp1().state == wp1().States.InCall, 1)
+        _util.WaitFor(lambda: p2.state == p2.States.InCall, 1)
+
+        p1.sendBye()
+
+        _util.WaitFor(lambda: wp1().state == wp1().States.CallEnded, 1)
+        _util.WaitFor(lambda: p2.state == p2.States.CallEnded, 1)
+
     def testDudParty(self):
 
         self.assertRaises(
