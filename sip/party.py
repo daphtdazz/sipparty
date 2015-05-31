@@ -41,6 +41,7 @@ import param
 __all__ = ('Party',)
 
 log = logging.getLogger(__name__)
+log.setLevel(logging.INFO)
 
 
 class PartyException(Exception):
@@ -98,7 +99,7 @@ class Party(vb.ValueBinder):
     ]
     vb_dependencies = [
         ("scenario", ["state"]),
-        ("_pt_transport", ["localAddress"])]
+        ("_pt_transport", ["localAddress", "listen", "connect"])]
 
     Scenario = None
 
@@ -278,7 +279,6 @@ class Party(vb.ValueBinder):
             self.calleeAOR = calleeAOR
         else:
             if self.calleeAOR is None:
-                self.scenario.reset()
                 self._pt_stateError(
                     "Send message for %r instance (aor: %s) passed no "
                     "aor." % (

@@ -26,6 +26,7 @@ import _util
 import fsm
 
 log = logging.getLogger(__name__)
+log.setLevel(logging.INFO)
 
 
 class BadNetwork(Exception):
@@ -100,6 +101,9 @@ class TransportFSM(fsm.FSM):
     """Controls a socket connection
     """
 
+    #
+    # =================== CLASS INTERFACE ====================================
+    #
     States = _util.Enum(
         ("disconnected",
          "startListen",
@@ -159,6 +163,24 @@ class TransportFSM(fsm.FSM):
         # Start disconnected.
         cls.setState(S.disconnected)
 
+    #
+    # =================== INSTANCE INTERFACE =================================
+    #
+    family = _util.DerivedProperty(
+        "_tfsm_family", lambda val: val in (socket.AF_INET, socket.AF_INET6))
+    type = _util.DerivedProperty(
+        "_tfsm_type",
+        lambda val: val in (socket.SOCK_STREAM, socket.SOCK_DGRAM))
+
+    localAddress = _util.DerivedProperty("_tfsm_localAddress")
+    localAddressPort = _util.DerivedProperty(
+        "_tfsm_localAddressPort",
+        lambda val: 0 <= val <= 0xffff)
+    localAddressHost = _util.DerivedProperty("_tfsm_localAddressHost")
+    byteConsumer = _util.DerivedProperty(
+        "_tfsm_byteConsumer",
+        lambda val: isinstance(val, collections.Callable))
+
     def __init__(self, *args, **kwargs):
 
         # The transport FSM is a root level independent FSM that schedules
@@ -189,27 +211,13 @@ class TransportFSM(fsm.FSM):
         # checking whether the socket is still valid.
         self._tfsm_acceptSocketTimeout = 0.1
 
-    #
-    # =================== PUBLIC PROPERTIES ==================================
-    #
-    family = _util.DerivedProperty(
-        "_tfsm_family", lambda val: val in (socket.AF_INET, socket.AF_INET6))
-    type = _util.DerivedProperty(
-        "_tfsm_type",
-        lambda val: val in (socket.SOCK_STREAM, socket.SOCK_DGRAM))
-
-    localAddress = _util.DerivedProperty("_tfsm_localAddress")
-    localAddressPort = _util.DerivedProperty(
-        "_tfsm_localAddressPort",
-        lambda val: 0 <= val <= 0xffff)
-    localAddressHost = _util.DerivedProperty("_tfsm_localAddressHost")
-    byteConsumer = _util.DerivedProperty(
-        "_tfsm_byteConsumer",
-        lambda val: isinstance(val, collections.Callable))
-
     # !!! These could be improved.
     @fsm.block_until_states((States.error, States.listening))
-    def listen(self):
+    def listen(self, address=None, port=None):
+        if address is not None:
+            self.localAddress = address
+        if port is not None:
+            self.localAddressPort = port
         self.hit(self.Inputs.listen)
 
     @fsm.block_until_states((

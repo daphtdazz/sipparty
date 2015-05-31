@@ -31,7 +31,7 @@ import retrythread
 import fsmtimer
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig()
     log = logging.getLogger()
 else:
     log = logging.getLogger(__name__)
@@ -492,6 +492,7 @@ class FSM(object):
                  self.delegate
                  if hasattr(self, "delegate") else None))
 
+        weak_action.__name__ = "weak_action_" + six.binary_type(action)
         return weak_action
 
     @_util.class_or_instance_method

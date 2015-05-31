@@ -35,7 +35,7 @@ Simple = {
     },
     "InviteSent": {
         4: {
-            tks.NewState: isk
+            tks.NewState: "CallEnded"
         },
         200: {
             tks.NewState: "InCall"

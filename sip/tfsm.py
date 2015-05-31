@@ -62,6 +62,12 @@ class TestFSM(unittest.TestCase):
         self.retry = 0
         self.cleanup = 0
 
+        self._tf_FSMLogLevel = fsm.log.level
+        fsm.log.setLevel(logging.DEBUG)
+
+    def tearDown(self):
+        fsm.log.setLevel(self._tf_FSMLogLevel)
+
     def testSimple(self):
         nf = fsm.FSM(name="testfsm")
         self.assertEqual(

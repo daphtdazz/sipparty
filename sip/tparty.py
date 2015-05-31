@@ -41,6 +41,13 @@ tks = scenario.TransitionKeys
 
 class TestParty(unittest.TestCase):
 
+    def setUp(self):
+        self._tp_sipPartyLogLevel = sip.party.log.level
+        sip.party.log.setLevel(logging.DEBUG)
+
+    def tearDown(self):
+        sip.party.log.setLevel(self._tp_sipPartyLogLevel)
+
     def testIncompleteParty(self):
         sipclient = sipscenarios.SimpleParty()
         tp = weakref.ref(sipclient._pt_transport)
@@ -69,14 +76,17 @@ class TestParty(unittest.TestCase):
             SimpleParty.Scenario._fsm_definitionDictionary[
                 scenario.InitialStateKey])
         p1 = SimpleParty()
+
+        log.warning("{ EXPECTING EXCEPTION UnexpectedState")
         p1.sendInvite()
         self.assertRaises(
             sip.party.UnexpectedState,
             lambda: p1.waitUntilState(
                 p1.States.InCall,
                 error_state=p1.States.Initial))
+        log.warning("} EXPECTING EXCEPTION UnexpectedState")
         p2 = SimpleParty()
-        p2._pt_transport.listen()
+        p2.listen()
         p1.sendInvite(p2)
 
         _util.WaitFor(lambda: p1.state == p1.States.InCall, 1)

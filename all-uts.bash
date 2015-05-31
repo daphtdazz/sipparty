@@ -22,7 +22,7 @@ exec {stdout}>&1
 exec 1>&2
 
 error_exit () {
-    rv = $1
+    rv=$1
     shift
     echo "$@" >&2
     exit ${rv}
