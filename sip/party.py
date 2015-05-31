@@ -23,6 +23,7 @@ import copy
 import weakref
 import re
 import time
+import socket
 import _util
 import transport
 import siptransport
@@ -128,7 +129,9 @@ class Party(vb.ValueBinder):
     #
     aor = _util.DerivedProperty("_pt_aor")
 
-    def __init__(self, username=None, host=None, displayname=None):
+    def __init__(
+            self, username=None, host=None, displayname=None,
+            socketType=socket.SOCK_STREAM):
         """Create the party.
         """
         super(Party, self).__init__()
@@ -147,7 +150,8 @@ class Party(vb.ValueBinder):
             self.aor.host = host
 
         # Set up the transport.
-        self._pt_transport = siptransport.SipTransportFSM()
+        self._pt_transport = siptransport.SipTransportFSM(
+            socketType=socketType)
 
         # Currently don't do listen until required to.
         # self._pt_transport.listen()

@@ -50,8 +50,8 @@ class SipTransportFSM(transport.TransportFSM):
         "_tsipfsm_messageConsumer",
         lambda val: isinstance(val, collections.Callable))
 
-    def __init__(self):
-        super(SipTransportFSM, self).__init__()
+    def __init__(self, **kwargs):
+        super(SipTransportFSM, self).__init__(**kwargs)
 
         self._tsipfsm_messageConsumer = None
         self._tsipfsm_messages = []

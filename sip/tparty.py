@@ -24,6 +24,7 @@ import time
 import logging
 import weakref
 import unittest
+import socket
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.WARNING)
@@ -57,7 +58,13 @@ class TestParty(unittest.TestCase):
         _util.WaitFor(lambda: tp() is None, 2)
         self.assertIsNone(tp())
 
-    def testBasicParty(self):
+    def testBasicPartyTCP(self):
+        self.subTestBasicParty(socket.SOCK_STREAM)
+
+    def testBasicPartyUDP(self):
+        self.subTestBasicParty(socket.SOCK_DGRAM)
+
+    def subTestBasicParty(self, socketType):
 
         class SimpleParty(sip.party.Party):
             pass
@@ -76,7 +83,7 @@ class TestParty(unittest.TestCase):
             'invite' in
             SimpleParty.Scenario._fsm_definitionDictionary[
                 scenario.InitialStateKey])
-        p1 = SimpleParty()
+        p1 = SimpleParty(socketType=socketType)
         wp1 = weakref.ref(p1)
 
         log.warning("{ EXPECTING EXCEPTION UnexpectedState")
@@ -87,7 +94,7 @@ class TestParty(unittest.TestCase):
                 wp1().States.InCall,
                 error_state=wp1().States.Initial))
         log.warning("} EXPECTING EXCEPTION UnexpectedState")
-        p2 = SimpleParty()
+        p2 = SimpleParty(socketType=socketType)
         wp2 = weakref.ref(p2)
         p2.listen()
         p1.sendInvite(p2)
@@ -118,7 +125,7 @@ class TestParty(unittest.TestCase):
 
         # Test that we can re-use existing parties.
         p2.reset()
-        p1 = SimpleParty()
+        p1 = SimpleParty(socketType=socketType)
         wp1 = weakref.ref(p1)
         p1.listen()
         p2.sendInvite(p1)
