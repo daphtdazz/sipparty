@@ -33,7 +33,7 @@ from header import Header
 import parse
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.INFO)
+bytes = six.binary_type
 
 
 @six.add_metaclass(
@@ -248,7 +248,7 @@ class Message(vb.ValueBinder):
         components.append(b"")  # need a newline at the end.
 
         log.debug("Last line: %r", components[-1])
-        return prot.EOL.join([six.binary_type(_cp) for _cp in components])
+        return prot.EOL.join([bytes(_cp) for _cp in components])
 
     def __getattr__(self, attr):
         """Get some part of the message. E.g. get a particular header like:

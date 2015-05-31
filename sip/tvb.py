@@ -22,12 +22,13 @@ import os
 import re
 import logging
 import unittest
-import pdb
 
-# Get the root logger.
+# If main get the root logger.
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     log = logging.getLogger()
+else:
+    log = logging.getLogger(__name__)
 
 import sip
 

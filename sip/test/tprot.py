@@ -23,8 +23,11 @@ import re
 import logging
 import unittest
 
-logging.basicConfig(level=logging.DEBUG)
-log = logging.getLogger()
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
+    log = logging.getLogger()
+else:
+    log = logging.getLogger(__name__)
 bytes = six.binary_type
 
 # Hack so we can always import the code we're testing.

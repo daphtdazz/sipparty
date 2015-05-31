@@ -27,7 +27,6 @@ import weakref
 import collections
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.INFO)
 
 TransitionKeys = copy.copy(fsm.TransitionKeys)
 tks = TransitionKeys  # Short alias

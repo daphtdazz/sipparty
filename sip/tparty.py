@@ -27,7 +27,7 @@ import unittest
 import socket
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.WARNING)
+    logging.basicConfig()
     log = logging.getLogger()
 else:
     log = logging.getLogger(__name__)

@@ -21,11 +21,7 @@ import collections
 import logging
 import _util
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
-    log = logging.getLogger()
-else:
-    log = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class TimerError(Exception):

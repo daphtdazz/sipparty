@@ -6,14 +6,11 @@ import sip._util
 import logging
 
 log = logging.getLogger()
-log.setLevel(logging.DEBUG)
-logging.basicConfig(level=logging.DEBUG)
+log1 = logging.getLogger("a")
 
+logging.basicConfig()
 
-def method():
-    log.info("method")
-
-thr = threading.Thread(target=method)
-thr.start()
-
-time.sleep(1)
+log.warning("Warning from root")
+log.info("Warning from root")
+log.debug("Hello from root")
+log1.debug("Hello from a")

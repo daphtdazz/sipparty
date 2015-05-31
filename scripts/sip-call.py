@@ -21,12 +21,10 @@ limitations under the License.
 import argparse
 import logging
 import time
-logging.basicConfig()
-
 import sipscenarios
 
+logging.basicConfig()
 log = logging.getLogger()
-log.setLevel(logging.DEBUG)
 
 
 class SipCallArgs(argparse.ArgumentParser):

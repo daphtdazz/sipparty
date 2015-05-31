@@ -27,7 +27,7 @@ import _util
 import fsm
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.INFO)
+bytes = six.binary_type
 
 
 class BadNetwork(Exception):
@@ -485,10 +485,10 @@ class TransportFSM(fsm.FSM):
         """This method is registered when connected with the FSM's thread to
         be called when there is data available on the socket.
         """
-        bytes, address = sck.recvfrom(self._tfsm_receiveSize)
+        data, address = sck.recvfrom(self._tfsm_receiveSize)
         address = (
             address if address is not None else self._tfsm_remoteAddressTuple)
-        byteslen = len(bytes)
+        datalen = len(data)
 
         if self._tfsm_remoteAddressTuple is None:
             # We have not yet learnt our interlocutor's address because we
@@ -497,25 +497,25 @@ class TransportFSM(fsm.FSM):
             sck.connect(address)
             self._tfsm_remoteAddressTuple = address
 
-        if byteslen > 0:
-            log.info(" received from %r\n<<<<<\n%s\n<<<<<", address, bytes)
+        if datalen > 0:
+            log.info(" received from %r\n<<<<<\n%s\n<<<<<", address, data)
 
-        self._tfsm_buffer.extend(bytes)
+        self._tfsm_buffer.extend(data)
 
         if self._tfsm_byteConsumer is None:
-            log.debug("No consumer; dumping bytes: %r.", self._tfsm_buffer)
+            log.debug("No consumer; dumping data: %r.", self._tfsm_buffer)
             del self._tfsm_buffer[:]
 
         else:
             while len(self._tfsm_buffer) > 0:
-                bytes_consumed = self._tfsm_byteConsumer(
-                    six.binary_type(self._tfsm_buffer))
-                if bytes_consumed == 0:
+                data_consumed = self._tfsm_byteConsumer(
+                    bytes(self._tfsm_buffer))
+                if data_consumed == 0:
                     log.debug("Consumer has used as much as it can.")
                     break
-                log.debug("Consumer consumed %d more bytes.", bytes_consumed)
-                del self._tfsm_buffer[:bytes_consumed]
+                log.debug("Consumer consumed %d more data.", data_consumed)
+                del self._tfsm_buffer[:data_consumed]
 
-        if byteslen == 0:
-            log.debug("Received 0 bytes: socket has demurely closed.")
+        if datalen == 0:
+            log.debug("Received 0 data: socket has demurely closed.")
             self.hit(self.Inputs.disconnect)

@@ -31,8 +31,6 @@ import retrythread
 import fsmtimer
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.INFO)
-
 bytes = six.binary_type
 
 
