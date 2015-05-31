@@ -42,6 +42,7 @@ __all__ = ('Party',)
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
+bytes = six.binary_type
 
 
 class PartyException(Exception):
@@ -91,6 +92,9 @@ class Party(vb.ValueBinder):
          "_pt_outboundRequest.ContactHeader.field.value.uri.aor.host"),
         ("_pt_transport.localAddressPort",
          "_pt_outboundRequest.ContactHeader.field.value.uri.aor.port"),
+        ("_pt_transport.socketType",
+         "_pt_outboundRequest.ViaHeader.field.transport",
+         lambda x: transport.SockTypeName(x)),
         ("calleeAOR", "_pt_outboundRequest.startline.uri.aor"),
         ("myTag", "_pt_outboundRequest.FromHeader.field.parameters.tag"),
         ("theirTag", "_pt_outboundRequest.ToHeader.field.parameters.tag"),
@@ -112,7 +116,7 @@ class Party(vb.ValueBinder):
             cls.__name__, scenario_definition)
 
         for input in SClass.Inputs:
-            if isinstance(input, six.binary_type) and hasattr(cls, input):
+            if isinstance(input, bytes) and hasattr(cls, input):
                 raise KeyError(
                     "Invalid input %r in scenario: class %r uses that as an "
                     "attribute!" % (
@@ -325,11 +329,8 @@ class Party(vb.ValueBinder):
         # attributes from ourself as per our bindings.
         self._pt_outboundRequest = msg
 
-        msg.viaheader.field.transport = transport.SockTypeName(
-            tp.socketType)
-
         try:
-            tp.send(str(msg))
+            tp.send(bytes(msg))
         finally:
             # Important to delete the message because it is bound to our
             # properties, and we will have binding conflicts with later

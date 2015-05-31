@@ -35,12 +35,14 @@ then
     error_exit 1 "${DIR_SIP} directory not in the current directory."
 fi
 
+failures=0
 for ut in "${DIR_SIP}"/{*,test/*}.py
 do
     echo $ut
     if ! python "${ut}" 2>/dev/null
         then
-        error_exit 2 "  Failed!"
-        break
+            echo "  Failed!" >&2
+	    (( failures++ ))
     fi
 done
+exit ${failures}

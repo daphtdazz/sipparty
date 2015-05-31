@@ -198,6 +198,10 @@ class ValueBinder(object):
                 for topath, bd in six.iteritems(bds):
                     log.debug("Push %s.%s to %s", attr, fromattrattrs,
                               topath)
+                    if ValueBinder.KeyTransformer in bd:
+                        tf = bd[ValueBinder.KeyTransformer]
+                        if tf is not None:
+                            val = tf(val)
                     self._vb_push_value_to_target(val, topath)
 
     def __del__(self):
@@ -323,7 +327,7 @@ class ValueBinder(object):
         target, toattr = self._vb_resolveboundobjectandattr(topath)
         if target is not None and hasattr(target, toattr):
             val = getattr(target, toattr)
-            setattr(self, myattr, val)
+            return val
 
     def _vb_binddirection(self, frompath, topath, parent, transformer,
                           direction):
@@ -380,10 +384,16 @@ class ValueBinder(object):
                 if hasattr(self, fromattr):
                     log.debug("  Has child attr %r", fromattr)
                     val = getattr(self, fromattr)
+                    if transformer is not None:
+                        val = transformer(val)
                     self._vb_push_value_to_target(val, resolvedtopath)
             else:
                 log.debug("Pull value.")
-                self._vb_pull_value_to_self(fromattr, resolvedtopath)
+                val = self._vb_pull_value_to_self(fromattr, resolvedtopath)
+                if transformer is not None:
+                    val = transformer(val)
+
+                setattr(self, fromattr, val)
 
         log.debug("  %r bindings after bind %r",
                   direction,
