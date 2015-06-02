@@ -168,21 +168,6 @@ class TestProtocol(unittest.TestCase):
                 TestProtocol.cseq_num_pattern, TestProtocol.tag_pattern),
             bytes(new_inv)), repr(bytes(new_inv)))
 
-    def testCall(self):
-
-        caller = sip.Party()
-        callee = sip.Party()
-
-        return
-        caller._sendinvite(callee)
-        callee._respond(200)
-        return
-
-        caller.bye(callee)
-        callee.respond(200)
-
-        return
-
     def testSDP(self):
 
         # Minimal and currently ungodly SDP.

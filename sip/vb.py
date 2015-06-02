@@ -20,7 +20,9 @@ import re
 import weakref
 
 log = logging.getLogger(__name__)
+log.setLevel(logging.WARNING)  # vb is verbose at lower levels.
 bytes = six.binary_type
+iteritems = six.iteritems
 
 
 class BindingException(Exception):
@@ -107,7 +109,8 @@ class ValueBinder(object):
         a.b = g
         >> a.d.e = 5
         """
-        log.debug("Bind %r to %r", frompath, topath)
+        log.info("Bind %r instance attribute %r to %r",
+                 self.__class__.__name__, frompath, topath)
         self._vb_binddirection(
             frompath, topath, None, transformer, self.VB_Forward)
         self._vb_binddirection(
@@ -117,7 +120,8 @@ class ValueBinder(object):
         """Unbind a binding. Raises NoSuchBinding() if the binding does not
         exist."""
 
-        log.debug("Unbind %r -> %r", frompath, topath)
+        log.info("Unbind %r instance attribute %r to %r",
+                 self.__class__.__name__, frompath, topath)
 
         self._vb_unbinddirection(frompath, topath, self.VB_Forward)
         self._vb_unbinddirection(topath, frompath, self.VB_Backward)
@@ -168,7 +172,10 @@ class ValueBinder(object):
                 "Can't set {attr!r} on {self.__class__.__name__!r} instance: "
                 "{exc}".format(**locals()))
         except RuntimeError:
-            print self.__class__.__mro__
+            log.error(
+                "Runtime error setting attribute %r on %r instance to %r. "
+                "MRO is: %r.",
+                attr, self.__class__.__name__, val, self.__class__.__mro__)
             raise
 
         if hasattr(existing_val, "_vb_unbindAllParent"):
@@ -178,10 +185,10 @@ class ValueBinder(object):
             for direction in self.VB_Directions:
                 _, _, _, bs, _ = self._vb_bindingdicts(attr, direction,
                                                        all=True)
-                for subpath, bds in six.iteritems(bs):
+                for subpath, bds in iteritems(bs):
                     if len(subpath) == 0:
                         continue
-                    for topath, bd in six.iteritems(bds):
+                    for topath, bd in iteritems(bds):
                         subtopath = self.VB_PrependParent(topath)
                         tf = bd[self.KeyTransformer]
                         log.debug("%r bind new value %r to %r", direction,
@@ -193,9 +200,9 @@ class ValueBinder(object):
         _, _, _, fbds, _ = self._vb_bindingdicts(attr, self.VB_Forward,
                                                  all=True)
 
-        for fromattrattrs, bds in six.iteritems(fbds):
+        for fromattrattrs, bds in iteritems(fbds):
             if len(fromattrattrs) == 0:
-                for topath, bd in six.iteritems(bds):
+                for topath, bd in iteritems(bds):
                     log.debug("Push %s.%s to %s", attr, fromattrattrs,
                               topath)
                     if ValueBinder.KeyTransformer in bd:
@@ -221,8 +228,8 @@ class ValueBinder(object):
                 _, _, _, bs, _ = self._vb_bindingdicts(
                     attr, direction, all=True)
                 log.debug("  %d bindings through %r", len(bs), attr)
-                for subpath, bds in six.iteritems(dict(bs)):
-                    for topath, bd in six.iteritems(dict(bds)):
+                for subpath, bds in iteritems(dict(bs)):
+                    for topath, bd in iteritems(dict(bds)):
                         toattr, _ = self.VB_PartitionPath(topath)
                         log.debug("  binding %r %r -> %r", attr, subpath,
                                   toattr)

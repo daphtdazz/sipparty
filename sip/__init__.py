@@ -20,6 +20,7 @@ import defaults
 from request import (Request,)
 from header import (Header,)
 from message import (Message,)
+from mediasession import (MediaSession,)
 from party import (Party, NoConnection)
 import sdp
 import scenario
