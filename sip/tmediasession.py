@@ -21,7 +21,8 @@ import six
 import unittest
 import vb
 import sip
-from sip import MediaSession
+from sip import Session
+from sip import mediasession
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
@@ -32,7 +33,7 @@ else:
 bytes = six.binary_type
 
 
-class TestMediaSession(unittest.TestCase):
+class TestSession(sip._util.TestCaseREMixin, unittest.TestCase):
 
     def setUp(self):
         self._ms_level = sip.mediasession.log.level
@@ -41,8 +42,10 @@ class TestMediaSession(unittest.TestCase):
     def tearDown(self):
         sip.mediasession.log.setLevel(self._ms_level)
 
-    def testBasicMediaSession(self):
-        ms = MediaSession("alice")
+    def testBasicSession(self):
+        return
+        ms = Session("alice")
+        ms.addSession()
 
 
 if __name__ == "__main__":

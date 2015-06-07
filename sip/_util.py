@@ -17,19 +17,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import six
-import types
 import collections
 import copy
 import threading
 import time
 import timeit
 import logging
-import pdb
-import vb
 import weakref
+import re
+
+import vb
 
 log = logging.getLogger(__name__)
 bytes = six.binary_type
+itervalues = six.itervalues
 
 # The clock. Defined here so that it can be overridden in the testbed.
 Clock = timeit.default_timer
@@ -93,16 +94,6 @@ class attributesubclassgen(type):
             return type(subclassguess, (cls,), dict(type=name))
 
 
-def upper(key):
-    """A normalizer for Enum, which uppercases the key."""
-    return key.upper()
-
-
-def title(key):
-    """A normalizer for Enum, which titles the key (So-Like-This)."""
-    return key.title()
-
-
 def sipheader(key):
     """Normalizer for SIP headers, which is almost title but not quite."""
     nk = key.title()
@@ -125,25 +116,23 @@ class Enum(set):
     It composes with a list to implement the listy bits.
     """
 
-    def __init__(self, vals=None, normalize=None):
-        self.normalize = normalize
-        super(Enum, self).__init__(*[v for v in [vals] if v is not None])
-        self._en_list = list(*[v for v in [vals] if v is not None])
+    def __init__(self, vals=None, normalize=None, aliases=None):
+        self._en_normalize = normalize
+        self._en_aliases = aliases
+        vlist = list(vals) if vals is not None else []
+        if aliases:
+            for v in itervalues(aliases):
+                if v not in vlist:
+                    vlist.append(v)
+        super(Enum, self).__init__(vlist)
+        self._en_list = vlist
 
-    def __contains__(self, val):
-        if self.normalize is not None:
-            nn = self.normalize(val)
-        else:
-            nn = val
-        rb = super(Enum, self).__contains__(nn)
-        # log.debug("%r in %r: %r", nn, self, rb)
-        return rb
+    def __contains__(self, name):
+        nn = self._en_fixAttr(name)
+        return super(Enum, self).__contains__(nn)
 
-    def __getattr__(self, name):
-        if self.normalize:
-            nn = self.normalize(name)
-        else:
-            nn = name
+    def __getattr__(self, attr):
+        nn = self._en_fixAttr(attr)
         if nn in self:
             return nn
         raise AttributeError(nn)
@@ -164,6 +153,16 @@ class Enum(set):
     def update(self, iterable):
         for item in iterable:
             self.add(item)
+
+    def _en_fixAttr(self, name):
+        if self._en_aliases:
+            if name in self._en_aliases:
+                return self._en_aliases[name]
+
+        if self._en_normalize:
+            return self._en_normalize(name)
+
+        return name
 
 
 class ClassType(object):
@@ -598,3 +597,18 @@ def WaitFor(condition, timeout_s, action_on_timeout=None, resolution=0.0001):
             action_on_timeout()
         else:
             raise Timeout("Timed out waiting for %r" % condition)
+
+
+class TestCaseREMixin(object):
+
+    def assertMatchesPattern(self, value, pattern):
+        cre = re.compile(pattern)
+        mo = cre.match(value)
+        if mo is None:
+            pvalue = self._tcrem_prettyFormat(value)
+            ppatt = self._tcrem_prettyFormat(pattern)
+            self.assertIsNotNone(
+                mo, "%s \nDoes not match\n%s" % (pvalue, ppatt))
+
+    def _tcrem_prettyFormat(self, string):
+        return repr(string).replace("\\n", "\\n'\n'")

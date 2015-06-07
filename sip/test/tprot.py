@@ -168,22 +168,6 @@ class TestProtocol(unittest.TestCase):
                 TestProtocol.cseq_num_pattern, TestProtocol.tag_pattern),
             bytes(new_inv)), repr(bytes(new_inv)))
 
-    def testSDP(self):
-
-        # Minimal and currently ungodly SDP.
-        sdpdata = (
-            "v=0\r\n"
-            "o=asdf\r\n"
-            "s=fadsf\r\n"
-            "t=asdf\r\n"
-            "a=attr1\r\n"
-            "a=attr2\r\n"
-        )
-
-        sdp = sip.sdp.Body.Parse(sdpdata)
-        self.assertEqual(bytes(sdp), sdpdata)
-        # !!! self.assertEqual(sdp.version, 0)
-
     def testEnum(self):
         en = sip._util.Enum(("cat", "dog", "aardvark", "mouse"))
 

@@ -172,9 +172,10 @@ class Parser(object):
     @classmethod
     def Parse(cls, string):
         """The aim of this class method is to produce a fully initialized
-        instance of this class (or in fact any class inheriting from Parser)
-        from some text. If it fails to parse the text it should raise a
-        ParseError.
+        instance or list of instances of a subclass of Parser from some text.
+        If it fails to parse the text it should raise a ParseError. Subclasses
+        may wish to override this method to do custom parsing (perhaps they
+        don't want to return instances of themselves).
         """
         pi = cls.parseinfo
 

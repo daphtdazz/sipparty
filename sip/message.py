@@ -128,7 +128,7 @@ class Message(vb.ValueBinder):
                 break
             message.addHeader(Header.Parse(line))
         body_lines = lines[ln:]
-        log.debug("Body lines %r", body_lines)
+        log.debug("SDP lines %r", body_lines)
 
         return message
 
