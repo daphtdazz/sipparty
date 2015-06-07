@@ -59,7 +59,7 @@ class SDPIncomplete(SDPException):
     "Raised when trying to format SDP that is incomplete."
 
 
-class SDPNoSuchDescription(Exception):
+class SDPNoSuchDescription(SDPException):
     pass
 
 
@@ -244,10 +244,21 @@ class SessionDescription(parse.Parser, vb.ValueBinder):
                         NetTypes.IN)
 
     @classmethod
-    def Line(self, lineType, value):
+    def Line(cls, lineType, value):
         return b"%s=%s" % (lineType, bytes(value))
 
+    @classmethod
+    def EmptyLine(cls):
+        return b""
+
+    def versionLine(self):
+        "v=0"
+        return self.Line(LineTypes.version, 0)
+
     def originLine(self):
+        """o=<username> <sess-id> <sess-version> <nettype> <addrtype>
+        <unicast-address>
+        """
         un = self.username
         if un is None:
             raise SDPIncomplete("No username specified.")
@@ -262,19 +273,20 @@ class SessionDescription(parse.Parser, vb.ValueBinder):
             b"%s %d %d %s %s %s" % (
                 un, self.sessionID, self.sessionVersion, self.netType, at, ad))
 
+    def sessionNameLine(self):
+        return self.Line(LineTypes.sessionname, self.sessionName)
+
     def lineGen(self):
         """v=0
         o=<username> <sess-id> <sess-version> <nettype> <addrtype>
         <unicast-address>
         """
-        yield self.Line(LineTypes.version, 0)
+        yield self.versionLine()
         yield self.originLine()
-        yield b""
+        yield self.sessionNameLine()
+        yield self.EmptyLine()
+        yield self.EmptyLine()
 
     def __bytes__(self):
 
-        all_lines = []
-        for line in self.lineGen():
-            all_lines.append(bytes(line))
-        all_lines.append(b"")  # Always need an extra newline.
-        return prot.EOL.join(all_lines)
+        return prot.EOL.join(self.lineGen())
