@@ -81,7 +81,20 @@ class Port(object):
         port_start = int(mo.group(1))
 
 
-class ConnectionDescription(vb.ValueBinder):
+@_util.TwoCompatibleThree
+class SDPSection(parse.Parser, vb.ValueBinder):
+
+    def lineGen(self):
+        raise AttributeError(
+            "Instance of subclass %r of SDPSection has not implemented "
+            "required method 'lineGen'.")
+
+    def __bytes__(self):
+        return b"\r\n".join(self.lineGen())
+
+
+
+class ConnectionDescription(SDPSection):
 
     netType = _util.DerivedProperty(
         "_ci_netType", lambda x: x in NetTypes)
@@ -91,8 +104,11 @@ class ConnectionDescription(vb.ValueBinder):
     def __init__(self):
         super(ConnectionInfo, self).__init__()
 
+    def lineGen(self):
+        """c=<nettype> <addrtype> <connection-address>"""
 
-class MediaDescription(parse.Parser, vb.ValueBinder):
+
+class MediaDescription(SDPSection):
 
     parseinfo = {
         parse.Parser.Pattern:
@@ -135,8 +151,7 @@ class Line(parse.Parser):
         return b"{self.type}={self.value}".format(self=self)
 
 
-@_util.TwoCompatibleThree
-class SessionDescription(parse.Parser, vb.ValueBinder):
+class SessionDescription(SDPSection):
     """SDP is a thankfully tightly defined protocol, allowing this parser to
     be much more explicit. The main point is that there are 3 sections:
 
@@ -286,7 +301,3 @@ class SessionDescription(parse.Parser, vb.ValueBinder):
         yield self.sessionNameLine()
         yield self.EmptyLine()
         yield self.EmptyLine()
-
-    def __bytes__(self):
-
-        return prot.EOL.join(self.lineGen())
