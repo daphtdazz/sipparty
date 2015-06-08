@@ -49,6 +49,7 @@ LineTypes = _util.Enum(
         "attribute": "a",
         "media": "m"
     })
+MediaProtocols = _util.Enum((b"RTP/AVP", ))
 
 
 class SDPException(Exception):
@@ -84,6 +85,10 @@ class Port(object):
 @_util.TwoCompatibleThree
 class SDPSection(parse.Parser, vb.ValueBinder):
 
+    @classmethod
+    def Line(cls, lineType, value):
+        return b"%s=%s" % (lineType, bytes(value))
+
     def lineGen(self):
         raise AttributeError(
             "Instance of subclass %r of SDPSection has not implemented "
@@ -91,7 +96,6 @@ class SDPSection(parse.Parser, vb.ValueBinder):
 
     def __bytes__(self):
         return b"\r\n".join(self.lineGen())
-
 
 
 class ConnectionDescription(SDPSection):
@@ -102,7 +106,7 @@ class ConnectionDescription(SDPSection):
         "_ms_addrType", lambda x: x in AddrTypes)
 
     def __init__(self):
-        super(ConnectionInfo, self).__init__()
+        super(ConnectionDescription, self).__init__()
 
     def lineGen(self):
         """c=<nettype> <addrtype> <connection-address>"""
@@ -120,9 +124,33 @@ class MediaDescription(SDPSection):
 
     mediaType = _util.DerivedProperty(
         "_md_mediaType", lambda x: x in MediaTypes)
+    port = _util.DerivedProperty(
+        "_md_port", lambda x: isinstance(x, int) and 0 < x <= 0xffff)
+    proto = _util.DerivedProperty("_md_proto")
+    fmt = _util.DerivedProperty("_md_fmt")
 
-    def __init__(self):
+    def __init__(self, mediaType=None, port=None, proto=None, fmt=None):
         super(MediaDescription, self).__init__()
+
+        for unguessable_attribute in ("mediaType", "port", "proto", "fmt"):
+            val = locals()[unguessable_attribute]
+            if val is None:
+                setattr(self, "_md_" + unguessable_attribute, val)
+            else:
+                # This gives us the type checking of DerivedProperty.
+                setattr(self, unguessable_attribute, val)
+
+    def mediaLine(self):
+        for attr in ("mediaType", "port", "proto", "fmt"):
+            if getattr(self, attr) is None:
+                raise SDPIncomplete(
+                    "Required media attribute %r not specified." % (attr,))
+        return "m=%s %s %s %s" % (
+            self.mediaType, self.port, self.proto, self.fmt)
+
+    def lineGen(self):
+        """m=<media> <port> <proto> <fmt> ..."""
+        yield self.mediaLine()
 
 
 @six.add_metaclass(_util.attributesubclassgen)
@@ -232,6 +260,9 @@ class SessionDescription(SDPSection):
     sessionName = _util.DerivedProperty(
         "_ms_sessionName",
         lambda x: isinstance(x, bytes))
+    sessionConnection = _util.DerivedProperty(
+        "_ms_sessionConnection",
+        lambda x: x is None or isinstance(x, ConnectionDescription))
 
     def __init__(self, username=None, sessionID=None, sessionVersion=None,
                  netType=None, addrType=None, address=None, sessionName=None):
@@ -258,13 +289,18 @@ class SessionDescription(SDPSection):
                         if netType is not None else
                         NetTypes.IN)
 
-    @classmethod
-    def Line(cls, lineType, value):
-        return b"%s=%s" % (lineType, bytes(value))
+        # Set by configuration only.
+        self.sessionConnection = None
+        self.mediaDescriptions = []
 
     @classmethod
     def EmptyLine(cls):
         return b""
+
+    def addMediaDescription(self, **kwargs):
+
+        md = MediaDescription(**kwargs)
+        self.mediaDescriptions.append(md)
 
     def versionLine(self):
         "v=0"
@@ -299,5 +335,8 @@ class SessionDescription(SDPSection):
         yield self.versionLine()
         yield self.originLine()
         yield self.sessionNameLine()
+        for md in self.mediaDescriptions:
+            for ln in md.lineGen():
+                yield ln
         yield self.EmptyLine()
         yield self.EmptyLine()

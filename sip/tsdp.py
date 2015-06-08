@@ -21,7 +21,7 @@ import logging
 import unittest
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     log = logging.getLogger()
 else:
     log = logging.getLogger(__name__)
@@ -34,9 +34,11 @@ class TestSDP(sip._util.TestCaseREMixin, unittest.TestCase):
 
     def setUp(self):
         "Set up the TestSDP test case suite"
+        self._sdpLogLevel = sip.sdp.log.level
+        sip.sdp.log.setLevel(logging.DEBUG)
 
     def tearDown(self):
-        pass
+        sip._util.log.setLevel(self._sdpLogLevel)
 
     def testSDP(self):
 
@@ -54,6 +56,21 @@ class TestSDP(sip._util.TestCaseREMixin, unittest.TestCase):
             "\r\n"
         )
 
+        sd.addMediaDescription(
+            mediaType=sip.sdp.MediaTypes.audio, port=1815,
+            proto="RTP/AVP", fmt=0)
+
+        self.assertMatchesPattern(
+            bytes(sd),
+            b"v=0\r\n"
+            "o=alice \d+ \d+ IN IP4 atlanta.com\r\n"
+            "s= \r\n"
+            "m=audio 1815 RTP/AVP 0\r\n"
+            "\r\n"
+        )
+
+        # Parse?
+
         return
 
         # Minimal and currently ungodly SDP.
@@ -66,8 +83,8 @@ class TestSDP(sip._util.TestCaseREMixin, unittest.TestCase):
             "a=attr2\r\n"
         )
 
-        sdp = sip.sdp.SDP.Parse(sdpdata)
-        self.assertEqual(bytes(sdp), sdpdata)
+        psdp = sip.sdp.SDP.Parse(sdpdata)
+        self.assertEqual(bytes(psdp), sdpdata)
         # !!! self.assertEqual(sdp.version, 0)
 
 if __name__ == "__main__":
