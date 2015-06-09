@@ -20,6 +20,7 @@ import six
 import logging
 import re
 import datetime
+import numbers
 
 import _util
 import vb
@@ -101,15 +102,41 @@ class SDPSection(parse.Parser, vb.ValueBinder):
 class ConnectionDescription(SDPSection):
 
     netType = _util.DerivedProperty(
-        "_ci_netType", lambda x: x in NetTypes)
+        "_cd_netType", lambda x: x in NetTypes)
     addrType = _util.DerivedProperty(
-        "_ms_addrType", lambda x: x in AddrTypes)
+        "_cd_addrType", lambda x: x in AddrTypes)
+    address = _util.DerivedProperty(
+        "_cd_address", lambda x: isinstance(x, bytes))
 
-    def __init__(self):
+    def __init__(self, netType=None, addrType=None, address=None):
         super(ConnectionDescription, self).__init__()
 
     def lineGen(self):
         """c=<nettype> <addrtype> <connection-address>"""
+
+
+class TimeDescription(SDPSection):
+
+    startTime = _util.DerivedProperty(
+        "_td_startTime", lambda x: isinstance(x, numbers.Integral))
+    endTime = _util.DerivedProperty(
+        "_td_endTime", lambda x: isinstance(x, numbers.Integral))
+
+    def __init__(self, startTime=None, endTime=None):
+        super(TimeDescription, self).__init__()
+
+        self.startTime = (startTime
+                          if startTime is not None
+                          else 0)
+        self.endTime = (endTime
+                        if endTime is not None
+                        else 0)
+
+        # TODO: Should have repeats as well for completeness.
+
+    def lineGen(self):
+        yield self.Line(LineTypes.time, "%d %d" % (
+            self.startTime, self.endTime))
 
 
 class MediaDescription(SDPSection):
@@ -125,11 +152,15 @@ class MediaDescription(SDPSection):
     mediaType = _util.DerivedProperty(
         "_md_mediaType", lambda x: x in MediaTypes)
     port = _util.DerivedProperty(
-        "_md_port", lambda x: isinstance(x, int) and 0 < x <= 0xffff)
+        "_md_port",
+        lambda x: isinstance(x, numbers.Integral) and 0 < x <= 0xffff)
     proto = _util.DerivedProperty("_md_proto")
     fmt = _util.DerivedProperty("_md_fmt")
+    connectionDescription = _util.DerivedProperty("_md_connectionDescription")
 
-    def __init__(self, mediaType=None, port=None, proto=None, fmt=None):
+    def __init__(
+            self, mediaType=None, port=None, proto=None, fmt=None,
+            connectionDescription=None):
         super(MediaDescription, self).__init__()
 
         for unguessable_attribute in ("mediaType", "port", "proto", "fmt"):
@@ -140,48 +171,29 @@ class MediaDescription(SDPSection):
                 # This gives us the type checking of DerivedProperty.
                 setattr(self, unguessable_attribute, val)
 
+        self.connectionDescription = connectionDescription
+
+    def setConnectionDescription(self, **kwargs):
+        self.connectionDescription = ConnectionDescription(**kwargs)
+
     def mediaLine(self):
         for attr in ("mediaType", "port", "proto", "fmt"):
             if getattr(self, attr) is None:
                 raise SDPIncomplete(
                     "Required media attribute %r not specified." % (attr,))
-        return "m=%s %s %s %s" % (
-            self.mediaType, self.port, self.proto, self.fmt)
+        return self.Line(
+            LineTypes.media, "%s %s %s %s" % (
+                self.mediaType, self.port, self.proto, self.fmt))
 
     def lineGen(self):
         """m=<media> <port> <proto> <fmt> ..."""
         yield self.mediaLine()
 
 
-@six.add_metaclass(_util.attributesubclassgen)
-@_util.TwoCompatibleThree
-class Line(parse.Parser):
-
-    descvalpattern = (
-        "([^{eol}]+)[{eol}]+".format(eol=prot.EOL)
-    )
-    parseinfo = {
-        parse.Parser.Pattern:
-            # Each valpat has a single group in it, which covers the value of
-            # the line.
-            "([{types}])={valpat}[{eol}]+"
-            "".format(types="".join(LineTypes), valpat=descvalpattern,
-                      eol=prot.EOL),
-        parse.Parser.Constructor:
-            (1, lambda t: getattr(Line, t)()),
-        parse.Parser.Mappings:
-            [None,  # The type.
-             ("value",)],
-        parse.Parser.Repeats: True
-    }
-
-    def __bytes__(self):
-        return b"{self.type}={self.value}".format(self=self)
-
-
 class SessionDescription(SDPSection):
-    """SDP is a thankfully tightly defined protocol, allowing this parser to
-    be much more explicit. The main point is that there are 3 sections:
+    """SDP is a tightly defined protocol, allowing for a simple parser.
+
+    There are 3 sections:
 
     Session Description (one)
     Time Description (one)
@@ -203,7 +215,7 @@ class SessionDescription(SDPSection):
             "(([^{eol}]+[{eol}]{{,2}})+)"
             "".format(eol=prot.EOL),
         parse.Parser.Mappings:
-            [("lines", Line)]
+            []
     }
 
     ZeroOrOne = b"?"
@@ -231,6 +243,7 @@ class SessionDescription(SDPSection):
         (b"micbka", ZeroPlus, ZeroOrOne, ZeroOrOne, ZeroOrOne, ZeroOrOne,
          ZeroPlus)
     )
+    username_pattern = re.compile("\S+")
 
     @classmethod
     def ID(cls):
@@ -243,14 +256,13 @@ class SessionDescription(SDPSection):
     #
     # =================== INSTANCE INTERFACE ==================================
     #
-    username_pattern = re.compile("\S+")
     username = _util.DerivedProperty(
         "_ms_username",
         lambda x: SessionDescription.username_pattern.match(x))
     sessionID = _util.DerivedProperty(
-        "_ms_sessionID", lambda x: isinstance(x, int))
+        "_ms_sessionID", lambda x: isinstance(x, numbers.Integral))
     sessionVersion = _util.DerivedProperty(
-        "_ms_sessionVersion", lambda x: isinstance(x, int))
+        "_ms_sessionVersion", lambda x: isinstance(x, numbers.Integral))
     netType = _util.DerivedProperty(
         "_ms_netType", lambda x: x in NetTypes)
     addrType = _util.DerivedProperty(
@@ -260,12 +272,15 @@ class SessionDescription(SDPSection):
     sessionName = _util.DerivedProperty(
         "_ms_sessionName",
         lambda x: isinstance(x, bytes))
-    sessionConnection = _util.DerivedProperty(
-        "_ms_sessionConnection",
+    connectionDescription = _util.DerivedProperty(
+        "_ms_connectionDescription",
         lambda x: x is None or isinstance(x, ConnectionDescription))
+    timeDescription = _util.DerivedProperty(
+        "_ms_timeDescription")
 
     def __init__(self, username=None, sessionID=None, sessionVersion=None,
-                 netType=None, addrType=None, address=None, sessionName=None):
+                 netType=None, addrType=None, address=None, sessionName=None,
+                 timeDescription=None):
         super(SessionDescription, self).__init__()
 
         # These may be uninitialized to begin with.
@@ -288,9 +303,12 @@ class SessionDescription(SDPSection):
         self.netType = (netType
                         if netType is not None else
                         NetTypes.IN)
+        self.timeDescription = (timeDescription
+                                if timeDescription is not None else
+                                TimeDescription())
 
         # Set by configuration only.
-        self.sessionConnection = None
+        self.connectionDescription = None
         self.mediaDescriptions = []
 
     @classmethod
@@ -335,6 +353,18 @@ class SessionDescription(SDPSection):
         yield self.versionLine()
         yield self.originLine()
         yield self.sessionNameLine()
+        if self.connectionDescription is None:
+            if len(self.mediaDescriptions) == 0:
+                raise SDPIncomplete(
+                    "SDP has no connection description and no media "
+                    "descriptions.")
+            for md in self.mediaDescriptions:
+                if md.connectionDescription is None:
+                    raise SDPIncomplete(
+                        "SDP has no connection description and not all media "
+                        "descriptions have one.")
+        for ln in self.timeDescription.lineGen():
+            yield ln
         for md in self.mediaDescriptions:
             for ln in md.lineGen():
                 yield ln

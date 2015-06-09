@@ -47,24 +47,17 @@ class TestSDP(sip._util.TestCaseREMixin, unittest.TestCase):
         sd.username = "alice"
         sd.addrType = sip.sdp.AddrTypes.IP4
         sd.address = "atlanta.com"
-
-        self.assertMatchesPattern(
-            bytes(sd),
-            b"v=0\r\n"
-            "o=alice \d+ \d+ IN IP4 atlanta.com\r\n"
-            "s= \r\n"
-            "\r\n"
-        )
-
         sd.addMediaDescription(
             mediaType=sip.sdp.MediaTypes.audio, port=1815,
             proto="RTP/AVP", fmt=0)
+        sd.mediaDescriptions[0].setConnectionDescription()
 
         self.assertMatchesPattern(
             bytes(sd),
             b"v=0\r\n"
             "o=alice \d+ \d+ IN IP4 atlanta.com\r\n"
             "s= \r\n"
+            "t=0 0\r\n"
             "m=audio 1815 RTP/AVP 0\r\n"
             "\r\n"
         )
