@@ -45,40 +45,33 @@ class TestSDP(sip._util.TestCaseREMixin, unittest.TestCase):
         sd = sip.SessionDescription()
         self.assertRaises(sip.sdp.SDPIncomplete, lambda: bytes(sd))
         sd.username = "alice"
-        sd.addrType = sip.sdp.AddrTypes.IP4
+        sd.addrType = sip.sdpsyntax.AddrTypes.IP4
         sd.address = "atlanta.com"
         sd.addMediaDescription(
-            mediaType=sip.sdp.MediaTypes.audio, port=1815,
+            mediaType=sip.sdpsyntax.MediaTypes.audio, port=1815,
             proto="RTP/AVP", fmt=0)
-        sd.mediaDescriptions[0].setConnectionDescription()
+        sd.mediaDescriptions[0].setConnectionDescription(
+            addrType=sip.sdpsyntax.AddrTypes.IP4,
+            address="media.atlanta.com")
 
+        data = bytes(sd)
         self.assertMatchesPattern(
-            bytes(sd),
+            data,
             b"v=0\r\n"
             "o=alice \d+ \d+ IN IP4 atlanta.com\r\n"
             "s= \r\n"
             "t=0 0\r\n"
             "m=audio 1815 RTP/AVP 0\r\n"
+            "c=IN IP4 media.atlanta.com\r\n"
             "\r\n"
         )
 
-        # Parse?
+        # Parse.
+        newDesc = sip.SessionDescription.Parse(data)
+        newData = bytes(newDesc)
+        self.assertEqual(data, newData)
+        # self.assertEqual(sd, newDesc)
 
-        return
-
-        # Minimal and currently ungodly SDP.
-        sdpdata = (
-            b"v=0\r\n"
-            "o=asdf\r\n"
-            "s=fadsf\r\n"
-            "t=asdf\r\n"
-            "a=attr1\r\n"
-            "a=attr2\r\n"
-        )
-
-        psdp = sip.sdp.SDP.Parse(sdpdata)
-        self.assertEqual(bytes(psdp), sdpdata)
-        # !!! self.assertEqual(sdp.version, 0)
 
 if __name__ == "__main__":
     unittest.main()

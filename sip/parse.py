@@ -117,6 +117,17 @@ class Parser(object):
 
     ## Repetition.
 
+    If you are parsing a sequence of items, then you can use the
+    `Parser.Repeats` flag to indicate that the result of `Parse` should be a
+    list of instances of the object, rather than just the object itself:
+
+        ...
+            Parser.Repeats: True
+        ...
+
+    In this case after the first match, the input text is cut down by the
+    matched text is parsed again, until there is no input text remaining.
+
     """
     # These are keys that can be used in the parseinfo
     Pattern = "pattern"
@@ -157,7 +168,12 @@ class Parser(object):
                     "{0!r} does not have a Parser.Pattern in its "
                     "'parseinfo' dictionary.".format(cls))
             log.debug("  compile pattern.")
-            pi[Parser.RE] = re.compile(ptrn)
+            try:
+                pi[Parser.RE] = re.compile(ptrn)
+            except re.error:
+                log.error("Pattern failed to compile:")
+                log.error(ptrn)
+                raise
             log.debug("  compile done.")
 
         pre = pi[Parser.RE]

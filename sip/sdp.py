@@ -26,31 +26,9 @@ import _util
 import vb
 import prot
 import parse
+import sdpsyntax
 
 log = logging.getLogger(__name__)
-
-NetTypes = _util.Enum((b"IN",))
-AddrTypes = _util.Enum((b"IP4", b"IP6"))
-MediaTypes = _util.Enum(
-    (b"audio", b"video", b"text", b"application", b"message"))
-LineTypes = _util.Enum(
-    aliases={
-        "version": "v",
-        "origin": "o",
-        "sessionname": "s",
-        "info": "i",
-        "uri": "u",
-        "email": "e",
-        "phone": "p",
-        "connectioninfo": "c",
-        "bandwidthinfo": "b",
-        "time": "t",
-        "timezone": "z",
-        "encryptionkey": "k",
-        "attribute": "a",
-        "media": "m"
-    })
-MediaProtocols = _util.Enum((b"RTP/AVP", ))
 
 
 class SDPException(Exception):
@@ -101,21 +79,61 @@ class SDPSection(parse.Parser, vb.ValueBinder):
 
 class ConnectionDescription(SDPSection):
 
+    parseinfo = {
+        parse.Parser.Pattern:
+            b"({nettype}){SP}({addrtype}){SP}({address})"
+            "".format(**sdpsyntax.__dict__),
+        parse.Parser.Mappings:
+            [("_cd_netType",),
+             ("_cd_addrType",),
+             ("_cd_address",)],
+    }
+
     netType = _util.DerivedProperty(
-        "_cd_netType", lambda x: x in NetTypes)
+        "_cd_netType", lambda x: x in sdpsyntax.NetTypes)
     addrType = _util.DerivedProperty(
-        "_cd_addrType", lambda x: x in AddrTypes)
+        "_cd_addrType", lambda x: x in sdpsyntax.AddrTypes)
     address = _util.DerivedProperty(
         "_cd_address", lambda x: isinstance(x, bytes))
 
     def __init__(self, netType=None, addrType=None, address=None):
         super(ConnectionDescription, self).__init__()
 
+        self.netType = (netType if netType is not None else
+                        sdpsyntax.NetTypes.IN)
+        if addrType is not None:
+            self.addrType = addrType
+        else:
+            self._cd_addrType = None
+        if address is not None:
+            self.address = address
+        else:
+            self._cd_address = None
+
     def lineGen(self):
         """c=<nettype> <addrtype> <connection-address>"""
+        if self.addrType is None:
+            raise SDPIncomplete("Connection description has no address type.")
+        if self.address is None:
+            raise SDPIncomplete("Connection description has no address set.")
+        yield self.Line(
+            sdpsyntax.LineTypes.connectioninfo,
+            "%s %s %s" % (self.netType, self.addrType, self.address))
 
 
 class TimeDescription(SDPSection):
+
+    parseinfo = {
+        parse.Parser.Pattern:
+            b"{LineTypes.time}=({start_time}){SP}({stop_time})"
+            # TODO: Don't ignore repeats and timezone.
+            "(?:{eol}{repeat_fields})*{eol}"
+            "(?:{zone_adjustments}{eol})?"
+            "".format(**sdpsyntax.__dict__),
+        parse.Parser.Mappings:
+            [("_td_startTime", int),
+             ("_td_stopTime", int)]
+    }
 
     startTime = _util.DerivedProperty(
         "_td_startTime", lambda x: isinstance(x, numbers.Integral))
@@ -135,7 +153,7 @@ class TimeDescription(SDPSection):
         # TODO: Should have repeats as well for completeness.
 
     def lineGen(self):
-        yield self.Line(LineTypes.time, "%d %d" % (
+        yield self.Line(sdpsyntax.LineTypes.time, "%d %d" % (
             self.startTime, self.endTime))
 
 
@@ -143,14 +161,25 @@ class MediaDescription(SDPSection):
 
     parseinfo = {
         parse.Parser.Pattern:
-            b"(\d+)"  # Port number.
-            "(?:/(\d+))?",  # Optional range.
-        parse.Parser.Constructor:
-            (1, lambda type: getattr(Header, type)())
+            b"{LineTypes.media}=({media}){SP}({port})(?:/{integer})?{SP}"
+            "({proto}){SP}({fmt}(?:{SP}{fmt})*){eol}"
+            "(?:{LineTypes.info}={text}{eol})?"
+            "(?:{LineTypes.connectioninfo}=({text}){eol})?"
+            "(?:{LineTypes.bandwidthinfo}={text}{eol})*"
+            "(?:{LineTypes.encryptionkey}={text}{eol})?"
+            "(?:{LineTypes.attribute}={text}{eol})*"
+            "".format(**sdpsyntax.__dict__),
+        parse.Parser.Mappings:
+            [("_md_mediaType",),
+             ("_md_port", int),
+             ("_md_proto",),
+             ("_md_fmt",),
+             ("_md_connectionDescription", ConnectionDescription)],
+        parse.Parser.Repeats: True
     }
 
     mediaType = _util.DerivedProperty(
-        "_md_mediaType", lambda x: x in MediaTypes)
+        "_md_mediaType", lambda x: x in sdpsyntax.MediaTypes)
     port = _util.DerivedProperty(
         "_md_port",
         lambda x: isinstance(x, numbers.Integral) and 0 < x <= 0xffff)
@@ -182,12 +211,15 @@ class MediaDescription(SDPSection):
                 raise SDPIncomplete(
                     "Required media attribute %r not specified." % (attr,))
         return self.Line(
-            LineTypes.media, "%s %s %s %s" % (
+            sdpsyntax.LineTypes.media, "%s %s %s %s" % (
                 self.mediaType, self.port, self.proto, self.fmt))
 
     def lineGen(self):
         """m=<media> <port> <proto> <fmt> ..."""
         yield self.mediaLine()
+        if self.connectionDescription is not None:
+            for ln in self.connectionDescription.lineGen():
+                yield ln
 
 
 class SessionDescription(SDPSection):
@@ -206,43 +238,53 @@ class SessionDescription(SDPSection):
     The SDP spec says something about multiple session descriptions, but I'm
     making the initial assumption that in SIP there will only be one.
     """
-
     #
     # =================== CLASS INTERFACE =====================================
     #
     parseinfo = {
         parse.Parser.Pattern:
-            "(([^{eol}]+[{eol}]{{,2}})+)"
-            "".format(eol=prot.EOL),
+            # Version
+            "{LineTypes.version}={supportedversions}{eol}"
+            # Origin
+            "{LineTypes.origin}=({username}){SP}({sessionid}){SP}"
+            "({sessionversion}){SP}({nettype}){SP}({addrtype}){SP}"
+            "({address}){eol}"
+            # Session name, info, uri, email, phone.
+            "{LineTypes.sessionname}=({text}){eol}"
+            "(?:{LineTypes.info}=({text}){eol})?"
+            "(?:{LineTypes.uri}=({text}){eol})?"  # TODO: URI.
+            "(?:{LineTypes.email}=({text}){eol})*"  # TODO: email.
+            "(?:{LineTypes.phone}=({text}){eol})*"  # TODO: phone.
+            # Connection info.
+            "({LineTypes.connectioninfo}={text}{eol})?"
+            # Bandwidth.
+            "(?:{LineTypes.bandwidthinfo}=({text}){eol})?"
+            # Time.
+            "({time_fields})"
+            # TODO: don't ignore key and attributes.
+            "(?:{LineTypes.encryptionkey}={text}{eol})?"
+            "(?:{LineTypes.attribute}={text}{eol})*"
+            "({media_fields})"
+            "{eol}"
+            "".format(**sdpsyntax.__dict__),
         parse.Parser.Mappings:
-            []
+            [("_ms_username",),
+             ("_ms_sessionID", int),
+             ("_ms_sessionVersion", int),
+             ("_ms_netType",),
+             ("_ms_addrType",),
+             ("_ms_address",),
+             ("_ms_sessionName",),
+             ("_ms_info",),
+             ("_ms_uri",),
+             ("_ms_email",),
+             ("_ms_phone",),
+             ("_ms_connectionDescription", ConnectionDescription),
+             ("_ms_bandwidth",),
+             ("_ms_timeDescription", TimeDescription),
+             ("mediaDescriptions", MediaDescription)]
     }
 
-    ZeroOrOne = b"?"
-    ZeroPlus = b"*"
-    OnePlus = b"+"
-    validorder = (
-        # Defines the order of SDP, and how many of each type there can be.
-        # Note that for the time and media lines, there are subsidiary fields
-        # which may follow, and the number of times they may follow are
-        # denoted by the next flag in the tuple.
-        (b"v", 1),
-        (b"o", 1),
-        (b"s", 1),
-        (b"i", ZeroOrOne),  # Info line.
-        (b"u", ZeroOrOne),
-        (b"e", ZeroOrOne),
-        (b"p", ZeroOrOne),
-        (b"c", ZeroOrOne),
-        (b"b", ZeroOrOne),
-        (b"z", ZeroOrOne),  # Timezone
-        (b"k", ZeroOrOne),  # Encryption key
-        (b"a", ZeroPlus),  # Zero or more attributes.
-        (b"tr", 1, ZeroPlus),  # Time descriptions followed by repeats.
-        # Zero or more media descriptions, and they may have attributes.
-        (b"micbka", ZeroPlus, ZeroOrOne, ZeroOrOne, ZeroOrOne, ZeroOrOne,
-         ZeroPlus)
-    )
     username_pattern = re.compile("\S+")
 
     @classmethod
@@ -264,9 +306,9 @@ class SessionDescription(SDPSection):
     sessionVersion = _util.DerivedProperty(
         "_ms_sessionVersion", lambda x: isinstance(x, numbers.Integral))
     netType = _util.DerivedProperty(
-        "_ms_netType", lambda x: x in NetTypes)
+        "_ms_netType", lambda x: x in sdpsyntax.NetTypes)
     addrType = _util.DerivedProperty(
-        "_ms_addrType", lambda x: x in AddrTypes)
+        "_ms_addrType", lambda x: x in sdpsyntax.AddrTypes)
     address = _util.DerivedProperty(
         "_ms_address", lambda x: isinstance(x, bytes))
     sessionName = _util.DerivedProperty(
@@ -302,7 +344,7 @@ class SessionDescription(SDPSection):
                                SessionDescription.ID())
         self.netType = (netType
                         if netType is not None else
-                        NetTypes.IN)
+                        sdpsyntax.NetTypes.IN)
         self.timeDescription = (timeDescription
                                 if timeDescription is not None else
                                 TimeDescription())
@@ -322,7 +364,7 @@ class SessionDescription(SDPSection):
 
     def versionLine(self):
         "v=0"
-        return self.Line(LineTypes.version, 0)
+        return self.Line(sdpsyntax.LineTypes.version, 0)
 
     def originLine(self):
         """o=<username> <sess-id> <sess-version> <nettype> <addrtype>
@@ -338,12 +380,12 @@ class SessionDescription(SDPSection):
         if ad is None:
             raise SDPIncomplete("No address specified.")
         return self.Line(
-            LineTypes.origin,
+            sdpsyntax.LineTypes.origin,
             b"%s %d %d %s %s %s" % (
                 un, self.sessionID, self.sessionVersion, self.netType, at, ad))
 
     def sessionNameLine(self):
-        return self.Line(LineTypes.sessionname, self.sessionName)
+        return self.Line(sdpsyntax.LineTypes.sessionname, self.sessionName)
 
     def lineGen(self):
         """v=0

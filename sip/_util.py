@@ -154,6 +154,9 @@ class Enum(set):
         for item in iterable:
             self.add(item)
 
+    def REPattern(self):
+        return "(?:%s)" % "|".join(self)
+
     def _en_fixAttr(self, name):
         if self._en_aliases:
             if name in self._en_aliases:
