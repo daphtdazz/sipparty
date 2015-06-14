@@ -39,6 +39,28 @@ class SDPIncomplete(SDPException):
     "Raised when trying to format SDP that is incomplete."
 
 
+class SDPNoSuchDescription(SDPException):
+    pass
+
+
+class Port(object):
+    "Port object is here just to allow generation of port ranges."
+
+    parseinfo = {
+        parse.Parser.Pattern:
+            b"(\d+)"  # Port number.
+            "(?:/(\d+))?",  # Optional range.
+        parse.Parser.Constructor:
+            (1, lambda type: getattr(Header, type)())
+    }
+
+    @classmethod
+    def Parse(cls, string):
+
+        mo = cls.SimpleParse(string)
+        port_start = int(mo.group(1))
+
+
 @_util.TwoCompatibleThree
 class SDPSection(parse.Parser, vb.ValueBinder):
 
@@ -101,9 +123,6 @@ class ConnectionDescription(SDPSection):
 
 class TimeDescription(SDPSection):
 
-    #
-    # =================== CLASS INTERFACE =====================================
-    #
     parseinfo = {
         parse.Parser.Pattern:
             b"{LineTypes.time}=({start_time}){SP}({stop_time})"
@@ -116,9 +135,6 @@ class TimeDescription(SDPSection):
              ("_td_stopTime", int)]
     }
 
-    #
-    # =================== INSTANCE INTERFACE ==================================
-    #
     startTime = _util.DerivedProperty(
         "_td_startTime", lambda x: isinstance(x, numbers.Integral))
     endTime = _util.DerivedProperty(
@@ -143,9 +159,6 @@ class TimeDescription(SDPSection):
 
 class MediaDescription(SDPSection):
 
-    #
-    # =================== CLASS INTERFACE =====================================
-    #
     parseinfo = {
         parse.Parser.Pattern:
             b"{LineTypes.media}=({media}){SP}({port})(?:/{integer})?{SP}"
@@ -165,9 +178,6 @@ class MediaDescription(SDPSection):
         parse.Parser.Repeats: True
     }
 
-    #
-    # =================== INSTANCE INTERFACE ==================================
-    #
     mediaType = _util.DerivedProperty(
         "_md_mediaType", lambda x: x in sdpsyntax.MediaTypes)
     port = _util.DerivedProperty(
@@ -213,11 +223,17 @@ class MediaDescription(SDPSection):
 
 
 class SessionDescription(SDPSection):
-    """SDP is made of 3 sections:
+    """SDP is a tightly defined protocol, allowing for a simple parser.
+
+    There are 3 sections:
 
     Session Description (one)
     Time Description (one)
     Media Description (one or more)
+
+    For sanity, sdp.SDP expands the first two (so sdp.body.version gives you
+    the version description), and the medias attribute is a list formed by
+    parsing MediaDe2sc, which is a repeating pattern.
 
     The SDP spec says something about multiple session descriptions, but I'm
     making the initial assumption that in SIP there will only be one.
