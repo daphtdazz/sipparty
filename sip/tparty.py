@@ -42,6 +42,18 @@ tks = scenario.TransitionKeys
 
 class TestParty(unittest.TestCase):
 
+    def assertIsNotNone(self, exp, *args, **kwargs):
+        if hasattr(super(TestParty, self), "assertIsNotNone"):
+            return super(TestParty, self).assertIsNotNone(exp, *args, **kwargs)
+
+        return self.assertTrue(exp is not None)
+
+    def assertIsNone(self, exp, *args, **kwargs):
+        if hasattr(super(TestParty, self), "assertIsNone"):
+            return super(TestParty, self).assertIsNone(exp, *args, **kwargs)
+
+        return self.assertTrue(exp is None)
+
     def setUp(self):
         self._tp_sipPartyLogLevel = sip.party.log.level
         sip.party.log.setLevel(logging.DEBUG)

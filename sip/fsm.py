@@ -502,11 +502,12 @@ class FSM(object):
             return weak_method
 
         weak_self = weakref.ref(self)
+        owner_thread = threading.currentThread()
 
         def fsmThread():
             cthr = threading.currentThread()
             log.debug("FSM Thread %r in.", cthr.name)
-            while True:
+            while owner_thread.isAlive():
                 self = weak_self()
                 log.debug("Self is %r.", self)
                 del self
@@ -522,6 +523,10 @@ class FSM(object):
                 log.debug("Thread %r wants to try again in %02f seconds.",
                           cthr.name, wait)
                 time.sleep(wait)
+            else:
+                log.warning(
+                    "Owner thread died, so finishing FSM thread %r.",
+                    cthr.name)
 
             self = weak_self()
             if self is not None:

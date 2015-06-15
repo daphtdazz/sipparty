@@ -103,7 +103,8 @@ class Party(vb.ValueBinder):
     ]
     vb_dependencies = [
         ("scenario", ["state"]),
-        ("_pt_transport", ["localAddress", "listen", "connect"])]
+        ("_pt_transport", [
+            "localAddress", "localAddressPort", "listen", "connect"])]
 
     Scenario = None
 
@@ -162,6 +163,8 @@ class Party(vb.ValueBinder):
             self.scenario = self.Scenario(delegate=self)
             self.scenario.actionCallback = _util.WeakMethod(
                 self, "scenarioActionCallback")
+        else:
+            self.scenario = None
 
         # Set up the transform.
         if not hasattr(self, "transform"):

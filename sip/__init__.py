@@ -23,6 +23,6 @@ from message import (Message,)
 from mediasession import (Session,)
 from party import (Party, NoConnection)
 import sdp
-from sdp import (SDPNoSuchDescription, SessionDescription)
+from sdp import (SDPIncomplete, SessionDescription)
 import scenario
 import party
