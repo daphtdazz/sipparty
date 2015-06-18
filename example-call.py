@@ -2,19 +2,16 @@ import six
 import sys
 import threading
 import time
-import sip._util
 import logging
 
 
-def gen2():
-    yield "c"
-    yield "d"
+class X(object):
 
+    def __getattr__(self, attr):
 
-def gen():
-    yield "a"
-    yield "b"
-    for ln in gen2():
-        yield ln
+        if attr == "a":
+            return 1
 
-print(",".join(gen()))
+        raise AttributeError("X has not attribute %r" % attr)
+
+print X.__getattr__(X(), "a")

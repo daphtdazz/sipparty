@@ -18,31 +18,6 @@
 # limitations under the License.
 #
 
-exec {stdout}>&1
-exec 1>&2
+python -m unittest discover
 
-error_exit () {
-    rv=$1
-    shift
-    echo "$@" >&2
-    exit ${rv}
-}
-
-DIR_SIP=sip
-
-if [[ ! -d ${DIR_SIP} ]]
-then
-    error_exit 1 "${DIR_SIP} directory not in the current directory."
-fi
-
-failures=0
-for ut in "${DIR_SIP}"/{*,test/*}.py
-do
-    echo $ut
-    if ! python "${ut}" 2>/dev/null
-        then
-            echo "  Failed!" >&2
-	    (( failures++ ))
-    fi
-done
-exit ${failures}
+exit $?
