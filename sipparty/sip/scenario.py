@@ -62,13 +62,7 @@ class Scenario(fsm.FSM):
         super(Scenario, cls).PopulateWithDefinition(definition_dict)
 
     def __init__(self, transform=None, transitions=None, **kwargs):
+        kwargs["lock"] = True
         super(Scenario, self).__init__(**kwargs)
         log.debug("Scenario using async timers: %r.",
                   self._fsm_use_async_timers)
-
-    def reset(self):
-        """Reset the scenario to the initial state. No actions are called."""
-        self.setState(InitialStateKey)
-        dele = self.delegate
-        if dele is not None and hasattr(dele, Scenario.DelegateResetMethod):
-            getattr(dele, Scenario.DelegateResetMethod)()

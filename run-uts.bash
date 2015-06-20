@@ -26,11 +26,40 @@ do
     shift
 done
 
+killchildren () {
+    local ppid=$1
+    local signal=$2
+    local cpid
+
+    if [[ -z ${signal} ]]
+    then
+      signal=KILL
+    fi
+    for cpid in $(pgrep -P ${ppid})
+    do
+        killchildren "${cpid}"
+        echo "killing $cpid" >&2
+        kill -${signal} ${cpid}
+    done
+}
+
+for signal in INT TERM ABRT QUIT
+do
+    trap \
+"echo \"Kill children $signal\";"\
+"killchildren $$ ${signal};"\
+"trap \"echo Kill children KILL; killchildren $$ KILL\" ${signal}" $signal
+done
+
 if (( ${#tests} > 0 ))
 then
-    python -m unittest "${tests[@]}"
+    python -m unittest "${tests[@]}" &
 else
-    python -m unittest discover
+    python -m unittest discover &
 fi
+
+while ! wait
+do :
+done
 
 exit $?

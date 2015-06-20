@@ -189,7 +189,8 @@ class FSM(object):
 
         # If the special initial state is specified, set that.
         if InitialStateKey in definition_dict:
-            cls.setState(InitialStateKey)
+            log.debug("Set initial state of %r to isk.", cls.__name__)
+            cls._fsm_state = InitialStateKey
 
     @classmethod
     def AddClassTransitions(cls):
@@ -278,11 +279,6 @@ class FSM(object):
             if state not in self.States:
                 self.States.add(state)
 
-        # For convenience assume that the first transition set tells us the
-        # initial state.
-        if not self_is_class and self._fsm_state is None:
-            self.setState(old_state)
-
         log.debug("%r: %r -> %r", old_state, input, result[self.KeyNewState])
 
     @util.class_or_instance_method
@@ -295,22 +291,19 @@ class FSM(object):
             fsmtimer.Timer(name, self._fsm_makeAction(action), retryer))
         self._fsm_timers[name] = newtimer
 
-    @util.class_or_instance_method
-    @util.OnlyWhenLocked
-    def setState(self, state):
-        "Force set the state, perhaps to initialize it."
-        if state not in self._fsm_transitions:
-            raise ValueError(
-                "FSM %r has no state %r so it cannot be set." %
-                self._fsm_name, state)
-        self._fsm_setState(state)
-
     #
     # =================== INSTANCE INTERFACE =================================
     #
     @property
     def state(self):
         return self._fsm_state
+
+    @state.setter
+    def state(self, value):
+        assert self._fsm_state is None, (
+            "Only allowed to set the state of an FSM once at initialization.")
+        assert value in self.States
+        self._fsm_state = value
 
     @property
     def delegate(self):
@@ -342,6 +335,7 @@ class FSM(object):
         self._fsm_name = name
         self._fsm_use_async_timers = asynchronous_timers
         self._fsm_weakDelegate = None
+        self._lock = None
         self.delegate = delegate
 
         # Need to learn configuration from the class.
@@ -351,7 +345,10 @@ class FSM(object):
         self._fsm_timers = {}
         self.Inputs = copy.copy(self.Inputs)
 
-        self._fsm_state = self._fsm_state
+        self._fsm_state = (
+            self._fsm_state if hasattr(self, "_fsm_state") else None)
+        log.debug("Initial state of %r instance is %r.",
+                  self.__class__.__name__, self._fsm_state)
 
         # If the class had any pre-set transitions or timers, set them up now.
         for timer_name, (action, retryer) in six.iteritems(class_timers):
@@ -371,7 +368,6 @@ class FSM(object):
 
         self._fsm_inputQueue = Queue.Queue()
         self._fsm_oldThreadQueue = Queue.Queue()
-        self._lock = None
 
         if lock:
             # We should lock access to this FSM's state as it may be called
@@ -435,11 +431,8 @@ class FSM(object):
         with self._fsm_stateChangeCondition:
             while timeout is None or then > now:
                 state = self._fsm_state
-                log.debug("State is %r.", state)
                 if condition(state):
-                    log.debug("Condition has come true.")
                     break
-                log.debug("Wait; condition not yet true.")
                 self._fsm_stateChangeCondition.wait(then - now)
                 now = time.time()
             else:
@@ -618,6 +611,7 @@ class FSM(object):
         """
         log.debug("_fsm_hit %r %r %r", input, args, kwargs)
         trans = self._fsm_transitions[self._fsm_state]
+
         if input not in trans:
             msg = "Bad input %r to %r %r (current state %r)." % (
                 input, self.__class__.__name__, self._fsm_name,

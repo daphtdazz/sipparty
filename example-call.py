@@ -7,11 +7,17 @@ import logging
 
 class X(object):
 
-    def __getattr__(self, attr):
+    @property
+    def state(self):
+        return self._state
 
-        if attr == "a":
-            return 1
+    @state.setter
+    def state(self, val):
+        self._state = val
 
-        raise AttributeError("X has not attribute %r" % attr)
+X.state = 2
 
-print X.__getattr__(X(), "a")
+x = X()
+
+x.state = 3
+print x._state

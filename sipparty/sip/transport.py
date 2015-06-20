@@ -27,6 +27,7 @@ import select
 from sipparty import (util, fsm)
 
 log = logging.getLogger(__name__)
+prot_log = logging.getLogger("messages")
 bytes = six.binary_type
 
 
@@ -99,7 +100,7 @@ def GetBoundSocket(family, socktype, address):
 
 
 class TransportFSM(fsm.FSM):
-    """Controls a socket connection
+    """Controls a socket connection.
     """
 
     #
@@ -164,7 +165,7 @@ class TransportFSM(fsm.FSM):
         Add(S.error, I.reset, S.disconnected)
 
         # Start disconnected.
-        cls.setState(S.disconnected)
+        cls._fsm_state = S.disconnected
 
     #
     # =================== INSTANCE INTERFACE =================================
@@ -265,10 +266,11 @@ class TransportFSM(fsm.FSM):
 
         explen = 2 if fam == socket.AF_INET else 4
 
-        if len(addr_tuple) != explen:
+        if len(addr_tuple) < explen:
             self.hit(self.Inputs.error, "Bad address %r for %r socket." %
                      (addr_tuple, SockFamilyName(fam)))
             return
+        addr_tuple = addr_tuple[:2]
 
         try:
             self._tfsm_activeSck = GetBoundSocket(fam, typ, adr)
@@ -322,9 +324,13 @@ class TransportFSM(fsm.FSM):
         datalen = len(data)
         sck = self._tfsm_activeSck
 
-        log.info("send\n>>>>>\n%s\n>>>>>", data)
+        try:
+            sent_bytes = sck.send(data)
+            prot_log.info("send\n>>>>>\n%s\n>>>>>", data)
+        except socket.error:
+            log.error("Exception sending bytes to %r", sck.getsockname())
+            raise
 
-        sent_bytes = sck.send(data)
         if sent_bytes != datalen:
             self.error("Failed to send %d bytes of data." %
                        (datalen - sent_bytes))
@@ -498,7 +504,7 @@ class TransportFSM(fsm.FSM):
             self._tfsm_remoteAddressTuple = address
 
         if datalen > 0:
-            log.info(" received from %r\n<<<<<\n%s\n<<<<<", address, data)
+            prot_log.info(" received from %r\n<<<<<\n%s\n<<<<<", address, data)
 
         self._tfsm_buffer.extend(data)
 

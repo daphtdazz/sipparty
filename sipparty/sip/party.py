@@ -101,7 +101,7 @@ class Party(vb.ValueBinder):
         ("theirTag", "_pt_outboundResponse.FromHeader.field.parameters.tag"),
     ]
     vb_dependencies = [
-        ("scenario", ["state"]),
+        ("scenario", ["state", "wait", "waitForStateCondition"]),
         ("_pt_transport", [
             "localAddress", "localAddressPort", "listen", "connect"])]
 
@@ -161,43 +161,27 @@ class Party(vb.ValueBinder):
             self, "_pt_messageConsumer")
 
         # Set up the scenario.
-        if self.Scenario is not None:
-            self.scenario = self.Scenario(delegate=self)
-            self.scenario.actionCallback = util.WeakMethod(
-                self, "scenarioActionCallback")
-        else:
-            self.scenario = None
+        self._pt_resetScenario()
 
         # Set up the transform.
         if not hasattr(self, "transform"):
             self.transform = transform.default
 
-    def waitUntilState(self, state,
-                       error_state=None, timeout=None, poll_interval=0.001):
+    def waitUntilState(self, state, error_state=None, timeout=None):
         for check_state in (state, error_state):
             if check_state is not None and check_state not in self.States:
                 raise AttributeError(
                     "%r instance has no state %r." % (
                         self.__class__.__name__, check_state))
 
-        start_time = time.time()
-        while True:
-            state_now = self.state
-            if state_now == state:
-                return
+        self.scenario.waitForStateCondition(
+            lambda x: x in (state, error_state), timeout=timeout)
 
-            if error_state is not None and state_now == error_state:
-                raise UnexpectedState(
-                    "%r instance has entered the error state %r while "
-                    "waiting for state %r." % (
-                        self.__class__.__name__, error_state, state))
-
-            if timeout is not None and (time.time() - start_time > timeout):
-                raise Timeout(
-                    "%r instance has timed out (waited %r seconds) while "
-                    "waiting for state %r." % (
-                        self.__class__.__name__, timeout, state))
-            time.sleep(poll_interval)
+        if self.state == error_state:
+            raise UnexpectedState(
+                "%r instance has entered the error state %r while "
+                "waiting for state %r." % (
+                    self.__class__.__name__, error_state, state))
 
     def reset(self):
         self._pt_reset()
@@ -329,6 +313,7 @@ class Party(vb.ValueBinder):
                 raise ValueError(
                     "Message recipient is not an AOR: %r." % callee)
 
+        log.info("Connecting to address %r.", contactAddress)
         self._pt_connectTransport(contactAddress)
 
         msg = getattr(Message, message_type)()
@@ -376,8 +361,7 @@ class Party(vb.ValueBinder):
 
     def _pt_reset(self):
         self._pt_transport.disconnect()
-        if self.scenario is not None:
-            self.scenario.reset()
+        self._pt_resetScenario()
 
     def _pt_connectTransport(self, remoteAddress):
 
@@ -395,3 +379,10 @@ class Party(vb.ValueBinder):
             self._pt_stateError(
                 "Got an error attempting to connect to %r." % (
                     remoteAddress))
+
+    def _pt_resetScenario(self):
+        self.scenario = None
+        if self.Scenario is not None:
+            self.scenario = self.Scenario(delegate=self)
+            self.scenario.actionCallback = util.WeakMethod(
+                self, "scenarioActionCallback")

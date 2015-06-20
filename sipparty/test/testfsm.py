@@ -67,10 +67,10 @@ class TestFSM(unittest.TestCase):
         self.cleanup = 0
 
         self._tf_FSMLogLevel = fsm.log.level
-        fsm.log.setLevel(logging.DEBUG)
+        sipparty.fsm.fsm.log.setLevel(logging.INFO)
 
     def tearDown(self):
-        fsm.log.setLevel(self._tf_FSMLogLevel)
+        fsm.fsm.log.setLevel(self._tf_FSMLogLevel)
 
     def testSimple(self):
         nf = sipparty.FSM(name="testfsm")
