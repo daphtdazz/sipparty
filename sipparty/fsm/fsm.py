@@ -424,21 +424,26 @@ class FSM(object):
 
         self._fsm_popTimerNow()
 
-    def waitForStateCondition(self, condition):
+    def waitForStateCondition(self, condition, timeout=5):
         assert isinstance(condition, collections.Callable)
         assert self._lock, (
             "'waitForStateCondition' may only be called on FSM instances that "
             "use locking (initialize with lock=True).")
 
+        now = time.time()
+        then = now + (timeout if timeout is not None else 0)
         with self._fsm_stateChangeCondition:
-            while True:
+            while timeout is None or then > now:
                 state = self._fsm_state
                 log.debug("State is %r.", state)
                 if condition(state):
                     log.debug("Condition has come true.")
                     break
                 log.debug("Wait; condition not yet true.")
-                self._fsm_stateChangeCondition.wait()
+                self._fsm_stateChangeCondition.wait(then - now)
+                now = time.time()
+            else:
+                raise FSMTimeout("Timeout waiting for condition.")
 
     @util.OnlyWhenLocked
     def checkTimers(self):

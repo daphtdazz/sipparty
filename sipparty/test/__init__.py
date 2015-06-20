@@ -18,7 +18,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-logging.basicConfig(level=logging.DEBUG)
+import sys
+print sys.argv
+if sys.argv[1] == "discover":
+    logging.basicConfig(level=logging.INFO)
+else:
+    logging.basicConfig(level=logging.DEBUG)
 
 from sipparty import (util, fsm)
 util.log.setLevel(logging.INFO)

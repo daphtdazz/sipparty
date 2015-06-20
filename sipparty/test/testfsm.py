@@ -437,6 +437,11 @@ class TestFSM(unittest.TestCase):
         self.assertEqual(fsm.state, "in progress")
         fsm.hit("input")
         fsm.waitForStateCondition(lambda state: state != "in progress")
+        self.assertNotEqual(fsm.state, "in progress")
+        self.assertRaises(
+            sipparty.FSMTimeout,
+            lambda: fsm.waitForStateCondition(
+                lambda state: state == "in progress", timeout=0.1))
 
 if __name__ == "__main__":
     sys.exit(unittest.main())
