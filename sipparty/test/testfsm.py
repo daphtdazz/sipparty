@@ -400,7 +400,14 @@ class TestFSM(unittest.TestCase):
         self.wait_for(lambda: thr_res[0] == 8 * 2)
 
     def testWaitFor(self):
+        fsm = sipparty.FSM()
+        self.assertRaises(
+            AssertionError, lambda: fsm.waitForStateCondition(lambda: True))
 
+        self.subTestWaitFor(async_timers=True)
+        self.subTestWaitFor(async_timers=False)
+
+    def subTestWaitFor(self, async_timers):
         class TFSM(sipparty.FSM):
             FSMDefinitions = {
                 sipparty.fsm.InitialStateKey: {
@@ -424,14 +431,12 @@ class TestFSM(unittest.TestCase):
                 }
             }
 
-        fsm = TFSM(asynchronous_timers=True)
+        fsm = TFSM(lock=True, asynchronous_timers=async_timers)
         fsm.hit("input")
         fsm.waitForStateCondition(lambda state: state == "in progress")
         self.assertEqual(fsm.state, "in progress")
         fsm.hit("input")
         fsm.waitForStateCondition(lambda state: state != "in progress")
-        fsm.hit("reset")
-        fsm.hit("cancel")
 
 if __name__ == "__main__":
     sys.exit(unittest.main())

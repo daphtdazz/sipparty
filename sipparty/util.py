@@ -455,7 +455,7 @@ def OnlyWhenLocked(method):
     if so locks it before calling method, releasing it after."""
 
     def maybeGetLock(self, *args, **kwargs):
-        if not hasattr(self, "_lock"):
+        if not hasattr(self, "_lock") or not self._lock:
             log.debug("No locking in this object.")
             return method(self, *args, **kwargs)
 

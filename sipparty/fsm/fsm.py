@@ -325,7 +325,8 @@ class FSM(object):
         else:
             self._fsm_weakDelegate = weakref.ref(val)
 
-    def __init__(self, name=None, asynchronous_timers=False, delegate=None):
+    def __init__(self, name=None, lock=False, asynchronous_timers=False,
+                 delegate=None):
         """name: a name for this FSM for debugging purposes.
         """
         log.debug("FSM init")
@@ -334,6 +335,9 @@ class FSM(object):
         if name is None:
             name = self._fsm_name + bytes(self.__class__.NextFSMNum)
             self.__class__.NextFSMNum += 1
+
+        if asynchronous_timers:
+            lock=True
 
         self._fsm_name = name
         self._fsm_use_async_timers = asynchronous_timers
@@ -367,6 +371,15 @@ class FSM(object):
 
         self._fsm_inputQueue = Queue.Queue()
         self._fsm_oldThreadQueue = Queue.Queue()
+        self._lock = None
+
+        if lock:
+            # We should lock access to this FSM's state as it may be called
+            # from multiple threads.
+            # Initialize support for the util.OnlyWhenLocked decorator.
+            self._lock = threading.RLock()
+            self._lock_holdingThread = None
+            self._fsm_stateChangeCondition = threading.Condition(self._lock)
 
         if asynchronous_timers:
             # If we pass ourselves directly to the RetryThread, then we'll get
@@ -385,14 +398,7 @@ class FSM(object):
 
             self._fsm_thread = retrythread.RetryThread(
                 action=check_weak_self_timers)
-
-           # Initialize support for the util.OnlyWhenLocked decorator.
-            self._lock = threading.RLock()
-            self._lock_holdingThread = None
-            self._fsm_stateChangeCondition = threading.Condition(self._lock)
-
             self._fsm_thread.start()
-
 
     def addFDSource(self, fd, action):
         if not self._fsm_use_async_timers:
@@ -418,19 +424,21 @@ class FSM(object):
 
         self._fsm_popTimerNow()
 
-    @util.OnlyWhenLocked
     def waitForStateCondition(self, condition):
         assert isinstance(condition, collections.Callable)
-        assert self._fsm_use_async_timers
+        assert self._lock, (
+            "'waitForStateCondition' may only be called on FSM instances that "
+            "use locking (initialize with lock=True).")
 
-        while True:
-            state = self._fsm_state
-            log.debug("State is %r.", state)
-            if condition(state):
-                log.debug("Condition has come true.")
-                break
-            log.debug("Wait; condition not yet true.")
-            self._fsm_stateChangeCondition.wait()
+        with self._fsm_stateChangeCondition:
+            while True:
+                state = self._fsm_state
+                log.debug("State is %r.", state)
+                if condition(state):
+                    log.debug("Condition has come true.")
+                    break
+                log.debug("Wait; condition not yet true.")
+                self._fsm_stateChangeCondition.wait()
 
     @util.OnlyWhenLocked
     def checkTimers(self):
@@ -687,5 +695,5 @@ class FSM(object):
     def _fsm_setState(self, newState):
         "Should only be called from methods that have the lock."
         self._fsm_state = newState
-        if not isinstance(self, type) and self._fsm_use_async_timers:
+        if not isinstance(self, type) and self._lock:
             self._fsm_stateChangeCondition.notifyAll()
