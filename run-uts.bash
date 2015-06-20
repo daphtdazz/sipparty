@@ -18,6 +18,19 @@
 # limitations under the License.
 #
 
-python -m unittest discover
+typeset -a tests
+PREPEND=sipparty.test
+while (( $# > 0 ))
+do
+    tests[${#tests}]=${PREPEND}.$1
+    shift
+done
+
+if (( ${#tests} > 0 ))
+then
+    python -m unittest "${tests[@]}"
+else
+    python -m unittest discover
+fi
 
 exit $?

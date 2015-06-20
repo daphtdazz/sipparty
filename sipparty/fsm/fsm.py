@@ -196,7 +196,8 @@ class FSM(object):
         """Subclasses should override this to do initial subclass setup. It
         is called when initializing the metaclass.
         """
-        pass
+        if hasattr(cls, "FSMDefinitions"):
+            cls.PopulateWithDefinition(cls.FSMDefinitions)
 
     #
     # =================== CLASS OR INSTANCE INTERFACE ========================
@@ -302,7 +303,7 @@ class FSM(object):
             raise ValueError(
                 "FSM %r has no state %r so it cannot be set." %
                 self._fsm_name, state)
-        self._fsm_state = state
+        self._fsm_setState(state)
 
     #
     # =================== INSTANCE INTERFACE =================================
@@ -385,11 +386,13 @@ class FSM(object):
             self._fsm_thread = retrythread.RetryThread(
                 action=check_weak_self_timers)
 
-            # Initialize support for the util.OnlyWhenLocked decorator.
+           # Initialize support for the util.OnlyWhenLocked decorator.
             self._lock = threading.RLock()
             self._lock_holdingThread = None
+            self._fsm_stateChangeCondition = threading.Condition(self._lock)
 
             self._fsm_thread.start()
+
 
     def addFDSource(self, fd, action):
         if not self._fsm_use_async_timers:
@@ -414,6 +417,20 @@ class FSM(object):
         self._fsm_inputQueue.put((input, args, kwargs))
 
         self._fsm_popTimerNow()
+
+    @util.OnlyWhenLocked
+    def waitForStateCondition(self, condition):
+        assert isinstance(condition, collections.Callable)
+        assert self._fsm_use_async_timers
+
+        while True:
+            state = self._fsm_state
+            log.debug("State is %r.", state)
+            if condition(state):
+                log.debug("Condition has come true.")
+                break
+            log.debug("Wait; condition not yet true.")
+            self._fsm_stateChangeCondition.wait()
 
     @util.OnlyWhenLocked
     def checkTimers(self):
@@ -604,7 +621,7 @@ class FSM(object):
             log.debug("Stop timer %r", st.name)
             st.stop()
 
-        self._fsm_state = new_state
+        self._fsm_setState(new_state)
 
         action = res[self.KeyAction]
         if action is not None:
@@ -665,3 +682,10 @@ class FSM(object):
             log.debug("Joining thread %r", thr.name)
             thr.join()
             log.debug("Joined thread %r", thr.name)
+
+    @util.class_or_instance_method
+    def _fsm_setState(self, newState):
+        "Should only be called from methods that have the lock."
+        self._fsm_state = newState
+        if not isinstance(self, type) and self._fsm_use_async_timers:
+            self._fsm_stateChangeCondition.notifyAll()
