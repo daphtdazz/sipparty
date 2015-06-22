@@ -32,7 +32,10 @@ bytes = six.binary_type
 @six.add_metaclass(util.attributesubclassgen)
 @util.TwoCompatibleThree
 class Request(parse.Parser, vb.ValueBinder):
-    """Enumeration class generator"""
+    """Encapsulates a SIP method request line.
+
+    Request-Line  =  Method SP Request-URI SP SIP-Version CRLF
+    """
 
     types = util.Enum(
         ("ACK", "BYE", "CANCEL", "INVITE", "OPTIONS", "REGISTER"),
@@ -44,18 +47,14 @@ class Request(parse.Parser, vb.ValueBinder):
 
     # Parse description.
     parseinfo = {
-        parse.Parser.Pattern:
-            "({0})"
-            " "
-            "([^ ]*|<[^>]*>)"  # The uri.
-            " "
-            "([\w\d./]+)$"  # The protocol
-            "".format("|".join(types)),
+        parse.Parser.Pattern: (
+            b"({Method}){SP}({Request_URI}){SP}({SIP_Version})"
+            "".format(**prot.__dict__)),
         parse.Parser.Constructor:
             (1, lambda a: getattr(Request, a)(autofill=False)),
         parse.Parser.Mappings:
             [None,  # First group is for the constructor.
-             ("uri", components.URI, lambda x: x.strip("<>")),
+             ("uri", components.URI),
              ("protocol",)],
     }
 
@@ -69,5 +68,10 @@ class Request(parse.Parser, vb.ValueBinder):
 
         for prop in ("uri", "protocol"):
             setattr(self, prop, locals()[prop])
+
+    def __repr__(self):
+        return (
+            "{0.__class__.__name__}(uri={0.uri!r}, protocol={0.protocol!r})"
+            "".format(self))
 
 Request.addSubclassesFromDict(locals())

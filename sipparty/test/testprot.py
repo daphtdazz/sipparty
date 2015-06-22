@@ -29,8 +29,10 @@ if __name__ == "__main__":
 else:
     log = logging.getLogger(__name__)
 bytes = six.binary_type
+iteritems = six.iteritems
 
-from sipparty import (util, sip, vb)
+from sipparty import (util, sip, vb, ParseError, Request)
+from sipparty.sip import (prot, components)
 
 
 class TestProtocol(unittest.TestCase):
@@ -48,8 +50,6 @@ class TestProtocol(unittest.TestCase):
             "".format(stra, strb))
 
     def testGeneral(self):
-        sip.param.log.setLevel(logging.DEBUG)
-        vb.log.setLevel(logging.DEBUG)
         aliceAOR = sip.components.AOR("alice", "atlanta.com")
         self.assertEqual(bytes(aliceAOR), "alice@atlanta.com")
         bobAOR = sip.components.AOR("bob", "baltimore.com")
@@ -63,17 +63,7 @@ class TestProtocol(unittest.TestCase):
         self.assertRaises(AttributeError, lambda: sip.Message.notareg)
 
         invite = sip.Message.invite()
-        self.assertTrue(re.match(
-            "INVITE sip: SIP/2.0\r\n"
-            "From: sip:;{3}\r\n"
-            "To: sip:\r\n"
-            "Via: SIP/2.0/UDP;{1}\r\n"
-            "Call-ID: {0}\r\n"
-            "CSeq: {2} INVITE\r\n"
-            "Max-Forwards: 70\r\n".format(
-                TestProtocol.call_id_pattern, TestProtocol.branch_pattern,
-                TestProtocol.cseq_num_pattern, TestProtocol.tag_pattern),
-            bytes(invite)), "%r\n--OR--\n%s" % (bytes(invite), invite))
+        self.assertRaises(prot.Incomplete, lambda: bytes(invite))
         old_branch = bytes(invite.viaheader.parameters.branch)
         invite.startline.uri = sip.components.URI(aor=bobAOR)
 
@@ -138,8 +128,8 @@ class TestProtocol(unittest.TestCase):
         invite.fromheader.field.value.uri.aor.username = "alice"
         invite.fromheader.field.value.uri.aor.host = "atlanta.com"
         log.debug("Set via header host.")
-        invite.viaheader.field.host.host = "127.0.0.1"
         invite.viaheader.field.host.port = "5060"
+        invite.contactheader.field.value.uri.aor.host = "127.0.0.1"
         invite_str = bytes(invite)
         log.debug("Invite to stringify and parse: %r", invite_str)
 
@@ -236,6 +226,45 @@ class TestProtocol(unittest.TestCase):
         self.assertEqual(inst.a, 1)
         self.assertEqual(inst.b, 2)
 
+    def testProt(self):
+        for name, obj in iteritems(prot.__dict__):
+            if name.endswith("range") or name in ('STAR',):
+                continue
+            if isinstance(obj, six.binary_type):
+                try:
+                    re.compile(obj)
+                except re.error as exc:
+                    self.fail("Failed to compile %r: %s: %r" % (
+                        name, exc, obj))
+
+        for ptrn, examples in (
+                (prot.userinfo, ('bob@',)),
+                (prot.hostname, ('biloxihostname.com',)),
+                (prot.host, ('biloxihost.com',)),
+                (prot.hostport, ('biloxible.com',)),
+                (prot.addr_spec, ('sip:bob@biloxi.com',)),
+                (prot.SIP_URI, ('sip:bob@biloxi.com',)),):
+            cre = re.compile(ptrn)
+            for example in examples:
+                mo = cre.match(example)
+                self.assertIsNotNone(
+                    mo, "regex %r did not match %r" % (ptrn, example))
+                self.assertEqual(len(mo.group(0)), len(example), (
+                    "%d != %d: regex %r does not fully match %r." % (
+                        (len(mo.group(0)), len(example), ptrn, example))))
+
+    def testComponents(self):
+        for cpnt, examples in (
+                (components.DNameURI, ("sip:bob@biloxi.com",)),
+                (Request, ('INVITE sip:bob@biloxi.com SIP/2.0',))):
+            for example in examples:
+                try:
+                    cp = cpnt.Parse(example)
+                except ParseError:
+                    self.fail("%r failed to parse %r." % (
+                        cpnt.__name__, example))
+
+                self.assertEqual(example, bytes(cp))
 
 if __name__ == "__main__":
     sys.exit(unittest.main())

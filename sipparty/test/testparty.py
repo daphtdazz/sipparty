@@ -33,6 +33,7 @@ else:
     log = logging.getLogger(__name__)
 
 from sipparty import (fsm, sip, util, sipscenarios)
+from sipparty.sip import components
 
 tks = sip.scenario.TransitionKeys
 
@@ -112,6 +113,8 @@ class TestParty(unittest.TestCase):
 
         util.WaitFor(lambda: wp1().state == wp1().States.InCall, 1)
         util.WaitFor(lambda: p2.state == p2.States.InCall, 1)
+
+        self.assertEqual(p2.calleeAOR, p1.aor)
 
         p1tag = p1.myTag
         p2tag = p2.myTag

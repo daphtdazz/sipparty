@@ -22,8 +22,7 @@ import random
 import re
 import logging
 
-from sipparty import (util, vb, parse)
-from parse import Parser
+from sipparty import (util, vb, Parser)
 import prot
 import components
 import field
@@ -78,8 +77,7 @@ class Header(Parser, vb.ValueBinder):
             # or not.
             "({token})"
             "{HCOLON}"
-            "\s*"
-            "([^,]+)$"  # Everything else to be parsed in parsecust().
+            "({header_value})"  # Everything else to be parsed in parsecust().
             "".format(**prot.__dict__),
         Parser.Constructor:
             (1, lambda type: getattr(Header, type)())
@@ -121,6 +119,11 @@ class Header(Parser, vb.ValueBinder):
     def __bytes__(self):
         return b"{0}: {1}".format(
             self.type, ",".join([bytes(v) for v in self.fields]))
+
+    def __repr__(self):
+        return (
+            "{0.__class__.__name__}(fields={0.fields!r})"
+            "".format(self))
 
 
 class FieldDelegateHeader(Header):

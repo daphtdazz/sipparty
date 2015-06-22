@@ -132,7 +132,6 @@ class ValueBinder(object):
     def __getattr__(self, attr):
         """If the attribute is a delegated attribute, gets the attribute from
         the delegate, else calls super."""
-        log.debug("getattr(%r, %r)", self.__class__.__name__, attr)
         if attr in self._vb_delegate_attributes:
             return getattr(getattr(self, self._vb_delegate_attributes[attr]),
                            attr)

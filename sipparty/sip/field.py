@@ -49,7 +49,7 @@ class Field(parse.Parser, vb.ValueBinder):
     parseinfo = {
         parse.Parser.Pattern:
             "([^;]+)"  # String value.
-            "((;[^;]*)*)"  # Parameters.
+            "(.*)"  # Parameters.
             "",
         parse.Parser.Mappings:
             [("value",),
@@ -83,6 +83,12 @@ class Field(parse.Parser, vb.ValueBinder):
                 return setattr(delval, attr, val)
 
         super(Field, self).__setattr__(attr, val)
+
+    def __repr__(self):
+        return (
+            "{0.__class__.__name__}(value={0.value!r}, "
+            "parameters={0.parameters!r})"
+            "".format(self))
 
 
 class DNameURIField(Field):

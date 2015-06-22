@@ -243,12 +243,9 @@ class Party(vb.ValueBinder):
         try:
             return super(Party, self).__getattr__(attr)
         except AttributeError:
-            log.debug(
-                "scenario inputs: %r",
-                scn.Inputs if scn is not None else None)
             raise AttributeError(
                 "{self.__class__.__name__!r} instance has no attribute "
-                "{attr!r}."
+                "{attr!r}; scenario inputs were {scn.Inputs}."
                 "".format(**locals()))
 
     #
@@ -256,13 +253,19 @@ class Party(vb.ValueBinder):
     #
     def _pt_messageConsumer(self, message):
         log.debug("Received a %r message.", message.type)
+        tt = None
+        cleaor = None
         if self.theirTag is None:
             if message.isrequest():
-                self.theirTag = message.FromHeader.field.parameters.tag
-                self.calleeAOR = message.FromHeader.field.value.uri.aor
+                tt = message.FromHeader.field.parameters.tag
+                cleaor = message.FromHeader.field.value.uri.aor
             else:
-                self.theirTag = message.ToHeader.field.parameters.tag
-                self.calleeAOR = message.ToHeader.field.value.uri.aor
+                tt = message.ToHeader.field.parameters.tag
+                cleaor = message.ToHeader.field.value.uri.aor
+            self.theirTag = tt
+            self.calleeAOR = cleaor
+        log.debug("Their tag: %r", tt)
+        log.debug("Their AOR: %r", cleaor)
         self.scenario.hit(message.type, message)
 
     def _pt_send(self, message_type, callee=None, contactAddress=None):
@@ -313,6 +316,9 @@ class Party(vb.ValueBinder):
                 raise ValueError(
                     "Message recipient is not an AOR: %r." % callee)
 
+        self.calleeAOR = calleeAOR
+        log.debug("%r", self.calleeAOR)
+
         log.info("Connecting to address %r.", contactAddress)
         self._pt_connectTransport(contactAddress)
 
@@ -321,6 +327,8 @@ class Party(vb.ValueBinder):
         # Hook it onto the outbound message. This does all the work of setting
         # attributes from ourself as per our bindings.
         self._pt_outboundRequest = msg
+
+        log.debug("%r", self._pt_outboundRequest)
 
         try:
             tp.send(bytes(msg))

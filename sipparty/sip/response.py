@@ -19,16 +19,16 @@ limitations under the License.
 import re
 import logging
 
-from sipparty import (parse, util, vb)
+from sipparty import (util, vb, Parser)
 import prot
 import defaults
 import components
-from parse import Parser
 from header import Header
 
 log = logging.getLogger(__name__)
 
 
+@util.TwoCompatibleThree
 class Response(Parser, vb.ValueBinder):
     """Response line class, such as
     200 INVITE
@@ -37,15 +37,12 @@ class Response(Parser, vb.ValueBinder):
     # Parse description.
     parseinfo = {
         Parser.Pattern:
-            "([^\s]+)"  # The protocol.
-            " "
-            "(\d+)"  # The response code.
-            " "
-            "(.+)$",  # The reason
+            "({SIP_Version}){SP}({Status_Code}){SP}({Reason_Phrase})"
+            "".format(**prot.__dict__),
         Parser.Mappings:
             [("protocol",),
              ("code", int),  # The code should be an int.
-             ("codemessage",)],
+             ("codeMessage",)],
     }
 
     @classmethod
@@ -59,20 +56,33 @@ class Response(Parser, vb.ValueBinder):
 
         raise prot.ProtocolError("Unknown response code %d" % code)
 
-    def __str__(self):
-        return "{self.protocol} {self.code} {self.codemessage}".format(
-            self=self)
+    codeMessage = util.DerivedProperty(
+        "_rsp_codeMessage", get="getCodeMessage")
 
-    def __init__(self, code=None):
+    def getCodeMessage(self, underlyingValue):
+        if underlyingValue is not None:
+            return underlyingValue
+
+        return self.MessageForCode(self.code)
+
+    def __init__(self, code=None, codeMessage=None,
+                 protocol=defaults.sipprotocol):
         super(Response, self).__init__()
         if code is not None:
             try:
-                self.code = int(code)
+                code = int(code)
             except ValueError:
                 raise ValueError("Response code %r not an integer" % code)
-        self.protocol = None
-        self.codemessage = None
 
-    def generate_codemessage(self):
-        return self.MessageForCode(self.code)
-    codemessage = util.GenerateIfNotSet("codemessage")
+        self.code = code
+        self.protocol = protocol
+        self.codeMessage = codeMessage
+
+    def __bytes__(self):
+        return b"{0.protocol} {0.code} {0.codeMessage}".format(self)
+
+    def __repr__(self):
+        return (
+            "{0.__class__.__name__}(code={0.code!r}, "
+            "codeMessage={0.codeMessage!r}, protocol={0.protocol!r})"
+            "".format(self))

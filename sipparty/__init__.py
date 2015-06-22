@@ -16,8 +16,9 @@ limitations under the License.
 """
 import fsm
 import vb
-import parse
+from parse import (Parser, ParsedProperty, ParseError)
 import sdp
 import sip
+from sip.request import (Request,)
 
 from fsm import (FSM, FSMTimeout)

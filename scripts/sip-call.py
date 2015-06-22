@@ -21,10 +21,13 @@ limitations under the License.
 import argparse
 import logging
 import time
-import sipscenarios
+import socket
 
-logging.basicConfig()
+import sipparty
+from sipparty import sipscenarios
+
 log = logging.getLogger()
+logging.basicConfig()
 
 
 class SipCallArgs(argparse.ArgumentParser):
@@ -36,17 +39,31 @@ class SipCallArgs(argparse.ArgumentParser):
 
         self.add_argument("aor")
         self.add_argument(
-            '--debug', '-D', type=int, nargs='?', help='Turn on debugging')
+            '--debug', '-D', type=int, nargs='?', help='Turn on debugging',
+            default=logging.WARNING)
+
+        self.args = self.parse_args()
+
+        if self.args.debug is None:
+            self.args.debug = logging.DEBUG
+
 
 #
 # =================== Main script. =======================================
 #
-args = SipCallArgs().parse_args()
+args = SipCallArgs().args
 
-sipclient = sipscenarios.SimpleParty()
+sipparty.sip.transport.prot_log.setLevel(logging.INFO)
+if args.debug < logging.INFO:
+    sipparty.util.log.setLevel(logging.INFO)
+    sipparty.fsm.retrythread.log.setLevel(logging.INFO)
+
+
+sipclient = sipscenarios.SimpleParty(socketType=socket.SOCK_DGRAM)
 
 sipclient.sendInvite(args.aor)
 sipclient.waitUntilState(sipclient.States.InCall,
-                         error_state=sipclient.States.Initial)
+                         error_state=sipclient.States.Initial,
+                         timeout=5)
 
 log.info("Finished.")

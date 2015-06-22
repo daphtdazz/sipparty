@@ -19,9 +19,8 @@ limitations under the License.
 import six
 import random
 import logging
-from sipparty import (util, vb, parse)
+from sipparty import (util, vb, Parser)
 import prot
-from parse import Parser
 
 log = logging.getLogger(__name__)
 bytes = six.binary_type
@@ -90,12 +89,15 @@ class Param(Parser, vb.ValueBinder):
     }
 
     name = util.ClassType("Param")
+    value = util.DerivedProperty("_prm_value", get="getValue")
 
     def __init__(self, value=None):
         super(Param, self).__init__()
-        self.values = []
-        if value is not None:
-            self.value = value
+        self.value = value
+
+    def getValue(self, underlyingValue):
+        "Get the value. Subclasses should override."
+        return underlyingValue
 
     def __bytes__(self):
         log.debug("Param Bytes")
@@ -112,7 +114,10 @@ class Param(Parser, vb.ValueBinder):
         return True
 
     def __repr__(self):
-        return "%s(value=%r)" % (self.__class__.__name__, self.value)
+        return "%s(value=%r)" % (
+            # !!! TODO: self.value causes us to call bytes which may not
+            # work...
+            self.__class__.__name__, self.value)
 
 
 class BranchParam(Param):
@@ -127,27 +132,26 @@ class BranchParam(Param):
             BranchParam.BranchNumber += 1
         self.branch_num = branch_num
 
-    def generate_value(self):
+    def getValue(self, underlyingValue):
+        if underlyingValue is not None:
+            return underlyingValue
+
         if not hasattr(self, "startline") or not hasattr(self, "branch_num"):
-            raise AttributeError(
-                "{self.__class__.__name__!r} needs attributes 'startline' and "
-                "'branch_num' to autogenerate 'value'."
-                "".format(**locals()))
-        str_to_hash = b"{0}-{1}".format(
-            bytes(self.startline), self.branch_num)
+            return None
+
+        try:
+            str_to_hash = b"{0}-{1}".format(
+                bytes(self.startline), self.branch_num)
+        except prot.Incomplete:
+            # So part of us is not complete. Return None.
+            return None
+
         the_hash = hash(str_to_hash)
         if the_hash < 0:
             the_hash = - the_hash
         nv = b"{0}{1:x}".format(prot.BranchMagicCookie, the_hash)
         log.debug("New %r value %r", self.__class__.__name__, nv)
         return nv
-    value = util.GenerateIfNotSet("value")
-
-    def __setattr__(self, attr, val):
-        if attr in ("startline", "branch_num"):
-            if hasattr(self, "value"):
-                del self.value
-        super(BranchParam, self).__setattr__(attr, val)
 
 
 class TagParam(Param):
@@ -158,11 +162,16 @@ class TagParam(Param):
         super(TagParam, self).__init__()
         self.tagtype = tagtype
 
-    def generate_value(self):
+    def getValue(self, underlyingValue):
+        if underlyingValue is not None:
+            return underlyingValue
+
         # RFC 3261 asks for 32 bits of randomness. Expect random is good
         # enough.
-        return "{0:08x}".format(random.randint(0, 2**32 - 1))
+        value = "{0:08x}".format(random.randint(0, 2**32 - 1))
 
-    value = util.GenerateIfNotSet("value")
+        # The TagParam needs to learn its value and stick with it.
+        self._prm_value = value
+        return value
 
-Param.addSubclassesFromDict(locals())
+Param.addSubclassesFromDict(dict(locals()))

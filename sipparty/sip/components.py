@@ -22,8 +22,7 @@ limitations under the License.
 import six
 
 import prot
-from sipparty import (util, vb, parse)
-from parse import Parser
+from sipparty import (util, vb, Parser, ParsedProperty)
 
 bytes = six.binary_type
 
@@ -71,6 +70,10 @@ class Host(Parser, vb.ValueBinder):
     def __repr__(self):
         return b"Host(host={host}, port={port})".format(**self.__dict__)
 
+    def __eq__(self, other):
+        return (
+            self.host == other.host and self.port == other.port)
+
 
 @util.TwoCompatibleThree
 class AOR(Parser, vb.ValueBinder):
@@ -78,67 +81,125 @@ class AOR(Parser, vb.ValueBinder):
 
     parseinfo = {
         Parser.Pattern:
-            "(.*)"
-            "@"
-            "(.*)$",
+            b"(?:({user}|{telephone_subscriber})(?::{password})?@)?"
+            "({hostport})".format(**prot.__dict__),
         Parser.Mappings:
             [("username",),
              ("host", Host)],
     }
 
+    host = ParsedProperty("_aor_host", Host)
+
     def __init__(self, username=None, host=None, **kwargs):
         super(AOR, self).__init__()
+        self._aor_host = None
         self.username = username
-        self.host = (
-            host
-            if host is not None and not isinstance(host, str) else
-            Host(host=host, **kwargs))
+        if host is None:
+            host = Host()
+        self.host = host
 
     def __bytes__(self):
-        if self.username and self.host:
-            return b"{username}@{host}".format(**self.__dict__)
 
-        if self.host:
-            return b"{host}".format(**self.__dict__)
+        host = self.host
+        if not host:
+            raise prot.Incomplete("AOR %r does not have a host." % self)
 
-        return b""
+        uname = self.username
+        if uname:
+            return b"{0}@{1}".format(uname, host)
+
+        return bytes(host)
 
     def __repr__(self):
         return (
-            "{self.__class__.__name__}(username={self.username!r}, "
-            "host={self.host!r})"
-            "".format(self=self))
+            "{0.__class__.__name__}(username={0.username!r}, "
+            "host={0.host!r})"
+            "".format(self))
+
+    def __eq__(self, other):
+        return (
+            other.username == self.username and
+            other.host == self.host)
 
 
 @util.TwoCompatibleThree
 class URI(Parser, vb.ValueBinder):
-    """A URI object."""
+    """A URI object.
+
+    This decomposes addr-spec from RFC 3261:
+
+    addr-spec      =  SIP-URI / SIPS-URI / absoluteURI
+    SIP-URI          =  "sip:" [ userinfo ] hostport
+                    uri-parameters [ headers ]
+    SIPS-URI         =  "sips:" [ userinfo ] hostport
+                        uri-parameters [ headers ]
+    absoluteURI    =  scheme ":" ( hier-part / opaque-part )
+    hier-part      =  ( net-path / abs-path ) [ "?" query ]
+    net-path       =  "//" authority [ abs-path ]
+    opaque-part    =  uric-no-slash *uric
+    """
 
     parseinfo = {
         Parser.Pattern:
-            "(sip|sips)"
-            ":"
-            "(.*)$",
+            "(?:"
+            "(sips?):"  # Most likely sip or sips uri.
+            "((?:{userinfo})?{hostport})"
+            "({uri_parameters})({headers})?|"
+            "({scheme}):"  # Else some other scheme.
+            "({hier_part}|{opaque_part})"
+            ")".format(**prot.__dict__),
         Parser.Mappings:
             [("scheme",),
-             ("aor", AOR)],
+             ("aor", AOR),
+             ("parameters",),
+             ("headers",),
+             ("scheme",),
+             ("absoluteURIPart",)],
     }
 
-    def __init__(self, scheme=None, aor=None):
+    def __init__(
+            self, scheme=None, aor=None, absoluteURIPart=None, parameters=b"",
+            headers=b""):
         super(URI, self).__init__()
 
         if scheme is None:
             scheme = defaults.scheme
+        self.scheme = scheme
+
         if aor is None:
             aor = AOR()
+        self.aor = aor
 
-        for prop in dict(locals()):
-            if prop == "self":
-                continue
-            setattr(self, prop, locals()[prop])
+        # If it wasn't a SIP/SIPS URL, this contains the body of the URL (the
+        # bit after the scheme).
+        self.absoluteURIPart = absoluteURIPart
+
+        self.parameters = parameters
+        self.headers = headers
 
     def __bytes__(self):
-        return "{scheme}:{aor}".format(**self.__dict__)
+        if not self.scheme:
+            raise prot.Incomplete("URI %r does not have a scheme." % self)
+
+        if self.absoluteURIPart:
+            auripart = bytes(self.absoluteURIPart)
+            if not auripart:
+                raise prot.Incomplete(
+                    "URI %r has an empty absoluteURIPart" % self)
+            return b"{scheme}:{absoluteURIPart}".format(**self.__dict__)
+
+        aorbytes = bytes(self.aor)
+        if not aorbytes:
+            raise prot.Incomplete(
+                "URI %r has an empty aor." % self)
+        return "{scheme}:{aor}{parameters}{headers}".format(**self.__dict__)
+
+    def __repr__(self):
+        return (
+            "{0.__class__.__name__}(scheme={0.scheme!r}, aor={0.aor!r}, "
+            "absoluteURIPart={0.absoluteURIPart!r}, "
+            "parameters={0.parameters!r}, headers={0.headers!r})"
+            "".format(self))
 
 
 @util.TwoCompatibleThree
@@ -148,7 +209,6 @@ class DNameURI(Parser, vb.ValueBinder):
     This is basically (name-addr/addr-spec) where:
 
     name-addr      =  [ display-name ] LAQUOT addr-spec RAQUOT
-    addr-spec      =  SIP-URI / SIPS-URI / absoluteURI
     display-name   =  *(token LWS)/ quoted-string
 
     contact-params     =  c-p-q / c-p-expires
@@ -166,21 +226,13 @@ class DNameURI(Parser, vb.ValueBinder):
     uri_mapping = ("uri", URI)
     parseinfo = {
         Parser.Pattern:
-            "("  # Either we want...
-            "([^<]+)"  # something which is not in angle brackets (disp. name)
-            "<([^>]+)>|"  # followed by a uri that is in <> OR...
-            "("
-            "(\w.*)\s+|"  # optionally at least one non-space for the disp
-            "\s*"  # or just spaces
-            ")"
-            "([^\s]+)"  # at least one thing that isn't a space for the uri
-            "\s*"  # followed by arbitrary space
-            ")$",
+            b"(?:{LAQUOT}({addr_spec}){RAQUOT}|"
+            "({addr_spec})|"
+            "({display_name}){LAQUOT}({addr_spec}){RAQUOT})"
+            "".format(**prot.__dict__),
         Parser.Mappings:
-            [None,
-             dname_mapping,
+            [uri_mapping,
              uri_mapping,
-             None,
              dname_mapping,
              uri_mapping]
     }
@@ -201,6 +253,12 @@ class DNameURI(Parser, vb.ValueBinder):
         if self.uri:
             return(bytes(self.uri))
 
-        return b""
+        raise prot.Incomplete(
+            "DNameURI %r needs at least a URI to mean something." % self)
+
+    def __repr__(self):
+        return (
+            "{0.__class__.__name__}(dname={0.dname!r}, uri={0.uri!r})"
+            "".format(self))
 
 import defaults

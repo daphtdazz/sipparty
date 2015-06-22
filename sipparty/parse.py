@@ -22,10 +22,34 @@ import logging
 import six
 
 log = logging.getLogger(__name__)
+bytes = six.binary_type
 
 
 class ParseError(Exception):
     pass
+
+
+class ParsedProperty(object):
+    """This descriptor overrides set, such that if a value that is of binary
+    type is set, instead of setting it directly, the `Parse` method of the
+    Parser subclass is called instead."""
+
+    def __init__(self, attr, cls):
+        assert isinstance(cls, type) and hasattr(cls, "Parse"), (
+            "Only subclasses of Parser may be used for ParsedProperty "
+            "classes.")
+        self._pp_attr = attr
+        self._pp_class = cls
+
+    def __get__(self, obj, cls):
+        assert obj is not None, "ParsedProperty only applicable for instances."
+        return getattr(obj, self._pp_attr)
+
+    def __set__(self, obj, val):
+        if isinstance(val, bytes):
+            val = self._pp_class.Parse(val)
+
+        setattr(obj, self._pp_attr, val)
 
 
 class Parser(object):
@@ -57,6 +81,8 @@ class Parser(object):
         > "a"
         kv.value
         > "b"
+
+        Attributes may be specified more than and
 
     ### Attribute customization
 
@@ -141,11 +167,12 @@ class Parser(object):
     @classmethod
     def ParseFail(cls, string, *args, **kwargs):
         log.debug("Parse failure of message %r", string)
+        for arg in args:
+            log.debug(arg)
         for key, val in six.iteritems(kwargs):
             log.debug("%r=%r", key, val)
         raise ParseError(
-            "{cls.__name__!r} type failed to parse text {string!r}. Extra "
-            "info: {args}"
+            "{cls.__name__!r} type failed to parse text {string!r}."
             "".format(**locals()))
 
     @classmethod
@@ -155,8 +182,6 @@ class Parser(object):
                 "{cls.__name__!r} does not support parsing (has no "
                 "'parseinfo' field)."
                 "".format(**locals()))
-
-        log.debug("  parseinfo: %r", cls.parseinfo)
 
         pi = cls.parseinfo
         if Parser.RE not in pi:
@@ -171,8 +196,8 @@ class Parser(object):
             try:
                 pi[Parser.RE] = re.compile(ptrn)
             except re.error:
-                log.error("Pattern failed to compile:")
-                log.error(ptrn)
+                log.error("Class %r pattern failed to compile:", cls.__name__)
+                log.error("%r", ptrn)
                 raise
             log.debug("  compile done.")
 

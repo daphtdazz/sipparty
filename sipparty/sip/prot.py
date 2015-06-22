@@ -21,91 +21,106 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-# Primitives. Refer to https://tools.ietf.org/html/rfc3261#section-25.1 for
-# the ABNF.  All written out for perf reasons.
+# Refer to https://tools.ietf.org/html/rfc3261#section-25.1 for the ABNF.
 CRLF = b"\r\n"
 SP = b" "
 HTAB = b"\t"
 WS = b"[ \t]".format(**locals())
-# LWS = b"(?:{WS}*{CRLF})?{WS}+"
 LWS = b"(?:{WS}*{CRLF})?{WS}+".format(**locals())  # Linear whitespace.
 SWS = b"(?:{LWS})?".format(**locals())  # Separator whitespace.
 HCOLON = b"{WS}*:{SWS}".format(**locals())
 SEMI = b"{SWS};{SWS}".format(**locals())
 SLASH = b"{SWS}/{SWS}".format(**locals())
 COLON = b"{SWS}:{SWS}".format(**locals())
-ALPHA = b"[a-zA-Z]".format(**locals())
-DIGIT = b"[0-9]".format(**locals())
-HEXDIG = b"[0-9a-fA-F]".format(**locals())
+upper_alpharange = b"A-Z"
+upper_alpha = b"[{upper_alpharange}]".format(**locals())
+alpharange = b"a-z{upper_alpharange}".format(**locals())
+ALPHA = b"[{alpharange}]".format(**locals())
+digitrange = b"0-9"
+DIGIT = b"[{digitrange}]".format(**locals())
+hexrange = b"{digitrange}a-fA-F".format(**locals())
+HEXDIG = b"[{hexrange}]".format(**locals())
 EQUAL = b"{SWS}={SWS}".format(**locals())
 DQUOTE = b"\""
-# UTF8_NONASCII = b"" TODO sort out uses.
-# alphanum is written out for performance reasons.
-# alphanum = "(?:{ALPHA}|{DIGIT})"
-alphanum = b"[a-zA-Z0-9]"
+LAQUOT = b"<"
+RAQUOT = b">"
+CHARrange = b"\x01-\x7F"  # As per RFC 2326.
+CHAR = b"[{CHARrange}]".format(**locals())
+UTF8_CONT = b"[\x80-\xbf]"
+UTF8_NONASCIIopts = (
+    b"[\xc0-\xdf]{UTF8_CONT}|"
+    "[\xe0-\xef]{UTF8_CONT}{{2}}|"
+    "[\xf0-\xf7]{UTF8_CONT}{{3}}|"
+    "[\xf8-\xfb]{UTF8_CONT}{{4}}|"
+    "[\xfc-\xfd]{UTF8_CONT}{{5}}"
+    "".format(**locals()))
+UTF8_NONASCII = b"(?:{UTF8_NONASCIIopts})".format(**locals())
+TEXT_UTF8charopts = (
+    b"[\x21-\x7e]|{UTF8_NONASCIIopts}"
+    "".format(**locals()))
+TEXT_UTF8char = b"(?:{TEXT_UTF8charopts})".format(**locals())
+TEXT_UTF8charsopts = (
+    b"[\x21-\x7e]+|{UTF8_NONASCIIopts}"
+    "".format(**locals()))
+TEXT_UTF8chars = b"(?:{TEXT_UTF8charopts})".format(**locals())
+alphanumrange = b"{alpharange}{digitrange}".format(**locals())
+alphanum = b"[{alphanumrange}]".format(**locals())
+markrange = b"_.!~*'()-"
+mark = b"[{markrange}]".format(**locals())
+unreservedrange = b"{alphanumrange}{markrange}".format(**locals())
+unreserved = b"[{unreservedrange}]".format(**locals())
+reservedrange = b";/?:@&=+$,"
+reserved = b"[{reservedrange}]".format(**locals())
+escaped = b"%{HEXDIG}{HEXDIG}".format(**locals())
+user_unreservedrange = b"&=+$,;?/"
+user_unreserved = b"[{user_unreservedrange}]".format(**locals())
 
-# A SIP token.
-# token       =  1*(alphanum / "-" / "." / "!" / "%" / "*"
-#                      / "_" / "+" / "`" / "'" / "~" )
-token = b"[a-zA-Z0-9#-_.!%*+`'~]+".format(**locals())
+# The following come from RFC 2806.
+token_charrange = (
+    b"!\x23-\x27*\x2b-\x2d{alphanumrange}^_`|~".format(**locals()))
+token_char = b"[{token_charrange}]".format(**locals())
+quoted_string = (
+    b"\"(?:[\x20-\x21\x23-\x7E\x80-\xFF]+|\\{CHAR})*\"".format(**locals()))
+visual_separatorrange = b".()-"
+visual_separator = b"[{visual_separatorrange}]".format(**locals())
+phonedigitrange = b"{digitrange}{visual_separatorrange}".format(**locals())
+phonedigit = b"[{phonedigitrange}]".format(**locals())
+dtmf_digitrange = b"*#ABCD"
+dtmf_digit = b"[{dtmf_digitrange}]".format(**locals())
+one_second_pause = b"p"
+wait_for_dial_tone = b"w"
+pause_characterrange = (
+    b"{one_second_pause}{wait_for_dial_tone}".format(**locals()))
+pause_character = b"[{pause_characterrange}]".format(**locals())
+base_phone_number = b"{phonedigit}+".format(**locals())
+# The following are special cases of extensions that aren't needed yet.
+# isdn-subaddress       = ";isub=" 1*phonedigit
+# post-dial             = ";postd=" 1*(phonedigit /
+#                         dtmf-digit / pause-character)
+# area-specifier        = ";" phone-context-tag "=" phone-context-ident
+# service_provider      = provider-tag "=" provider-hostname
+future_extension = (
+    b";{token_char}+"
+    "(?:=(?:{token_char}+(?:[?]{token_char}+)|{quoted_string}))?"
+    "".format(**locals()))
+global_phone_number = (
+    b"[+]{base_phone_number}(?:{future_extension})*"
+    "".format(**locals()))
+local_phone_number = (
+    b"[{dtmf_digitrange}{pause_characterrange}{phonedigitrange}]+"
+    "(?:{future_extension})*"
+    "".format(**locals()))
+telephone_subscriber = (
+    b"(?:{global_phone_number}|{local_phone_number})".format(**locals()))
+
+token = b"[{alphanumrange}\x23-\x5F.!%*+`'~]+".format(**locals())
 STAR = b"*"
-
-# Display name
-# display-name   =  *(token LWS)/ quoted-string
-display_name = b""
 
 # The end of line string used in SIP messages.
 EOL = CRLF
 
 # Magic cookie used in branch parameters.
 BranchMagicCookie = b"z9hG4bK"
-
-"""
-Via               =  ( "Via" / "v" ) HCOLON via-parm *(COMMA via-parm)
-via-parm          =  sent-protocol LWS sent-by *( SEMI via-params )
-via-params        =  via-ttl / via-maddr
-                     / via-received / via-branch
-                     / via-extension
-via-ttl           =  "ttl" EQUAL ttl
-via-maddr         =  "maddr" EQUAL host
-via-received      =  "received" EQUAL (IPv4address / IPv6address)
-via-branch        =  "branch" EQUAL token
-via-extension     =  generic-param
-sent-protocol     =  protocol-name SLASH protocol-version
-                     SLASH transport
-protocol-name     =  "SIP" / token
-protocol-version  =  token
-transport         =  "UDP" / "TCP" / "TLS" / "SCTP"
-                     / other-transport
-sent-by           =  host [ COLON port ]
-ttl               =  1*3DIGIT ; 0 to 255
-
-quoted-pair  =  "\" (%x00-09 / %x0B-0C
-                / %x0E-7F)
-
-SIP-URI          =  "sip:" [ userinfo ] hostport
-                    uri-parameters [ headers ]
-SIPS-URI         =  "sips:" [ userinfo ] hostport
-                    uri-parameters [ headers ]
-userinfo         =  ( user / telephone-subscriber ) [ ":" password ] "@"
-user             =  1*( unreserved / escaped / user-unreserved )
-user-unreserved  =  "&" / "=" / "+" / "$" / "," / ";" / "?" / "/"
-password         =  *( unreserved / escaped /
-                    "&" / "=" / "+" / "$" / "," )
-hostport         =  host [ ":" port ]
-host             =  hostname / IPv4address / IPv6reference
-hostname         =  *( domainlabel "." ) toplabel [ "." ]
-domainlabel      =  alphanum
-                    / alphanum *( alphanum / "-" ) alphanum
-toplabel         =  ALPHA / ALPHA *( alphanum / "-" ) alphanum
-IPv4address    =  1*3DIGIT "." 1*3DIGIT "." 1*3DIGIT "." 1*3DIGIT
-IPv6reference  =  "[" IPv6address "]"
-IPv6address    =  hexpart [ ":" IPv4address ]
-hexpart        =  hexseq / hexseq "::" [ hexseq ] / "::" [ hexseq ]
-hexseq         =  hex4 *( ":" hex4)
-hex4           =  1*4HEXDIG
-port           =  1*DIGIT"""
-
 
 hex4 = b"{HEXDIG}{{1,4}}".format(**locals())
 # Surely IPv6 address length is limited?
@@ -116,12 +131,13 @@ IPv4address = b"{DIGIT}{{1,3}}(?:[.]{DIGIT}{{1,3}}){{3}}".format(**locals())
 IPv6address = b"{hexpart}(?::{IPv4address})?".format(**locals())
 IPv6reference = b"[[]{IPv6address}[]]".format(**locals())
 port = b"{DIGIT}+".format(**locals())
-toplabel = b"(?:{ALPHA}|{ALPHA}(?:{alphanum}|-)*{alphanum})".format(
+toplabel = b"{ALPHA}(?:[{alphanumrange}-]*{alphanum})?".format(
     **locals())
-domainlabel = b"(?:{alphanum}|{alphanum}(?:{alphanum}|-)*{alphanum})".format(
+domainlabel = b"(?:{alphanum}|{alphanum}[{alphanumrange}-]*{alphanum})".format(
     **locals())
 hostname = b"(?:{domainlabel}[.])*{toplabel}[.]?".format(**locals())
 host = b"(?:{hostname}|{IPv4address}|{IPv6reference})".format(**locals())
+hostport = b"{host}(?::{port})?".format(**locals())
 # Should be SIP or token, but just use token.
 protocol_name = token
 protocol_version = token
@@ -138,25 +154,91 @@ via_parm = b"{sent_protocol}{LWS}{sent_by}".format(**locals())
 # transport actually includes specific sets of token as well in the spec.
 transport = token
 
+user = (
+    b"(?:[{user_unreservedrange}{unreservedrange}]+|{escaped})+"
+    "".format(**locals()))
+password = (
+    b"(?:[&=+$,{unreservedrange}]+|{escaped})*"
+    "".format(**locals()))
+userinfo = (
+    b"(?:{user}|{telephone_subscriber})(?::{password})?@".format(**locals()))
+scheme = b"{ALPHA}[{alphanumrange}\x2b-\x2e]*".format(**locals())
+srvr = b"(?:(?:{userinfo}@)?{hostport})?".format(**locals())
+reg_name = b"(?:[$,;:@&=+{unreservedrange}]|{escaped})+".format(**locals())
+authority = b"(?:{srvr}|{reg_name})".format(**locals())
+pchar = b"(?:[:@&=+$,{unreservedrange}]|{escaped})".format(**locals())
+param = b"(?:{pchar})*".format(**locals())
+segment = b"{pchar}(?:;{param})*".format(**locals())
+path_segments = b"{segment}(?:/{segment})*".format(**locals())
+abs_path = b"/{path_segments}".format(**locals())
+net_path = b"//{authority}(?:{abs_path})?".format(**locals())
+uric = b"(?:[{reservedrange}{unreservedrange}]+|{escaped})".format(**locals())
+uric_no_slash = (
+    b"(?:[;?:@&=+$,{unreservedrange}]+|{escaped})".format(**locals()))
+query = b"{uric}*".format(**locals())
+hier_part = b"(?:{net_path}|{abs_path})(?:[?]{query})?".format(**locals())
+opaque_part = b"{uric_no_slash}{uric}*".format(**locals())
+absoluteURI = b"{scheme}:(?:{hier_part}|{opaque_part})".format(**locals())
+display_name = b"(?:(?:{token}{LWS})*|{quoted_string})".format(**locals())
+param_unreservedrange = b"][/:&+$"
+param_unreserved = b"[{param_unreservedrange}]".format(**locals())
+# paramchars is paramchar but with an optimization to match several characters
+# in a row.
+paramchars = (
+    b"(?:[{param_unreservedrange}{unreservedrange}]+|{escaped})+"
+    "".format(**locals()))
+uri_parameter = b"{paramchars}(?:={paramchars})?".format(**locals())
+uri_parameters = b"(?:;{uri_parameter})*".format(**locals())
+hnv_unreservedrange = b"][/?:+$"
+hnv_unreserved = b"[{hnv_unreservedrange}]".format(**locals())
+hname = (
+    b"(?:[{hnv_unreservedrange}{unreservedrange}]+|{escaped})+"
+    "".format(**locals()))
+hvalue = (
+    b"(?:[{hnv_unreservedrange}{unreservedrange}]+|{escaped})*"
+    "".format(**locals()))
+header = b"{hname}={hvalue}".format(**locals())
+headers = b"[?]{header}(?:[&]{header})*".format(**locals())
+sip_sips_body = (
+    b"(?:{userinfo})?{hostport}{uri_parameters}(?:{headers})?"
+    "".format(**locals()))
+SIP_URI = b"sip:{sip_sips_body}".format(**locals())
+SIPS_URI = b"sips:{sip_sips_body}".format(**locals())
+addr_spec = b"(?:{SIP_URI}|{SIPS_URI}|{absoluteURI})".format(**locals())
+
+Method = b"[{upper_alpharange}]+".format(**locals())
+Request_URI = b"(?:sips?{sip_sips_body}|{absoluteURI})".format(**locals())
+SIP_Version = b"SIP/{DIGIT}+[.]{DIGIT}+".format(**locals())
+
+Status_Code = b"{DIGIT}{{3}}".format(**locals())
+# Reason phrase should be a bit more complicated:
+# Reason-Phrase   =  *(reserved / unreserved / escaped
+#                    / UTF8-NONASCII / UTF8-CONT / SP / HTAB)
+Reason_Phrase = (
+    b"(?:[{reservedrange}{SP}{HTAB}{unreservedrange}]+|"
+    "{escaped})*".format(**locals()))
+
+header_name = token
+header_value = (
+    b"(?:{TEXT_UTF8charsopts}|{LWS}|{UTF8_CONT})*".format(**locals()))
+extension_header = b"{header_name}{HCOLON}{header_value}".format(**locals())
+
 
 class ProtocolError(Exception):
     """Something didn't make sense in SIP."""
     pass
 
 
-class ProtocolSyntaxError(Exception):
+class ProtocolSyntaxError(ProtocolError):
     """Syntax errors are when a request is missing some key bit from the
     protocol, or is otherwise confused. Like trying to build
     a request with a response code.
     """
 
 
-class ProtocolValueError(ProtocolError):
-    """Value errors are when a user request makes syntactic sense, but some
-    value is not allowed by the protocol. For example asking for a request
-    type of "notarequest" or a status code of "13453514".
+class Incomplete(ProtocolError):
+    """Could not make a SIP message because it was incomplete.
     """
-    pass
 
 
 ResponseCodeMessages = {

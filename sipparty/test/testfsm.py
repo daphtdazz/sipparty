@@ -86,6 +86,7 @@ class TestFSM(unittest.TestCase):
         nf.addTransition("running", "stop", "stopping")
         nf.addTransition("stopping", "stop", "stopping")
         nf.addTransition("stopping", "stop_done", "initial")
+        nf.state = "initial"
         self.assertEqual(
             bytes(nf),
             "'FSM' 'testfsm':\n"
@@ -129,7 +130,7 @@ class TestFSM(unittest.TestCase):
                          stop_timers=["retry"])
         nf.addTransition("running", "stop", "initial")
 
-        nf.setState("initial")
+        nf.state = "initial"
         nf.hit("start")
         self.assertEqual(self.retry, 0)
         nf.checkTimers()
@@ -204,7 +205,7 @@ class TestFSM(unittest.TestCase):
                          stop_timers=["retry"])
         nf.addTransition("running", "stop", "initial")
 
-        nf.setState("initial")
+        nf.state = "initial"
         log.debug("Hit async FSM with start")
         nf.hit("start")
         self.wait_for(lambda: nf.state == "starting", timeout=2)
@@ -225,6 +226,7 @@ class TestFSM(unittest.TestCase):
             self.assertEqual(len(kwargs), expect_kwargs)
 
         nf.addTransition("stopped", "start", "running", action=actnow)
+        nf.state = "stopped"
         expect_args = 3
         expect_kwargs = 2
         nf.hit("start", 1, 2, 3, a=1, b=2)
@@ -259,7 +261,7 @@ class TestFSM(unittest.TestCase):
                 cls.addTransition("starting", "start_done", "running",
                                   stop_timers=["retry_start"])
                 cls.addTransition("running", "stop", "stopped")
-                cls.setState("stopped")
+                cls._fsm_state = "stopped"
 
             def __init__(self, *args, **kwargs):
                 super(FSMTestSubclass, self).__init__(*args, **kwargs)
@@ -326,6 +328,7 @@ class TestFSM(unittest.TestCase):
                              [0])
                 cls.addTransition("initial", "go", "going",
                                   start_timers=["retry_start"])
+                cls._fsm_state = "initial"
 
         badFSM = FSMTestBadSubclass()
         # We get a ValueError when we cause the thread to get started because
@@ -372,7 +375,7 @@ class TestFSM(unittest.TestCase):
                 cls.addTransition(
                     "running", "jump", "jumping",
                     start_threads=["thrmethod"])
-                cls.setState("not_running")
+                cls._fsm_state = "not_running"
 
             def thrmethod(self):
                 thr_res[0] += 1

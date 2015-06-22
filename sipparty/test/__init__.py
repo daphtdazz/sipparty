@@ -20,7 +20,7 @@ limitations under the License.
 import logging
 import sys
 print sys.argv
-if sys.argv[1] == "discover":
+if len(sys.argv) > 0 and sys.argv[1] == "discover":
     logging.basicConfig(level=logging.INFO)
 else:
     logging.basicConfig(level=logging.DEBUG)

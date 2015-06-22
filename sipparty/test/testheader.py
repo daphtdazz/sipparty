@@ -26,6 +26,7 @@ else:
     log = logging.getLogger(__name__)
 
 from sipparty import sip
+from sipparty.sip import prot
 
 
 class TestHeaders(unittest.TestCase):
@@ -40,14 +41,10 @@ class TestHeaders(unittest.TestCase):
 
         ch.isStar = True
 
-        self.assertEqual(
-            six.binary_type(ch),
-            b"Contact: *")
+        self.assertEqual(six.binary_type(ch), b"Contact: *")
 
         ch.isStar = False
-        self.assertEqual(
-            six.binary_type(ch),
-            b"Contact: sip:")
+        self.assertRaises(prot.Incomplete, lambda: six.binary_type(ch))
         ch.field.value.uri.aor.username = b"bill"
         ch.field.value.uri.aor.host = b"billland.com"
 
@@ -60,7 +57,7 @@ class TestHeaders(unittest.TestCase):
             six.binary_type(ch),
             b"Contact: sip:bill@billland.com")
         self.assertEqual(
-            ch.field.value.uri.aor.host, b"billland.com")
+            ch.field.value.uri.aor.host, sip.components.Host("billland.com"))
 
 if __name__ == "__main__":
     unittest.main()

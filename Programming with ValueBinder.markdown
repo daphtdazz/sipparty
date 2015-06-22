@@ -25,7 +25,7 @@ Is equivalent to:
 
 ### Required work. ###
 
-The following methods, if overridden in subclasses, must invoke `super`'s method to ensure correct binding behaviour.
+The following methods, if implemented in subclasses, must invoke `super`'s method to ensure correct binding behaviour.
 
     __init__
     __del__

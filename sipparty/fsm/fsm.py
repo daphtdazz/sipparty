@@ -330,7 +330,7 @@ class FSM(object):
             self.__class__.NextFSMNum += 1
 
         if asynchronous_timers:
-            lock=True
+            lock = True
 
         self._fsm_name = name
         self._fsm_use_async_timers = asynchronous_timers

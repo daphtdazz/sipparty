@@ -76,6 +76,9 @@ class Message(vb.ValueBinder):
             Header.types)), flags=re.IGNORECASE)
     type = util.ClassType("Message")
 
+    MethodRE = re.compile("{Method}".format(**prot.__dict__))
+    ResponseRE = re.compile("{SIP_Version}".format(**prot.__dict__))
+
     @classmethod
     def Parse(cls, string):
 
@@ -102,24 +105,24 @@ class Message(vb.ValueBinder):
         lines = joined_lines
         log.debug("Sectioned lines: {0!r}".format(lines))
         startline = lines.pop(0)
+        log.debug("Does %r match %r?", startline, cls.MethodRE.pattern)
 
-        # Fix the startline and build the message.
-        try:
-            # !!! TODO: This is highly suboptimal; must come back and fix the
-            # parsing so that requests and responses are parsed more
-            # equivocally.
-            log.debug("Attempt Message Parse of %r as a request.", startline)
-            requestline = request.Request.Parse(startline)
-            message = getattr(Message, requestline.type)(
-                startline=requestline, autofillheaders=False)
-            log.debug("Message is of type %r", message.type)
-        except parse.ParseError:
-            # Try response...
+        if cls.ResponseRE.match(startline):
             log.debug("Attempt Message Parse of %r as a response.", startline)
             reqline = response.Response.Parse(startline)
             log.debug(reqline)
             message = Response(startline=reqline)
             log.debug("Success. Type: %r.", message.type)
+
+        elif cls.MethodRE.match(startline):
+            log.debug("Attempt Message Parse of request %r.", startline)
+            requestline = request.Request.Parse(startline)
+            message = getattr(Message, requestline.type)(
+                startline=requestline, autofillheaders=False)
+            log.debug("Message is of type %r", message.type)
+        else:
+            raise parse.ParseError(
+                "Startline is not a SIP startline: %r." % (startline,))
 
         for line, ln in zip(lines, range(1, len(lines) + 1)):
             if len(line) == 0:
@@ -304,6 +307,13 @@ class Message(vb.ValueBinder):
 
     def __del__(self):
         log.debug("Deleting %r instance.", self.__class__.__name__)
+
+    def __repr__(self):
+        return (
+            "{0.__class__.__name__}("
+            "startline={0.startline!r}, headers={0.headers!r}, "
+            "bodies={0.bodies!r})"
+            "".format(self))
 
     def _establishbindings(self):
         for binding in self.bindings:
