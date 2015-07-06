@@ -121,6 +121,17 @@ class Param(Parser, vb.ValueBinder):
 
 
 class BranchParam(Param):
+    """Branch parameter.
+
+    The branch parameter identifies a request and response transaction. It is
+    renewed for each request as per:
+
+    https://tools.ietf.org/html/rfc3261#section-8.1.1.7
+
+    and each ACK responding to 200 as per:
+
+    https://tools.ietf.org/html/rfc3261#section-13.2.2.4
+    """
 
     BranchNumber = random.randint(1, 10000)
 

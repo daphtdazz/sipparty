@@ -205,6 +205,8 @@ sip_sips_body = (
 SIP_URI = b"sip:{sip_sips_body}".format(**locals())
 SIPS_URI = b"sips:{sip_sips_body}".format(**locals())
 addr_spec = b"(?:{SIP_URI}|{SIPS_URI}|{absoluteURI})".format(**locals())
+name_addr = (
+    b"(?:{display_name})?{LAQUOT}{addr_spec}{RAQUOT}".format(**locals()))
 
 Method = b"[{upper_alpharange}]+".format(**locals())
 Request_URI = b"(?:sips?{sip_sips_body}|{absoluteURI})".format(**locals())

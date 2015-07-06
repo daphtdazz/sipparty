@@ -50,12 +50,12 @@ class TestHeaders(unittest.TestCase):
 
         self.assertEqual(
             six.binary_type(ch),
-            b"Contact: sip:bill@billland.com")
+            b"Contact: <sip:bill@billland.com>")
 
         nh = sip.Header.Parse(six.binary_type(ch))
         self.assertEqual(
             six.binary_type(ch),
-            b"Contact: sip:bill@billland.com")
+            b"Contact: <sip:bill@billland.com>")
         self.assertEqual(
             ch.field.value.uri.aor.host, sip.components.Host("billland.com"))
 

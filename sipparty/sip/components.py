@@ -251,7 +251,7 @@ class DNameURI(Parser, vb.ValueBinder):
             return(b"\"{self.dname}\" <{self.uri}>".format(**locals()))
 
         if self.uri:
-            return(bytes(self.uri))
+            return(b"<{self.uri}>".format(**locals()))
 
         raise prot.Incomplete(
             "DNameURI %r needs at least a URI to mean something." % self)

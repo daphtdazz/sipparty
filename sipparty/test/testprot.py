@@ -82,8 +82,8 @@ class TestProtocol(unittest.TestCase):
         invite.viaheader.field.host.host = "127.0.0.1"
         self.assertTrue(re.match(
             "INVITE sip:bob@baltimore.com SIP/2.0\r\n"
-            "From: sip:alice@atlanta.com;{3}\r\n"
-            "To: sip:bob@baltimore.com\r\n"
+            "From: <sip:alice@atlanta.com>;{3}\r\n"
+            "To: <sip:bob@baltimore.com>\r\n"
             "Via: SIP/2.0/UDP 127.0.0.1;{1}\r\n"
             # 6 random hex digits followed by a date/timestamp
             "Call-ID: {0}\r\n"
@@ -93,7 +93,7 @@ class TestProtocol(unittest.TestCase):
                 TestProtocol.cseq_num_pattern, TestProtocol.tag_pattern),
             bytes(invite)), repr(bytes(invite)))
 
-        self.assertEqual(bytes(invite.toheader), "To: sip:bob@baltimore.com")
+        self.assertEqual(bytes(invite.toheader), "To: <sip:bob@baltimore.com>")
         self.assertEqual(
             bytes(invite.call_idheader),
             bytes(getattr(invite, "Call_IdHeader")))
@@ -106,8 +106,8 @@ class TestProtocol(unittest.TestCase):
 
         self.assertTrue(re.match(
             "SIP/2.0 200 OK\r\n"
-            "From: sip:alice@atlanta.com;{3}\r\n"
-            "To: sip:bob@baltimore.com;{3}\r\n"
+            "From: <sip:alice@atlanta.com>;{3}\r\n"
+            "To: <sip:bob@baltimore.com>;{3}\r\n"
             "Via: SIP/2.0/UDP 127.0.0.1;{1}\r\n"
             # 6 random hex digits followed by a date/timestamp
             "Call-ID: {0}\r\n"
@@ -143,11 +143,11 @@ class TestProtocol(unittest.TestCase):
 
         self.assertTrue(re.match(
             "INVITE sip:bill@biloxi.com SIP/2.0\r\n"
-            "From: sip:alice@atlanta.com;{3}\r\n"
+            "From: <sip:alice@atlanta.com>;{3}\r\n"
             # Note that the To: URI hasn't changed because when the parse
             # happens a new uri gets created for each, and there's no link
             # between them.
-            "To: sip:bob@biloxi.com\r\n"
+            "To: <sip:bob@biloxi.com>\r\n"
             "Via: SIP/2.0/UDP arkansas.com\r\n"
             "Via: SIP/2.0/UDP 127.0.0.1:5060;{1}\r\n"
             # 6 random hex digits followed by a date/timestamp
@@ -255,8 +255,11 @@ class TestProtocol(unittest.TestCase):
 
     def testComponents(self):
         for cpnt, examples in (
-                (components.DNameURI, ("sip:bob@biloxi.com",)),
-                (Request, ('INVITE sip:bob@biloxi.com SIP/2.0',))):
+                (components.DNameURI, (
+                    "<sip:bob@biloxi.com>",)),
+                (Request, ('INVITE sip:bob@biloxi.com SIP/2.0',)),
+                (sip.header.Header, (
+                    'Contact: <sip:[::1]:5060;transport=UDP>',))):
             for example in examples:
                 try:
                     cp = cpnt.Parse(example)

@@ -214,7 +214,17 @@ class ContactHeader(FieldDelegateHeader):
 
 
 class Call_IdHeader(Header):
-    """Call ID header."""
+    """Call ID header.
+
+    To paraphrase:
+
+    https://tools.ietf.org/html/rfc3261#section-8.1.1.4
+
+    This value should be generated uniquely over space and time for each new
+    dialogue initiated by the UA. It must be the same for all messages during
+    a dialogue. It SHOULD also be the same for each REGISTER sent to maintain a
+    registration by the UA. I.e. being registered == being in a dialogue.
+    """
 
     @classmethod
     def GenerateKey(cls):

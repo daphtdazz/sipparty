@@ -48,6 +48,9 @@ class Field(parse.Parser, vb.ValueBinder):
     # if re-set in subclasses.
     parseinfo = {
         parse.Parser.Pattern:
+            # TODO: this is very coarse and could be improved. In particular it
+            # does not cope with angle quoted URIs or double quoted display
+            # names which contain semicolons.
             "([^;]+)"  # String value.
             "(.*)"  # Parameters.
             "",
@@ -96,6 +99,10 @@ class DNameURIField(Field):
     vb_dependencies = (("value", delegateattributes),)
 
     parseinfo = {
+        parse.Parser.Pattern:
+            "({name_addr}|{addr_spec})"  # String value.
+            "((?:;{generic_param})*)"  # Parameters.
+            "".format(**prot.__dict__),
         parse.Parser.Mappings:
             [("value", components.DNameURI),
              ("parameters", param.Parameters)]
