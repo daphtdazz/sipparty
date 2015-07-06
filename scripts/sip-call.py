@@ -28,6 +28,7 @@ from sipparty import sipscenarios
 
 log = logging.getLogger()
 logging.basicConfig()
+log.setLevel(logging.INFO)
 
 
 class SipCallArgs(argparse.ArgumentParser):

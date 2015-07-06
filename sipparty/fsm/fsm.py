@@ -613,7 +613,7 @@ class FSM(object):
         trans = self._fsm_transitions[self._fsm_state]
 
         if input not in trans:
-            msg = "Bad input %r to %r %r (current state %r)." % (
+            msg = "Bad input %r to %r instance %r (current state %r)." % (
                 input, self.__class__.__name__, self._fsm_name,
                 self._fsm_state)
             log.error(msg)

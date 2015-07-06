@@ -25,7 +25,7 @@ import re
 import time
 import socket
 
-from sipparty import (util, vb, parse)
+from sipparty import (util, vb, parse, fsm)
 import transport
 import siptransport
 import prot
@@ -266,7 +266,12 @@ class Party(vb.ValueBinder):
             self.calleeAOR = cleaor
         log.debug("Their tag: %r", tt)
         log.debug("Their AOR: %r", cleaor)
-        self.scenario.hit(message.type, message)
+
+        try:
+            self.scenario.hit(message.type, message)
+        except fsm.UnexpectedInput as exc:
+            # fsm has already logged the error. We just carry on.
+            pass
 
     def _pt_send(self, message_type, callee=None, contactAddress=None):
         log.debug("Send message of type %r to %r.", message_type, callee)
