@@ -116,6 +116,19 @@ class ValueBinder(object):
         self._vb_binddirection(
             topath, frompath, None, transformer, self.VB_Backward)
 
+    def bindBindings(self, bindings):
+        """Establish a set of bindings.
+
+        :param bindings: A iterable of tuples of the form
+        (frompath, topath[, transformer]).
+        """
+        for binding in bindings:
+            if len(binding) > 2:
+                transformer = binding[2]
+            else:
+                transformer = None
+            self.bind(binding[0], binding[1], transformer)
+
     def unbind(self, frompath, topath):
         """Unbind a binding. Raises NoSuchBinding() if the binding does not
         exist."""
@@ -125,6 +138,22 @@ class ValueBinder(object):
 
         self._vb_unbinddirection(frompath, topath, self.VB_Forward)
         self._vb_unbinddirection(topath, frompath, self.VB_Backward)
+
+    @property
+    def vb_parent(self):
+        wp = self._vb_weakBindingParent
+        log.debug("vb_parent weakref: %s", wp)
+        return wp() if wp is not None else None
+
+    @vb_parent.setter
+    def vb_parent(self, newParent):
+        log.debug("Set vb_parent to %s", newParent)
+        if newParent is None:
+            self._vb_weakBindingParent = None
+            return
+
+        weakp = weakref.ref(newParent)
+        self._vb_weakBindingParent = weakp
 
     #
     # =================== MAGIC METHODS ======================================
@@ -358,12 +387,10 @@ class ValueBinder(object):
             ValueBinder.KeyTransformer: transformer
         }
 
-        currparent = (
-            self._vb_weakBindingParent()
-            if self._vb_weakBindingParent is not None else None)
-        assert currparent is None or currparent is parent
-        self._vb_weakBindingParent = (
-            weakref.ref(parent) if parent is not None else None)
+        currparent = self.vb_parent
+        assert (currparent is None or parent is None or currparent is parent)
+        if currparent is None:
+            self.vb_parent = parent
 
         if fromattrattrs:
             # This is an indirect binding, so recurse if possible.
@@ -372,9 +399,17 @@ class ValueBinder(object):
             # >> self.a.bindforward("b", ".c")
             log.debug("indirect %r binding %r -> %r", direction, frompath,
                       resolvedtopath)
-            if hasattr(self, fromattr):
-                log.debug("  has child at %r.", fromattr)
-                subobj = getattr(self, fromattr)
+            if len(fromattr) == 0:
+                # Parent in the from path.
+                log.debug("  parent in frompath")
+                fromattr_resolved = "vb_parent"
+            else:
+                fromattr_resolved = fromattr
+
+            if hasattr(self, fromattr_resolved):
+                log.debug("  has child at %r.", fromattr_resolved)
+                subobj = getattr(self, fromattr_resolved)
+                log.debug("  %s", subobj)
                 if hasattr(subobj, "_vb_binddirection"):
                     log.debug("  child is VB compatible.")
                     subobj._vb_binddirection(
@@ -426,9 +461,14 @@ class ValueBinder(object):
         bindings, fromattr, fromattrattrs, attrbindings, _ = (
             self._vb_bindingdicts(resolvedfrompath, direction, create=False))
 
-        if len(fromattrattrs) > 0 and hasattr(self, fromattr):
+        if len(fromattr) == 0:
+            fromattr_resolved = "vb_parent"
+        else:
+            fromattr_resolved = fromattr
+
+        if len(fromattrattrs) > 0 and hasattr(self, fromattr_resolved):
             attrtopath = self.VB_PrependParent(resolvedtopath)
-            child = getattr(self, fromattr)
+            child = getattr(self, fromattr_resolved)
 
             # If the child doesn't support ValueBinding, then it is a bit late
             # to do anything about this now! This will have been logged when
@@ -456,7 +496,7 @@ class ValueBinder(object):
 
             nalen = len(nextattr)
             if nalen == 0:
-                nextattr = "_vb_weakBindingParent"
+                nextattr = "vb_parent"
 
             log.debug("  try next attribute %r", nextattr)
             if not hasattr(nextobj, nextattr):
@@ -468,6 +508,8 @@ class ValueBinder(object):
                 break
 
             nextobj = getattr(nextobj, nextattr)
+            continue
+
             if nalen == 0:
                 # Parent object.
                 nextobj = nextobj()
@@ -500,9 +542,4 @@ class ValueBinder(object):
         if not hasattr(self, "vb_bindings"):
             return
 
-        for binding in self.vb_bindings:
-            if len(binding) > 2:
-                transformer = binding[2]
-            else:
-                transformer = None
-            self.bind(binding[0], binding[1], transformer)
+        self.bindBindings(self.vb_bindings)

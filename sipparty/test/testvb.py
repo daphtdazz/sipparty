@@ -35,6 +35,13 @@ from sipparty import vb
 
 class TestVB(unittest.TestCase):
 
+    def setUp(self):
+        self._vb_loggingLevel = vb.log.level
+        vb.log.setLevel(logging.DEBUG)
+
+    def tearDown(self):
+        vb.log.setLevel(self._vb_loggingLevel)
+
     def testBindings(self):
         VB = vb.ValueBinder
 
@@ -175,6 +182,21 @@ class TestVB(unittest.TestCase):
         a.val = 5
         self.assertEqual(a.val1, 5)
         self.assertEqual(a.val2, 5)
+
+    def testParentBindings(self):
+        a, ab = [vb.ValueBinder() for _ in range(2)]
+
+        ab.vb_parent = a
+
+        ab.bind(".c", "c")
+        a.c = 2
+        self.assertEqual(ab.c, 2)
+        ab.unbind(".c", "c")
+        self.assertEqual(len(ab._vb_forwardbindings), 0)
+        self.assertEqual(len(ab._vb_backwardbindings), 0)
+        self.assertEqual(len(a._vb_forwardbindings), 0)
+        self.assertEqual(len(a._vb_backwardbindings), 0)
+
 
 if __name__ == "__main__":
     sys.exit(unittest.main())
