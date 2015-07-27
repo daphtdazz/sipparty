@@ -1,7 +1,6 @@
-"""__init__.py
+"""testdialog.py
 
-This module is here so that the test directory is a module so that test
-discovery works.
+Unit tests for a SIP party.
 
 Copyright 2015 David Park
 
@@ -17,14 +16,30 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import logging
 import sys
-print sys.argv
-if len(sys.argv) > 0 and sys.argv[1] == "discover":
-    logging.basicConfig(level=logging.INFO)
-else:
-    logging.basicConfig(level=logging.DEBUG)
+import os
+import re
+import timeit
+import time
+import logging
+import weakref
+import unittest
+import socket
 
-from sipparty import (util, fsm)
-util.log.setLevel(logging.INFO)
-fsm.retrythread.log.setLevel(logging.INFO)
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
+    log = logging.getLogger()
+else:
+    log = logging.getLogger(__name__)
+    log.setLevel(logging.INFO)
+
+from sipparty import (fsm, sip, util)
+from sipparty.sip import Dialog
+
+
+class TestDialog(unittest.TestCase):
+
+    def testStandardDialog(self):
+        dl = Dialog()
+        self.assertRaises(AttributeError, lambda: dl.asdf)
+        iv = dl.sendRequestInvite

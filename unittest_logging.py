@@ -1,4 +1,6 @@
-"""__init__.py
+"""unittest_logging.py
+
+Configuration for logging while using unittest to test
 
 Copyright 2015 David Park
 
@@ -14,14 +16,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import util
-import vb
-from fsm import (FSM, FSMTimeout)
-import parse
-from parse import (Parser, ParsedProperty, ParseError)
-import sdp
+import logging
+logging.basicConfig(level=logging.DEBUG)
+log = logging.getLogger()
+log.debug("unittest logging")
 
-import sip
-from sip.request import (Request,)
-
-
+if __name__ == "__main__":
+    import unittest
+    unittest.main()

@@ -34,15 +34,15 @@ tks = TransitionKeys  # Short alias
 InitialStateKey = fsm.InitialStateKey
 
 
-def ScenarioClassWithDefinition(name, defn):
-    nc = type(name + "Scenario", (Scenario,), {})
-    nc.PopulateWithDefinition(defn)
-    return nc
-
-
 class Scenario(fsm.FSM):
 
     DelegateResetMethod = "scenarioDelegateReset"
+
+    @classmethod
+    def ClassWithDefinition(cls, name, defn):
+        nc = type(name + cls.__name__, (cls,), {})
+        nc.PopulateWithDefinition(defn)
+        return nc
 
     @classmethod
     def PopulateWithDefinition(cls, definition_dict):

@@ -14,6 +14,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+print("import sip")
 import prot
 import components
 import defaults
@@ -21,6 +22,7 @@ from request import (Request,)
 from header import (Header,)
 from message import (Message,)
 from mediasession import (Session,)
-from party import (Party, NoConnection)
+from dialog import (Dialog,)
+from party import (Party, PartySubclass, NoConnection)
 import scenario
 import party

@@ -37,8 +37,9 @@ from message import (Message, Response)
 import transform
 import message
 import param
+from dialogs import CallDialog
 
-__all__ = ('Party',)
+__all__ = ('Party', 'PartySubclass')
 
 log = logging.getLogger(__name__)
 bytes = six.binary_type
@@ -104,6 +105,8 @@ class Party(vb.ValueBinder):
         ("scenario", ["state", "wait", "waitForStateCondition"]),
         ("_pt_transport", [
             "localAddress", "localAddressPort", "listen", "connect"])]
+    dialog_bindings = [
+    ]
 
     Scenario = None
 
@@ -112,7 +115,7 @@ class Party(vb.ValueBinder):
         if cls.Scenario is not None:
             raise AttributeError(
                 "Scenario for class %r is already set." % (cls.__name__,))
-        SClass = scenario.ScenarioClassWithDefinition(
+        SClass = scenario.Scenario.ClassWithDefinition(
             cls.__name__, scenario_definition)
 
         log.debug(
@@ -132,40 +135,54 @@ class Party(vb.ValueBinder):
     aor = util.DerivedProperty("_pt_aor")
 
     def __init__(
-            self, username=None, host=None, displayname=None,
+            self, aor=None, username=None, host=None, displayname=None,
             socketType=socket.SOCK_STREAM):
         """Create the party.
         """
         super(Party, self).__init__()
 
-        self._pt_waitingMessage = None
-        self._pt_outboundRequest = None
-        self._pt_outboundResponse = None
-        self.calleeAOR = None
-        self.myTag = None
-        self.theirTag = None
+        self._pt_provInviteDialogs = {}
+        self._pt_establishedInviteDialogs = {}
 
-        self.aor = NewAOR()
-        if username is not None:
-            self.aor.username = username
-        if host is not None:
-            self.aor.host = host
+        # Mapping of messages based on type.
+        self._pt_requestMessages = {}
+        self._pt_aor = None
 
-        # Set up the transport.
-        self._pt_transport = siptransport.SipTransportFSM(
-            socketType=socketType)
+        if aor is not None:
+            self.aor = self._pt_resolveAORFromObject(aor)
 
-        # Currently don't do listen until required to.
-        # self._pt_transport.listen()
-        self._pt_transport.messageConsumer = util.WeakMethod(
-            self, "_pt_messageConsumer")
-
-        # Set up the scenario.
-        self._pt_resetScenario()
+        return
 
         # Set up the transform.
         if not hasattr(self, "transform"):
             self.transform = transform.default
+
+    def invite(self, target, proxy=None):
+
+        if not hasattr(self, "aor"):
+            raise ValueError("Cannot build an")
+
+        aor = self._pt_resolveAORFromObject(target)
+
+        if proxy is None:
+            proxy = self._pt_resolveProxyHostFromTarget(target)
+
+        inviteMessage = Message.invite()
+        inviteMessage.FromHeader.field.uri.aor = self.aor
+        inviteMessage.ToHeader.field.uri.aor = aor
+
+        invD = CallDialog()
+        self._pt_configureDialog(invD)
+
+        pdid = invD.provisionalDialogID
+        pdis = self._pt_provInviteDialogs
+        assert pdid not in pdis
+        pdis[pdid] = invD
+
+        invD.initiate(inviteMessage)
+
+        assert 0
+
 
     def waitUntilState(self, state, error_state=None, timeout=None):
         for check_state in (state, error_state):
@@ -183,9 +200,6 @@ class Party(vb.ValueBinder):
                 "waiting for state %r." % (
                     self.__class__.__name__, error_state, state))
 
-    def reset(self):
-        self._pt_reset()
-
     #
     # =================== DELEGATE IMPLEMENTATIONS ===========================
     #
@@ -198,6 +212,19 @@ class Party(vb.ValueBinder):
     # =================== MAGIC METHODS ======================================
     #
     def __getattr__(self, attr):
+
+        if attr.startswith(b"message"):
+            messageType = attr.replace(b"message", b"", 1)
+            if messageType in self._pt_requestMessages:
+                return self._pt_requestMessages[messageType]
+
+        try:
+            return super(Party, self).__getattr__(attr)
+        except AttributeError:
+            raise AttributeError(
+                "{self.__class__.__name__!r} instance has no attribute "
+                "{attr!r}.."
+                "".format(**locals()))
 
         if attr == "States":
             try:
@@ -251,147 +278,34 @@ class Party(vb.ValueBinder):
     #
     # =================== INTERNAL METHODS ===================================
     #
-    def _pt_messageConsumer(self, message):
-        log.debug("Received a %r message.", message.type)
-        tt = None
-        cleaor = None
-        if self.theirTag is None:
-            if message.isrequest():
-                tt = message.FromHeader.field.parameters.tag
-                cleaor = message.FromHeader.field.value.uri.aor
-            else:
-                tt = message.ToHeader.field.parameters.tag
-                cleaor = message.ToHeader.field.value.uri.aor
-            self.theirTag = tt
-            self.calleeAOR = cleaor
-        log.debug("Their tag: %r", tt)
-        log.debug("Their AOR: %r", cleaor)
+    def _pt_configureDialog(self, dialog):
+        dialog.vb_parent = self
+        dialog.bindBindings(self.dialog_bindings)
+        dialog.callIDHeader.host = self.aor.host
 
+    def _pt_resolveAORFromObject(self, target):
+        if hasattr(target, "aor"):
+            return target.aor
+
+        if isinstance(target, components.AOR):
+            return target
+
+        if isinstance(target, bytes):
+            return components.AOR.Parse(target)
+
+        raise TypeError(
+            "%r instance cannot be derived from %r instance." % (
+                components.AOR.__class__.__name__, target.__class__.__name__))
+
+    def _pt_resolveProxyHostFromTarget(self, target):
         try:
-            self.scenario.hit(message.type, message)
-        except fsm.UnexpectedInput as exc:
-            # fsm has already logged the error. We just carry on.
-            pass
-
-    def _pt_send(self, message_type, callee=None, contactAddress=None):
-        log.debug("Send message of type %r to %r.", message_type, callee)
-
-        tp = self._pt_transport
-
-        if self.myTag is None:
-            self.myTag = param.TagParam()
-
-        if callee is not None:
-            # Callee can be overridden with various different types of object.
-            if isinstance(callee, components.AOR):
-                calleeAOR = callee
-            elif hasattr(callee, "aor"):
-                calleeAOR = callee.aor
-            else:
-                calleeAOR = components.AOR.Parse(callee)
-            log.debug("calleeAOR: %r", calleeAOR)
-            self.calleeAOR = calleeAOR
-        else:
-            if self.calleeAOR is None:
-                self._pt_stateError(
-                    "Send message for %r instance (aor: %s) passed no "
-                    "aor." % (
-                        self.__class__.__name__, self.aor))
-            calleeAOR = self.calleeAOR
-
-        if contactAddress is None:
-            if callee is not None and hasattr(callee, "localAddress"):
-                # Looks like we've been passed another sip party to connect
-                # to.
-                contactAddress = callee.localAddress
-            elif tp.state == tp.States.connected:
-                # We're already connected, so use the transport's remote
-                # address.
-                contactAddress = tp.remoteAddress
-            else:
-                # Otherwise try and use the address from the AOR.
-                contactAddress = calleeAOR.host.addrTuple()
-
-        if not isinstance(calleeAOR, components.AOR):
-            # Perhaps we can make an AOR out of it?
-            try:
-                calleeAOR = components.AOR.Parse(calleeAOR)
-                log.debug("Callee: %r, host: %r.", calleeAOR, calleeAOR.host)
-            except TypeError, parse.ParseError:
-                raise ValueError(
-                    "Message recipient is not an AOR: %r." % callee)
-
-        self.calleeAOR = calleeAOR
-        log.debug("%r", self.calleeAOR)
-
-        log.info("Connecting to address %r.", contactAddress)
-        self._pt_connectTransport(contactAddress)
-
-        msg = getattr(Message, message_type)()
-
-        # Hook it onto the outbound message. This does all the work of setting
-        # attributes from ourself as per our bindings.
-        self._pt_outboundRequest = msg
-
-        log.debug("%r", self._pt_outboundRequest)
-
-        try:
-            tp.send(bytes(msg))
-        finally:
-            # Important to delete the message because it is bound to our
-            # properties, and we will have binding conflicts with later
-            # messages if it is not released now.
-            log.debug("Delete outbound message.")
-            self._pt_outboundRequest = None
-            del msg
-
-    def _pt_reply(self, message_type, request):
-        log.debug("Reply to %r with %r.", request.type, message_type)
-
-        if self.myTag is None:
-            self.myTag = param.TagParam()
-
-        if re.match("\d+$", message_type):
-            message_type = int(message_type)
-            msg = message.Response(code=message_type)
-        else:
-            msg = getattr(message.Message, message_type)
-
-        tform = self.transform[request.type][message_type]
-        request.applyTransform(msg, tform)
-
-        self._pt_outboundResponse = msg
-
-        try:
-            self._pt_transport.send(bytes(msg))
-        finally:
-            self._pt_outboundResponse = None
-            del msg
-
-    def _pt_stateError(self, message):
-        self._pt_reset()
-        raise UnexpectedState(message)
-
-    def _pt_reset(self):
-        self._pt_transport.disconnect()
-        self._pt_resetScenario()
-
-    def _pt_connectTransport(self, remoteAddress):
-
-        tp = self._pt_transport
-        if tp.state != tp.States.connected:
-            tp.connect(remoteAddress)
-            util.WaitFor(lambda: tp.state in (
-                tp.States.connected,
-                tp.States.error), 10.0)
-
-        assert tp.remoteAddress[:2] == remoteAddress[:2], (
-            "%r != %r" % (tp.remoteAddress, remoteAddress))
-
-        if tp.state == tp.States.error:
-            self._pt_stateError(
-                "Got an error attempting to connect to %r." % (
-                    remoteAddress))
+            aor = self._pt_resolveAORFromObject(target)
+            return aor.host
+        except TypeError:
+            raise TypeError(
+                "%r instance cannot be derived from %r instance." % (
+                    components.Host.__class__.__name__,
+                    target.__class__.__name__))
 
     def _pt_resetScenario(self):
         self.scenario = None
@@ -399,3 +313,12 @@ class Party(vb.ValueBinder):
             self.scenario = self.Scenario(delegate=self)
             self.scenario.actionCallback = util.WeakMethod(
                 self, "scenarioActionCallback")
+
+    def _pt_transformForReply(self, inputMessageType, responseType):
+        indct = transform.EntryForMessageType(self.transform, inputMessageType)
+        tform = transform.EntryForMessageType(indct, responseType)
+        return tform
+
+
+def PartySubclass(name, transitions):
+    return type(name + "Party", (Party,), {"ScenarioDefinitions": transitions})

@@ -100,13 +100,15 @@ class TestTransportFSM(unittest.TestCase):
     def subTestSimpleTransport(self, socketType):
 
         log.debug("Listen")
-        t1 = transport.TransportFSM(socketType=socketType)
-        t1.listen()
+        l1 = transport.ListenTransportFSM(socketType=socketType)
+        l1.listen()
 
-        log.debug("Connect to %r", t1.localAddress)
+        log.debug("Connect to %r", l1.localAddress)
         t2 = transport.TransportFSM(socketType=socketType)
         t2.connect(t1.localAddress)
         self.wait_for(lambda: t2.state == t2.States.connected)
+
+        assert 0
 
         if socketType == socket.SOCK_STREAM:
             # Stream connections, actually having a connection, connect both

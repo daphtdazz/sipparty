@@ -53,9 +53,9 @@ done
 
 if (( ${#tests} > 0 ))
 then
-    python -m unittest "${tests[@]}" &
+    python -m unittest unittest_logging "${tests[@]}" &
 else
-    python -m unittest discover &
+    python unittest_logging.py discover &
 fi
 
 while ! wait

@@ -32,11 +32,13 @@ import retrythread
 import fsmtimer
 
 log = logging.getLogger(__name__)
+log.setLevel(logging.DEBUG)
 bytes = six.binary_type
 
 __all__ = [
-    "FSMError", "UnexpectedInput", "FSMTimeout", "FSM", "block_until_states",
-    "InitialStateKey", "TransitionKeys"]
+    "FSMError", "UnexpectedInput", "FSMTimeout", "FSM", "FSMType",
+    "FSMClassInitializer",
+    "block_until_states", "InitialStateKey", "TransitionKeys"]
 
 
 class FSMError(Exception):
@@ -89,7 +91,10 @@ def block_until_states(states):
 InitialStateKey = "Initial"
 TransitionKeys = util.Enum((
     "NewState",
-    "Action"
+    "Action",
+    "StartTimers",
+    "StopTimers",
+    "StartThreads"
     ))
 
 
@@ -112,13 +117,15 @@ class FSMClassInitializer(type):
                   self.Inputs)
 
 
-@six.add_metaclass(
+FSMType = type(
     # The FSM type needs both the FSMClassInitializer and the cumulative
     # properties tool.
-    type('FSMType',
-         (util.CCPropsFor(("States", "Inputs", "Actions")),
-          FSMClassInitializer),
-         dict()))
+    'FSMType',
+    (util.CCPropsFor(("States", "Inputs", "Actions")), FSMClassInitializer),
+    dict())
+
+
+@six.add_metaclass(FSMType)
 class FSM(object):
     """Interface:
 
@@ -148,11 +155,11 @@ class FSM(object):
     #
     # =================== CLASS INTERFACE ====================================
     #
-    KeyNewState = "new state"
-    KeyAction = "action"
-    KeyStartTimers = "start timers"
-    KeyStopTimers = "stop timers"
-    KeyStartThreads = "start threads"
+    KeyNewState = TransitionKeys.NewState
+    KeyAction = TransitionKeys.Action
+    KeyStartTimers = TransitionKeys.StartTimers
+    KeyStopTimers = TransitionKeys.StopTimers
+    KeyStartThreads = TransitionKeys.StartThreads
 
     NextFSMNum = 1
 
@@ -169,8 +176,10 @@ class FSM(object):
                 try:
                     ns = transdef[TransitionKeys.NewState]
                 except KeyError:
+                    print("%r" % definition_dict)
                     raise KeyError(
-                        "FSM definition transition dictionary for "
+                        "{cls.__name__!r} definition transition dictionary "
+                        "for "
                         "input {input!r} into state {old_state!r} doesn't "
                         "have a {ns!r} value."
                         "".format(ns=TransitionKeys.NewState, **locals()))
@@ -241,6 +250,7 @@ class FSM(object):
         result[self.KeyNewState] = new_state
         result[self.KeyAction] = self._fsm_makeAction(action)
 
+        log.debug("  addTransition threads: %r", start_threads)
         result[self.KeyStartThreads] = (
             [] if start_threads is None else
             [self._fsm_makeThreadAction(thr) for thr in start_threads])
@@ -459,6 +469,7 @@ class FSM(object):
         """
         log.debug("make action %r", action)
 
+        assert action is not None
         if action is None:
             return None
 

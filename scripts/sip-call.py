@@ -56,6 +56,7 @@ args = SipCallArgs().args
 
 sipparty.sip.transport.prot_log.setLevel(logging.INFO)
 if args.debug < logging.INFO:
+    log.setLevel(args.debug)
     sipparty.util.log.setLevel(logging.INFO)
     sipparty.fsm.retrythread.log.setLevel(logging.INFO)
 

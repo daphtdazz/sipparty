@@ -166,6 +166,8 @@ class BranchParam(Param):
 
 
 class TagParam(Param):
+    """The dialog ID consists of a Call-ID value, a local tag and a remote tag.
+    """
 
     def __init__(self, tagtype=None):
         # tagtype could be used to help ensure that the From: and To: tags are

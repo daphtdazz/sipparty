@@ -31,9 +31,10 @@ if __name__ == "__main__":
     log = logging.getLogger()
 else:
     log = logging.getLogger(__name__)
+    log.setLevel(logging.INFO)
 
 from sipparty import (fsm, sip, util, sipscenarios)
-from sipparty.sip import components
+from sipparty.sip import components, transport
 
 tks = sip.scenario.TransitionKeys
 
@@ -77,6 +78,13 @@ class TestParty(unittest.TestCase):
         self.subTestBasicParty(socket.SOCK_DGRAM)
 
     def subTestBasicParty(self, socketType):
+
+        transport.TransportFSM.DefaultType = socket.SOCK_DGRAM
+        p1 = sip.party.Party(aor="alice@127.0.0.4:5060")
+        p2 = sip.party.Party(aor="bob@127.0.0.4:5061")
+        p1.invite(p2)
+
+        return
 
         class SimpleParty(sip.party.Party):
             pass
@@ -172,6 +180,36 @@ class TestParty(unittest.TestCase):
                         }
                     }
                 }))
+
+    def testBasicSIPP(self):
+        p1 = sipscenarios.SimpleParty(socketType=socket.SOCK_DGRAM)
+
+        data = bytearray()
+
+        def byteConsumer(bytes):
+            log.info("Consume %d bytes", len(bytes))
+            data.extend(bytes)
+            return len(bytes)
+
+        p2transport = sip.transport.TransportFSM(socketType=socket.SOCK_DGRAM)
+        p2transport.byteConsumer = byteConsumer
+        p2transport.listen("127.0.0.1", 5060)
+        p1.sendInvite("sippuser@127.0.0.1")
+
+        util.WaitFor(lambda: len(data) > 0, 0.1)
+
+        p2transport.send(
+            b"SIP/2.0 180 Ringing\r\n"
+            "Via: SIP/2.0/UDP 127.0.0.1;branch={branch}\r\n"
+            "From: <sip:alice@atlanta.com>;tag={taga}\r\n"
+            "To: <sip:user@raspbmc.local>;tag=11586SIPpTag0116\r\n"
+            "Call-ID: {call_id}\r\n"
+            "CSeq: 1070250068 INVITE\r\n"
+            "Contact: <sip:[::1]:5060;transport=UDP>\r\n"
+            "Content-Length: 0\r\n\r\n".format(
+                branch=p1, taga="", call_id=""))
+        p2transport.send(
+            )
 
 if __name__ == "__main__":
     unittest.main()

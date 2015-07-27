@@ -38,7 +38,8 @@ Simple = {
             tks.NewState: "CallEnded"
         },
         200: {
-            tks.NewState: "InCall"
+            tks.NewState: "InCall",
+            tks.Action: "_replyACK"
         }
     },
     "InCall": {
@@ -59,6 +60,4 @@ Simple = {
     "CallEnded": {}
 }
 
-
-class SimpleParty(sip.Party):
-    ScenarioDefinitions = Simple
+SimpleParty = sip.PartySubclass("Simple", transitions=Simple)

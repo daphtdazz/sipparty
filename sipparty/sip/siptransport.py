@@ -17,6 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import six
+import abc
 import logging
 
 from sipparty import (util, vb)
@@ -28,11 +29,24 @@ import collections
 log = logging.getLogger(__name__)
 
 
+@six.add_metaclass(abc.ABCMeta)
+class SIPMessageConsumer(object):
+    @abc.abstractmethod
+    def messageConsumer(self):
+        raise AttributeError("messageConsumer not implemented for class %r" % (
+            self.__class__.__name__))
+
+
+
 class SipTransportFSM(transport.TransportFSM):
 
     #
     # =================== CLASS INTERFACE ====================================
     #
+    ConnectedInstances = {}
+    ListeningInstances = {}
+    MessageConsumers = {}
+
     # These are cumulative with the super classes'.
     States = util.Enum(
         ("sendingreq", "waitingrsp"))
@@ -41,6 +55,20 @@ class SipTransportFSM(transport.TransportFSM):
     def AddClassTransitions(cls):
         log.debug("STFSM's states: %r", cls.States)
         super(cls, cls).AddClassTransitions()
+
+    @classmethod
+    def RegisterMessageConsumer(cls, key, consumer):
+        """
+        :param tuple key: Of the form (call_id, local_tag, remote_tag), where
+        each value is the string value.
+        """
+        if not isinstance(consumer, SIPMessageConsumer):
+            raise TypeError(
+                "%r instance is not an instance of SIPMessageConsumer." % (
+                    consumer.__class__.__name__,))
+
+        assert key not in cls.MessageConsumers
+        cls.MessageConsumers[key] = consumer
 
     #
     # =================== INSTANCE INTERFACE =================================

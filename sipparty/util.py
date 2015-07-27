@@ -179,7 +179,9 @@ class Enum(set):
 
     def add(self, item):
         super(Enum, self).add(item)
-        self._en_list.append(item)
+        ll = self._en_list
+        if item not in ll:
+            ll.append(item)
 
     def update(self, iterable):
         for item in iterable:

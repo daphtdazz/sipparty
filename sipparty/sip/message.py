@@ -19,6 +19,7 @@ limitations under the License.
 import six
 import re
 import logging
+import collections
 
 from sipparty import (util, vb, parse)
 import prot
@@ -198,8 +199,7 @@ class Message(vb.ValueBinder):
                     mheader.field.parameters, param_name,
                     getattr(Param, param_name)())
 
-    def applyTransform(self, targetmsg, tform):
-        copylist = tform[transform.KeyActCopy]
+    def applyTransform(self, targetmsg, tform, request=None):
 
         def setattratpath(obj, path, val):
             nextobj = obj
@@ -210,7 +210,8 @@ class Message(vb.ValueBinder):
 
             setattr(to_target, tocomponents[-1], val)
 
-        for copy_tuple in copylist:
+        def apply_copy_tuple(to_obj, from_obj, copy_tuple):
+
             frmattr = copy_tuple[0]
             if len(copy_tuple) > 1:
                 toattr = copy_tuple[1]
@@ -218,19 +219,39 @@ class Message(vb.ValueBinder):
                 toattr = frmattr
             log.debug("Copy %r to %r", frmattr, toattr)
 
-            nextobj = self
+            nextobj = to_obj
             for fm in frmattr.split("."):
                 nextobj = getattr(nextobj, fm)
             from_attribute = nextobj
 
-            setattratpath(targetmsg, toattr, from_attribute)
+            setattratpath(to_obj, toattr, from_attribute)
 
-        addlist = tform.get(transform.KeyActAdd, [])
-        for add_tuple in addlist:
-            tpath = add_tuple[0]
-            new_obj = add_tuple[1]()
-            log.debug("Adding %r at path %r", new_obj, tpath)
-            setattratpath(targetmsg, tpath, new_obj)
+        # tform may be a list of transforms to perform in order, or just a
+        # single transform dictionary.
+        if isinstance(tform, collections.Mapping):
+            tform_list = [tform]
+        else:
+            assert isinstance(tform, collections.Sequence), (
+                "tform %r is not a Sequence or mapping type" % tform)
+            tform_list = tform
+
+        for tform in tform_list:
+            if transform.KeyActCopy in tform:
+                copylist = tform[transform.KeyActCopy]
+                for tp in copylist:
+                    apply_copy_tuple(targetmsg, self, tp)
+
+            if transform.KeyActCopyFromRequest in tform and request is not None:
+                orig_list = tform[transform.KeyActCopyFromRequest]
+                for item in orig_list:
+                    apply_copy_tuple(targetmsg, request, tp)
+
+            addlist = tform.get(transform.KeyActAdd, [])
+            for add_tuple in addlist:
+                tpath = add_tuple[0]
+                new_obj = add_tuple[1]()
+                log.debug("Adding %r at path %r", new_obj, tpath)
+                setattratpath(targetmsg, tpath, new_obj)
 
     #
     # =================== INTERNAL METHODS ===================================
@@ -388,5 +409,19 @@ class ByeMessage(Message):
         Header.types.From: [Param.types.tag],
         Header.types.Via: [Param.types.branch]
     }
+
+
+class AckMessage(Message):
+    """An INVITE."""
+
+    bindings = [
+        ("startline.uri", "ToHeader.field.uri"),
+        ("startline.protocol", "ViaHeader.field.protocol"),
+        ("startline", "ViaHeader.field.parameters.branch.startline"),
+        ("FromHeader.field.value.uri.aor.username",
+         "ContactHeader.field.value.uri.aor.username"),
+        ("ContactHeader.field.value.uri.aor.host",
+         "ViaHeader.field.host.host"),
+        ("startline.type", "CseqHeader.field.reqtype")]
 
 Message.addSubclassesFromDict(locals())

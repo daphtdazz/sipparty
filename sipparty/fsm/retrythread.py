@@ -171,8 +171,8 @@ class RetryThread(threading.Thread):
                 if select_bad_fd_count == 5:
                     log.warning(
                         "%s one of %r is a bad file descriptor: error hit %r "
-                        "times in a row...", self, select_bad_fd_count,
-                        rsrckeys)
+                        "times in a row...", self, rsrckeys,
+                        select_bad_fd_count)
                 continue
 
             log.debug("%s process %r, %r, %r", self, rfds, wfds, efds)
