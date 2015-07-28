@@ -58,9 +58,12 @@ class TestTransportFSM(unittest.TestCase):
 
         self._ttf_logLevel = transport.log.level
         transport.log.setLevel(logging.DEBUG)
+        self._ttfsm_logLevel = fsm.fsm.log.level
+        fsm.fsm.log.setLevel(logging.INFO)
 
     def tearDown(self):
         transport.log.setLevel(self._ttf_logLevel)
+        fsm.fsm.log.setLevel(self._ttfsm_logLevel)
 
     def testValues(self):
         t1 = transport.TransportFSM()
@@ -99,21 +102,27 @@ class TestTransportFSM(unittest.TestCase):
 
     def subTestSimpleTransport(self, socketType):
 
+        global t1
+        t1 = None
+        def TestAcceptConsumer(sock):
+            global t1
+            t1 = sock
+
         log.debug("Listen")
-        l1 = transport.ListenTransportFSM(socketType=socketType)
+        l1 = transport.ListenTransportFSM(
+            socketType=socketType, acceptConsumer=TestAcceptConsumer)
         l1.listen()
 
-        log.debug("Connect to %r", l1.localAddress)
-        t2 = transport.TransportFSM(socketType=socketType)
-        t2.connect(t1.localAddress)
+        log.debug("Listening on %r", l1.localAddress)
+        t2 = transport.ActiveTransportFSM(socketType=socketType)
+        t2.connect(l1.localAddress)
         self.wait_for(lambda: t2.state == t2.States.connected)
-
-        assert 0
 
         if socketType == socket.SOCK_STREAM:
             # Stream connections, actually having a connection, connect both
             # sides together. Datagrams won't connect until after the first
             # data is received.
+            self.wait_for(lambda: t1 is not None)
             self.wait_for(lambda: t1.state == t1.States.connected)
 
         log.debug("Send some data.")
@@ -122,19 +131,22 @@ class TestTransportFSM(unittest.TestCase):
         # For datagram streams, there is no real connection, so we must wait
         # until we receive some data before latching and connecting to the
         # first address that called us.
+        self.wait_for(lambda: t1 is not None)
         self.wait_for(lambda: t1.state == t1.States.connected)
 
         t1.send("hello world")
 
-        t1.disconnect()
-        self.wait_for(lambda: t1.state == t1.States.disconnected)
+        t1.close()
+        self.wait_for(lambda: t1.state == t1.States.closed)
 
         if socketType == socket.SOCK_DGRAM:
             # Stream connections will tear both sides down, but datagram ones
             # are oblivious.
-            t2.disconnect()
+            t2.close()
 
-        self.wait_for(lambda: t2.state == t2.States.disconnected)
+        self.wait_for(lambda: t2.state == t2.States.closed)
+
+        return
 
         log.debug("Handle data.")
         expected_bytes = [None]

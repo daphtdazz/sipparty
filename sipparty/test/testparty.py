@@ -1,4 +1,4 @@
-"""tparty.py
+"""testparty.py
 
 Unit tests for a SIP party.
 

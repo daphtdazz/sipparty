@@ -193,8 +193,13 @@ class FSM(object):
                     transdef[TransitionKeys.Action]
                     if TransitionKeys.Action in transdef else
                     None)
+                start_threads = (
+                    transdef[TransitionKeys.StartThreads]
+                    if TransitionKeys.StartThreads in transdef else None)
 
-                cls.addTransition(old_state, input, ns, action=action)
+                cls.addTransition(
+                    old_state, input, ns, action=action,
+                    start_threads=start_threads)
 
         # If the special initial state is specified, set that.
         if InitialStateKey in definition_dict:
@@ -253,7 +258,10 @@ class FSM(object):
         log.debug("  addTransition threads: %r", start_threads)
         result[self.KeyStartThreads] = (
             [] if start_threads is None else
-            [self._fsm_makeThreadAction(thr) for thr in start_threads])
+            [self._fsm_makeThreadAction(thr) for thr in start_threads]
+            if isinstance(start_threads, tuple) or
+            isinstance(start_threads, list) else
+            [self._fsm_makeThreadAction(start_threads)])
 
         # Link up the timers.
         for key, timer_names in (
@@ -469,7 +477,6 @@ class FSM(object):
         """
         log.debug("make action %r", action)
 
-        assert action is not None
         if action is None:
             return None
 

@@ -43,8 +43,6 @@ class SipTransportFSM(transport.TransportFSM):
     #
     # =================== CLASS INTERFACE ====================================
     #
-    ConnectedInstances = {}
-    ListeningInstances = {}
     MessageConsumers = {}
 
     # These are cumulative with the super classes'.
