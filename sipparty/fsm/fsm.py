@@ -628,19 +628,29 @@ class FSM(object):
         6. If there are any old threads, tidy them up.
         """
         log.debug("_fsm_hit %r %r %r", input, args, kwargs)
-        trans = self._fsm_transitions[self._fsm_state]
 
-        if input not in trans:
+        old_state = self._fsm_state
+        ts = self._fsm_transitions
+
+        def BadInput():
             msg = "Bad input %r to %r instance %r (current state %r)." % (
                 input, self.__class__.__name__, self._fsm_name,
-                self._fsm_state)
+                old_state)
             log.error(msg)
             raise UnexpectedInput(msg)
+
+        if old_state not in ts:
+            BadInput()
+        trans = ts[old_state]
+
+        if input not in trans:
+            BadInput()
+
         res = trans[input]
         new_state = res[self.KeyNewState]
         log.info(
             "FSM: %r; Input: %r; State Change: %r -> %r.",
-            self._fsm_name, input, self._fsm_state, new_state)
+            self._fsm_name, input, old_state, new_state)
 
         for st in res[self.KeyStopTimers]:
             log.debug("Stop timer %r", st.name)

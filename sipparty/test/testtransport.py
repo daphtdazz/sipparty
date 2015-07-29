@@ -59,7 +59,7 @@ class TestTransportFSM(unittest.TestCase):
         self._ttf_logLevel = transport.log.level
         transport.log.setLevel(logging.DEBUG)
         self._ttfsm_logLevel = fsm.fsm.log.level
-        fsm.fsm.log.setLevel(logging.INFO)
+        fsm.fsm.log.setLevel(logging.DEBUG)
 
     def tearDown(self):
         transport.log.setLevel(self._ttf_logLevel)
@@ -136,34 +136,42 @@ class TestTransportFSM(unittest.TestCase):
 
         t1.send("hello world")
 
+        self.assertEqual(
+            len(transport.ActiveTransportFSM.ConnectedInstances), 2)
+
         t1.close()
         self.wait_for(lambda: t1.state == t1.States.closed)
-
+        t1 = None
         if socketType == socket.SOCK_DGRAM:
             # Stream connections will tear both sides down, but datagram ones
             # are oblivious.
             t2.close()
 
         self.wait_for(lambda: t2.state == t2.States.closed)
-
-        return
+        self.assertEqual(
+            len(transport.ActiveTransportFSM.ConnectedInstances), 0)
 
         log.debug("Handle data.")
         expected_bytes = [None]
         received_bytes = [None]
 
-        def tByteConsumer(bytes):
-            eb = expected_bytes[0]
-            match = None if eb is None else bytearray(eb)
-            if match is None or not bytes.startswith(match):
-                return 0
+        class TBCTransportFSM(transport.TransportFSM):
 
-            received_bytes[0] = bytes[:len(match)]
-            return len(match)
+            def __init__(self, **kwargs):
+                super(self, TBCTransportFSM).__init__(**kwargs)
+                self.byteConsumer = "tByteConsumer"
 
-        t1.byteConsumer = tByteConsumer
-        t1.listen()
-        t2.connect(t1.localAddress)
+            def tByteConsumer(bytes):
+                eb = expected_bytes[0]
+                match = None if eb is None else bytearray(eb)
+                if match is None or not bytes.startswith(match):
+                    return 0
+
+                received_bytes[0] = bytes[:len(match)]
+                return len(match)
+
+        l1.ConnectedTransportClass = TBCTransportFSM
+        t2.connect(l1.localAddress)
         self.wait_for(lambda: t2.state == t2.States.connected)
 
         if socketType == socket.SOCK_STREAM:

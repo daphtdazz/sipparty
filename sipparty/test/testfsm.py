@@ -430,21 +430,32 @@ class TestFSM(unittest.TestCase):
                     "reset": {
                         sipparty.fsm.TransitionKeys.NewState:
                         sipparty.fsm.InitialStateKey
+                    },
+                    "cancel_to_null_state": {
+                        sipparty.fsm.TransitionKeys.NewState: "null"
                     }
-                }
+                },
+                "null": {}
             }
 
-        fsm = TFSM(lock=True, asynchronous_timers=async_timers)
-        fsm.hit("input")
-        fsm.waitForStateCondition(lambda state: state == "in progress")
-        self.assertEqual(fsm.state, "in progress")
-        fsm.hit("input")
-        fsm.waitForStateCondition(lambda state: state != "in progress")
-        self.assertNotEqual(fsm.state, "in progress")
+        fsm1 = TFSM(lock=True, asynchronous_timers=async_timers)
+        fsm1.hit("input")
+        fsm1.waitForStateCondition(lambda state: state == "in progress")
+        self.assertEqual(fsm1.state, "in progress")
+        fsm1.hit("input")
+        fsm1.waitForStateCondition(lambda state: state != "in progress")
+        self.assertNotEqual(fsm1.state, "in progress")
         self.assertRaises(
             sipparty.FSMTimeout,
-            lambda: fsm.waitForStateCondition(
+            lambda: fsm1.waitForStateCondition(
                 lambda state: state == "in progress", timeout=0.1))
+        log.info("EXPECT EXCEPTION IN ASYNC MODE")
+        fsm1.hit("cancel_to_null_state")
+        if not async_timers:
+            self.assertRaises(fsm.UnexpectedInput,
+                              lambda: fsm1.hit("bad input"))
+        log.info("END EXPECT EXCEPTION IN ASYNC MODE")
+
 
 if __name__ == "__main__":
     sys.exit(unittest.main())

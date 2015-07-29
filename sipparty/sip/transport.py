@@ -263,6 +263,7 @@ class ActiveTransportFSM(TransportFSM):
     @classmethod
     def AddConnectedTransport(cls, tp):
         rkey = (tp.remoteAddressHost, tp.remoteAddressPort)
+        log.debug("Adding Connected Transport to %r", rkey)
         typ = tp.socketType
         lkey = (tp.localAddressHost, tp.localAddressPort)
         cis1 = cls.ConnectedInstances
@@ -285,14 +286,18 @@ class ActiveTransportFSM(TransportFSM):
             cis3[key3] = tp
 
     @classmethod
-    def GetConnectedTransport(cls, addr, port, typ=None):
+    def GetConnectedTransport(cls, remote_addr, remote_port, local_addr=None,
+                              typ=None):
         """Get a connected transport to the given address tuple.
 
-        :param tuple key: Of the form (fromAddressTuple, fromPort, socketType,
-        toAddressTuple, toPort)
+        :param string remote_addr: The address or hostname of the target we
+        want to get a connection to.
+        :param integer remote_port: The port of the target we want to get a
+        connection to.
         """
-        assert typ is None, "Not yet implemented"
-        key1 = (addr, port)
+        assert typ is None, "typ not yet implemented"
+        assert local_addr is None, "local_addr not yet implemented"
+        key1 = (remote_addr, remote_port)
         cis1 = cls.ConnectedInstances
         if key1 in cis1:
             for dict1 in itervalues(cis1):
@@ -302,6 +307,40 @@ class ActiveTransportFSM(TransportFSM):
 
         # No existing connected transport.
         return None
+
+    @classmethod
+    def RemoveConnectedTransport(cls, tp):
+        rkey = (tp.remoteAddressHost, tp.remoteAddressPort)
+        log.debug("Adding Connected Transport to %r", rkey)
+        typ = tp.socketType
+        lkey = (tp.localAddressHost, tp.localAddressPort)
+        cis1 = cls.ConnectedInstances
+
+        for it, key1, key2, key3 in (1, rkey, typ, lkey), (2, rkey, lkey, typ):
+
+            def not_there():
+                raise KeyError(
+                    "No transport to %r from %r registered as connected." % (
+                        key1, key2 if it == 1 else key3))
+
+            if key1 not in cis1:
+                not_there()
+            cis2 = cis1[key1]
+
+            if key2 not in cis2:
+                not_there()
+
+            cis3 = cis2[key2]
+
+            if key3 not in cis3:
+                not_there()
+            del cis3[key3]
+
+            if len(cis3) == 0:
+                del cis2[key2]
+
+            if len(cis2) == 0:
+                del cis1[key1]
 
     @classmethod
     def NewWithConnectedSocket(cls, socket):
@@ -399,13 +438,14 @@ class ActiveTransportFSM(TransportFSM):
     def becomesConnected(self):
         "Called when the transport becomes connected"
         log.debug("Becomes connected to %r", self._atfsm_remoteAddress)
+        self.AddConnectedTransport(self)
         if self.socketType == socket.SOCK_STREAM:
-            self.AddConnectedTransport(self)
             self.addFDSource(self._tfsm_sck,
                              util.WeakMethod(self, "_atfsm_dataAvailable"))
 
     def becomesDisconnected(self):
         "Called when the transport goes down."
+        self.RemoveConnectedTransport(self)
         if self.socketType == socket.SOCK_STREAM:
             sck = self._tfsm_sck
             self.rmFDSource(sck)
@@ -753,15 +793,14 @@ class ListenTransportFSM(TransportFSM):
         data, addr = lsck.recvfrom(self._tfsm_receiveSize)
         assert len(addr) >= 2
         ctc = self.ConnectedTransportClass
-        asck = ctc.GetConnectedTransport(
-            addr[0], addr[1])
+        asck = ctc.GetConnectedTransport(addr[0], addr[1])
         if asck is None:
             asck = ctc(
                 localAddress=self.localAddress, socketType=self.socketType,
                 family=self.family, remoteAddress=addr)
-            asck._fsm_state = asck.States.connected
+            asck._fsm_state = asck.States.connecting
             asck._tfsm_sck = lsck
-            ctc.AddConnectedTransport(asck)
+            asck.hit("connectUp")
             ac = self.acceptConsumer
             log.debug("distribute to acceptConsumer %r", ac)
             if ac is not None:
