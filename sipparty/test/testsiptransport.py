@@ -48,36 +48,36 @@ class TestSIPTransport(unittest.TestCase):
             self.assertTrue(0, "Timed out waiting for %r" % func)
 
     def testConnectedTidyUp(self):
-
-        S = siptransport.SipTransportFSM.States
-        I = siptransport.SipTransportFSM.Inputs
-
-        t1 = siptransport.SipTransportFSM()
-        t2 = siptransport.SipTransportFSM()
-
-        t1.listen()
-        log.debug("t1.localAddress: %r", t1.localAddress)
-
-        t2.hit(I.connect, t1.localAddress)
-
-        self.wait_for(lambda: t2.state == S.connected)
-        self.wait_for(lambda: t1.state == S.connected)
+        self.subTestBasicSIPTransport(1)
 
     def testBasicSIPTransport(self):
+        self.subTestBasicSIPTransport(0)
+
+    def subTestBasicSIPTransport(self, finish_point):
+        global t1
+        t1 = None
+        def AcceptConsumer(tp):
+            global t1
+            t1 = tp
 
         S = siptransport.SipTransportFSM.States
         I = siptransport.SipTransportFSM.Inputs
 
-        t1 = siptransport.SipTransportFSM()
+        l1 = siptransport.SipListenTransport()
+        l1.acceptConsumer = AcceptConsumer
         t2 = siptransport.SipTransportFSM()
 
-        t1.listen()
-        log.debug("t1.localAddress: %r", t1.localAddress)
+        l1.listen()
+        log.debug("t1.localAddress: %r", l1.localAddress)
 
-        t2.hit(I.connect, t1.localAddress)
+        t2.hit(I.attemptConnect, l1.localAddress)
 
         self.wait_for(lambda: t2.state == S.connected)
+        self.wait_for(lambda: t1 is not None)
         self.wait_for(lambda: t1.state == S.connected)
+
+        if finish_point == 1:
+            return
 
         inv = message.Message.invite()
         inv.fromHeader.uri.aor = components.AOR(

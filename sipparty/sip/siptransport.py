@@ -37,8 +37,7 @@ class SIPMessageConsumer(object):
             self.__class__.__name__))
 
 
-
-class SipTransportFSM(transport.TransportFSM):
+class SipTransportFSM(transport.ActiveTransportFSM):
 
     #
     # =================== CLASS INTERFACE ====================================
@@ -112,3 +111,7 @@ class SipTransportFSM(transport.TransportFSM):
             self.messageConsumer(newmessage)
 
         return message_end
+
+
+class SipListenTransport(transport.ListenTransportFSM):
+    ConnectedTransportClass = SipTransportFSM
