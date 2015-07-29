@@ -155,13 +155,12 @@ class TestTransportFSM(unittest.TestCase):
         expected_bytes = [None]
         received_bytes = [None]
 
-        class TBCTransportFSM(transport.TransportFSM):
-
+        class TBCTransportFSM(transport.ActiveTransportFSM):
             def __init__(self, **kwargs):
-                super(self, TBCTransportFSM).__init__(**kwargs)
-                self.byteConsumer = "tByteConsumer"
+                super(TBCTransportFSM, self).__init__(**kwargs)
+                self.byteConsumer = self.tByteConsumer
 
-            def tByteConsumer(bytes):
+            def tByteConsumer(self, bytes):
                 eb = expected_bytes[0]
                 match = None if eb is None else bytearray(eb)
                 if match is None or not bytes.startswith(match):
@@ -171,6 +170,7 @@ class TestTransportFSM(unittest.TestCase):
                 return len(match)
 
         l1.ConnectedTransportClass = TBCTransportFSM
+        t2 = transport.ActiveTransportFSM(socketType=socketType)
         t2.connect(l1.localAddress)
         self.wait_for(lambda: t2.state == t2.States.connected)
 
@@ -191,12 +191,12 @@ class TestTransportFSM(unittest.TestCase):
         t2.send("oss ")
         self.wait_for(lambda: received_bytes == [bytearray("boss ")])
 
-        t2.disconnect()
-        self.wait_for(lambda: t2.state == t2.States.disconnected)
+        t2.close()
+        self.wait_for(lambda: t2.state == t2.States.closed)
 
         if socketType == socket.SOCK_DGRAM:
-            t1.disconnect()
-        self.wait_for(lambda: t1.state == t1.States.disconnected)
+            t1.close()
+        self.wait_for(lambda: t1.state == t1.States.closed)
 
         log.debug("Done.")
 

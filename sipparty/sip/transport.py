@@ -299,9 +299,13 @@ class ActiveTransportFSM(TransportFSM):
         assert local_addr is None, "local_addr not yet implemented"
         key1 = (remote_addr, remote_port)
         cis1 = cls.ConnectedInstances
+        log.debug("GetConnectedTransport to %r from all %r",
+            (remote_addr, remote_port), cis1)
         if key1 in cis1:
-            for dict1 in itervalues(cis1):
-                for tp in itervalues(dict1):
+            cis2 = cis1[key1]
+            for cis3 in itervalues(cis2):
+                for tp in itervalues(cis3):
+
                     log.debug("Got existing connected transport %r", tp)
                     return tp
 
