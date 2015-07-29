@@ -444,11 +444,13 @@ class ActiveTransportFSM(TransportFSM):
         log.debug("Becomes connected to %r", self._atfsm_remoteAddress)
         self.AddConnectedTransport(self)
         if self.socketType == socket.SOCK_STREAM:
+            log.debug("Add new FD source")
             self.addFDSource(self._tfsm_sck,
                              util.WeakMethod(self, "_atfsm_dataAvailable"))
 
     def becomesDisconnected(self):
         "Called when the transport goes down."
+        log.debug("Becomes disconnected from %r", self._atfsm_remoteAddress)
         self.RemoveConnectedTransport(self)
         if self.socketType == socket.SOCK_STREAM:
             sck = self._tfsm_sck
@@ -765,14 +767,9 @@ class ListenTransportFSM(TransportFSM):
         log.debug("Stream sockets: try and accept.")
 
         try:
-            assert 0
             conn, addr = lsck.accept()
-            self._tfsm_sck = conn
-            self._atfsm_remoteAddress = addr
-            log.info("Connection accepted from %r.",
-                     self._atfsm_remoteAddress)
-            self.hit(self.Inputs.connected)
-            return
+            self._ltfsm_handleNewActiveStreamSocket(conn, addr)
+            return 0
         except socket.timeout:
             # In this case we are going to try again straight away.
             log.debug("Socket timeout")
@@ -794,20 +791,34 @@ class ListenTransportFSM(TransportFSM):
     #
     def _ltfsm_distributeDatagramData(self, lsck):
         assert self.socketType == socket.SOCK_DGRAM
-        data, addr = lsck.recvfrom(self._tfsm_receiveSize)
-        assert len(addr) >= 2
+        data, raddr = lsck.recvfrom(self._tfsm_receiveSize)
+        assert len(raddr) >= 2
         ctc = self.ConnectedTransportClass
-        asck = ctc.GetConnectedTransport(addr[0], addr[1])
-        if asck is None:
-            asck = ctc(
-                localAddress=self.localAddress, socketType=self.socketType,
-                family=self.family, remoteAddress=addr)
-            asck._fsm_state = asck.States.connecting
-            asck._tfsm_sck = lsck
-            asck.hit("connectUp")
-            ac = self.acceptConsumer
-            log.debug("distribute to acceptConsumer %r", ac)
-            if ac is not None:
-                ac(asck)
+        actp = ctc.GetConnectedTransport(raddr[0], raddr[1])
+        if actp is None:
+            actp = self._ltfsm_newActiveTransportWithSck(lsck, raddr)
+            self._ltfsm_distributeNewActTransport(actp)
 
-        asck._atfsm_receiveData(data)
+        actp._atfsm_receiveData(data)
+
+    def _ltfsm_handleNewActiveStreamSocket(self, asck, raddr):
+        assert self.socketType == socket.SOCK_STREAM
+        atp = self._ltfsm_newActiveTransportWithSck(asck, raddr)
+        self._ltfsm_distributeNewActTransport(atp)
+
+    def _ltfsm_newActiveTransportWithSck(self, sck, raddr):
+        ctc = self.ConnectedTransportClass
+        actp = ctc(
+            localAddress=self.localAddress, socketType=self.socketType,
+            family=self.family, remoteAddress=raddr)
+        actp._fsm_state = actp.States.connecting
+        actp._tfsm_sck = sck
+        actp.hit("connectUp")
+        return actp
+
+    def _ltfsm_distributeNewActTransport(self, atp):
+        ac = self.acceptConsumer
+        log.debug("distribute to acceptConsumer %r", ac)
+        if ac is not None:
+            ac(atp)
+
