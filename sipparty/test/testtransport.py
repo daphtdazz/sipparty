@@ -59,7 +59,7 @@ class TestTransportFSM(unittest.TestCase):
         self._ttf_logLevel = transport.log.level
         transport.log.setLevel(logging.DEBUG)
         self._ttfsm_logLevel = fsm.fsm.log.level
-        fsm.fsm.log.setLevel(logging.DEBUG)
+        fsm.fsm.log.setLevel(logging.INFO)
 
     def tearDown(self):
         transport.log.setLevel(self._ttf_logLevel)
@@ -76,23 +76,21 @@ class TestTransportFSM(unittest.TestCase):
 
     def testTransportErrors(self):
 
-        t1 = transport.TransportFSM()
+        t1 = transport.ActiveTransportFSM()
 
         log.debug("Check connect can fail.")
         t1.connect()
         t1.hit(t1.Inputs.error)
         self.wait_for(lambda: t1.state == t1.States.error)
-        t1.reset()
-        self.assertEqual(t1.state, t1.States.disconnected)
 
         log.debug("Check listen can be cancelled.")
-        t1.family = socket.AF_INET
-        t1.socketType = socket.SOCK_STREAM
-        t1.listen()
-        self.assertEqual(t1.state, t1.States.listening)
-        t1.hit(t1.Inputs.error, "user cancelled")
-        self.wait_for(lambda: t1.state == t1.States.error)
-        t1.reset()
+        l1 = transport.ListenTransportFSM()
+        l1.family = socket.AF_INET
+        l1.socketType = socket.SOCK_STREAM
+        l1.listen()
+        l1.waitForStateCondition(lambda st: st == l1.States.listening)
+        l1.hit(l1.Inputs.error, "user cancelled")
+        self.wait_for(lambda: l1.state == l1.States.error)
 
     def testSimpleTransportStream(self):
         self.subTestSimpleTransport(socketType=socket.SOCK_STREAM)

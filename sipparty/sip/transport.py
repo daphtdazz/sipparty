@@ -587,6 +587,10 @@ class ListenTransportFSM(TransportFSM):
             Inputs.accept: {
                 FSM.KeyNewState: States.listening,
                 FSM.KeyAction: Actions.accept
+            },
+            Inputs.error: {
+                FSM.KeyNewState: States.error,
+                FSM.KeyAction: Actions.transportError
             }
         },
         States.closed: {},
