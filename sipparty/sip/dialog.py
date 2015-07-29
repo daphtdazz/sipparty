@@ -101,7 +101,7 @@ class Dialog(fsm.FSM, vb.ValueBinder):
 
         self.callIDHeader = callIDHeader
 
-        siptransport.SipTransportFSM.RegisterMessageConsumer((
+        siptransport.SipTransport.RegisterMessageConsumer((
             bytes(callIDHeader.field), bytes(self.localTag)), self)
 
     def initiate(self, *args, **kwargs):
@@ -114,7 +114,7 @@ class Dialog(fsm.FSM, vb.ValueBinder):
 
         log.debug("  getTransportForHost %r:%r", addr, port)
 
-        tp = siptransport.SipTransportFSM.GetConnectedTransport(
+        tp = siptransport.SipTransport.GetConnectedTransport(
             addr, port)
         return tp
 

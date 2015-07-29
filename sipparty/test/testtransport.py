@@ -33,7 +33,7 @@ from sipparty import (util, fsm)
 from sipparty.sip import transport
 
 
-class TestTransportFSM(unittest.TestCase):
+class TestTransport(unittest.TestCase):
 
     def wait_for(self, func, timeout=2):
         assert timeout > 0.05
@@ -66,7 +66,7 @@ class TestTransportFSM(unittest.TestCase):
         fsm.fsm.log.setLevel(self._ttfsm_logLevel)
 
     def testValues(self):
-        t1 = transport.TransportFSM()
+        t1 = transport.Transport()
         self.assertRaises(ValueError,
                           lambda: setattr(t1, "localAddressPort", -1))
         self.assertRaises(ValueError,
@@ -76,7 +76,7 @@ class TestTransportFSM(unittest.TestCase):
 
     def testTransportErrors(self):
 
-        t1 = transport.ActiveTransportFSM()
+        t1 = transport.ActiveTransport()
 
         log.debug("Check connect can fail.")
         t1.connect()
@@ -84,7 +84,7 @@ class TestTransportFSM(unittest.TestCase):
         self.wait_for(lambda: t1.state == t1.States.error)
 
         log.debug("Check listen can be cancelled.")
-        l1 = transport.ListenTransportFSM()
+        l1 = transport.ListenTransport()
         l1.family = socket.AF_INET
         l1.socketType = socket.SOCK_STREAM
         l1.listen()
@@ -107,12 +107,12 @@ class TestTransportFSM(unittest.TestCase):
             t1 = sock
 
         log.debug("Listen")
-        l1 = transport.ListenTransportFSM(
+        l1 = transport.ListenTransport(
             socketType=socketType, acceptConsumer=TestAcceptConsumer)
         l1.listen()
 
         log.debug("Listening on %r", l1.localAddress)
-        t2 = transport.ActiveTransportFSM(socketType=socketType)
+        t2 = transport.ActiveTransport(socketType=socketType)
         t2.connect(l1.localAddress)
         self.wait_for(lambda: t2.state == t2.States.connected)
 
@@ -135,7 +135,7 @@ class TestTransportFSM(unittest.TestCase):
         t1.send("hello world")
 
         self.assertEqual(
-            len(transport.ActiveTransportFSM.ConnectedInstances), 2)
+            len(transport.ActiveTransport.ConnectedInstances), 2)
 
         t1.close()
         self.wait_for(lambda: t1.state == t1.States.closed)
@@ -147,15 +147,15 @@ class TestTransportFSM(unittest.TestCase):
 
         self.wait_for(lambda: t2.state == t2.States.closed)
         self.assertEqual(
-            len(transport.ActiveTransportFSM.ConnectedInstances), 0)
+            len(transport.ActiveTransport.ConnectedInstances), 0)
 
         log.debug("Handle data.")
         expected_bytes = [None]
         received_bytes = [None]
 
-        class TBCTransportFSM(transport.ActiveTransportFSM):
+        class TBCTransport(transport.ActiveTransport):
             def __init__(self, **kwargs):
-                super(TBCTransportFSM, self).__init__(**kwargs)
+                super(TBCTransport, self).__init__(**kwargs)
                 self.byteConsumer = self.tByteConsumer
 
             def tByteConsumer(self, bytes):
@@ -167,8 +167,8 @@ class TestTransportFSM(unittest.TestCase):
                 received_bytes[0] = bytes[:len(match)]
                 return len(match)
 
-        l1.ConnectedTransportClass = TBCTransportFSM
-        t2 = transport.ActiveTransportFSM(socketType=socketType)
+        l1.ConnectedTransportClass = TBCTransport
+        t2 = transport.ActiveTransport(socketType=socketType)
         t2.connect(l1.localAddress)
         self.wait_for(lambda: t2.state == t2.States.connected)
 

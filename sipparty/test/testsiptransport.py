@@ -60,12 +60,12 @@ class TestSIPTransport(unittest.TestCase):
             global t1
             t1 = tp
 
-        S = siptransport.SipTransportFSM.States
-        I = siptransport.SipTransportFSM.Inputs
+        S = siptransport.SipTransport.States
+        I = siptransport.SipTransport.Inputs
 
         l1 = siptransport.SipListenTransport()
         l1.acceptConsumer = AcceptConsumer
-        t2 = siptransport.SipTransportFSM()
+        t2 = siptransport.SipTransport()
 
         l1.listen()
         log.debug("t1.localAddress: %r", l1.localAddress)

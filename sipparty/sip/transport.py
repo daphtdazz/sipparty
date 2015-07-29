@@ -100,7 +100,7 @@ def GetBoundSocket(family, socktype, address):
     return ssocket
 
 
-class TransportFSM(FSM):
+class Transport(FSM):
     """Abstract superclass for the listen and active transport FSMs."""
 
     DefaultType = socket.SOCK_STREAM
@@ -138,7 +138,7 @@ class TransportFSM(FSM):
                 kwargs["asynchronous_timers"])
         kwargs["asynchronous_timers"] = True
 
-        super(TransportFSM, self).__init__(**kwargs)
+        super(Transport, self).__init__(**kwargs)
 
         self._tfsm_receiveSize = 4096
 
@@ -170,7 +170,7 @@ class TransportFSM(FSM):
         except socket.error:
             pass
 
-        sp = super(TransportFSM, self)
+        sp = super(Transport, self)
         if hasattr(sp, "__del__"):
             try:
                 sp.__del__()
@@ -207,7 +207,7 @@ class TransportFSM(FSM):
         self.__dict__["_tfsm_localAddress"][1] = val
 
 
-class ActiveTransportFSM(TransportFSM):
+class ActiveTransport(Transport):
     """Controls a socket connection.
     """
 
@@ -372,7 +372,7 @@ class ActiveTransportFSM(TransportFSM):
             else:
                 self.__dict__["_atfsm_" + key] = keydef_pair[1]
 
-        super(ActiveTransportFSM, self).__init__(**kwargs)
+        super(ActiveTransport, self).__init__(**kwargs)
 
         self._tfsm_timeout = 2
         self._tfsm_sck = None
@@ -382,9 +382,9 @@ class ActiveTransportFSM(TransportFSM):
         self.hit(self.Inputs.attemptConnect, *args, **kwargs)
         self.waitForStateCondition(
             lambda state: state in (
-                ActiveTransportFSM.States.error,
-                ActiveTransportFSM.States.connecting,
-                ActiveTransportFSM.States.connected))
+                ActiveTransport.States.error,
+                ActiveTransport.States.connecting,
+                ActiveTransport.States.connected))
 
     def send(self, data):
         self.hit(self.Inputs.send, data)
@@ -393,8 +393,8 @@ class ActiveTransportFSM(TransportFSM):
         self.hit(self.Inputs.close)
         self.waitForStateCondition(
             lambda state: state in (
-                ActiveTransportFSM.States.error,
-                ActiveTransportFSM.States.closed))
+                ActiveTransport.States.error,
+                ActiveTransport.States.closed))
 
     #
     # =================== ACTIONS ============================================
@@ -437,7 +437,7 @@ class ActiveTransportFSM(TransportFSM):
             self._tfsm_sck.connect(addr_tuple)
 
         log.debug("Connected")
-        self.hit(ActiveTransportFSM.Inputs.connectUp)
+        self.hit(ActiveTransport.Inputs.connectUp)
 
     def becomesConnected(self):
         "Called when the transport becomes connected"
@@ -552,7 +552,7 @@ class ActiveTransportFSM(TransportFSM):
             self.hit(self.Inputs.close)
 
 
-class ListenTransportFSM(TransportFSM):
+class ListenTransport(Transport):
     #
     # =================== CLASS INTERFACE ====================================
     #
@@ -603,8 +603,8 @@ class ListenTransportFSM(TransportFSM):
     ListeningInstances = {}
 
     # This can be configured in instances to create different subclasses of
-    # ActiveTransportFSM if desired.
-    ConnectedTransportClass = ActiveTransportFSM
+    # ActiveTransport if desired.
+    ConnectedTransportClass = ActiveTransport
 
     @classmethod
     def AddListeningTransport(cls, tp):
@@ -659,7 +659,7 @@ class ListenTransportFSM(TransportFSM):
             else:
                 self.__dict__["_ltfsm_" + key] = keydef_pair[1]
 
-        super(ListenTransportFSM, self).__init__(**kwargs)
+        super(ListenTransport, self).__init__(**kwargs)
 
         self._atfsm_remoteAddress = None
 
@@ -693,7 +693,7 @@ class ListenTransportFSM(TransportFSM):
     def close(self):
         self.hit(self.Inputs.close)
         self.waitForStateCondition(
-            lambda state: state != ListenTransportFSM.States.listening)
+            lambda state: state != ListenTransport.States.listening)
 
     #
     # =================== ACTIONS ============================================

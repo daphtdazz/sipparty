@@ -79,7 +79,7 @@ class TestParty(unittest.TestCase):
 
     def subTestBasicParty(self, socketType):
 
-        transport.TransportFSM.DefaultType = socket.SOCK_DGRAM
+        transport.Transport.DefaultType = socket.SOCK_DGRAM
         p1 = sip.party.Party(aor="alice@127.0.0.4:5060")
         p2 = sip.party.Party(aor="bob@127.0.0.4:5061")
         p1.invite(p2)
@@ -191,7 +191,7 @@ class TestParty(unittest.TestCase):
             data.extend(bytes)
             return len(bytes)
 
-        p2transport = sip.transport.TransportFSM(socketType=socket.SOCK_DGRAM)
+        p2transport = sip.transport.Transport(socketType=socket.SOCK_DGRAM)
         p2transport.byteConsumer = byteConsumer
         p2transport.listen("127.0.0.1", 5060)
         p1.sendInvite("sippuser@127.0.0.1")

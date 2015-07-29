@@ -37,7 +37,7 @@ class SIPMessageConsumer(object):
             self.__class__.__name__))
 
 
-class SipTransportFSM(transport.ActiveTransportFSM):
+class SipTransport(transport.ActiveTransport):
 
     #
     # =================== CLASS INTERFACE ====================================
@@ -76,7 +76,7 @@ class SipTransportFSM(transport.ActiveTransportFSM):
         lambda val: isinstance(val, collections.Callable))
 
     def __init__(self, **kwargs):
-        super(SipTransportFSM, self).__init__(**kwargs)
+        super(SipTransport, self).__init__(**kwargs)
 
         self._tsipfsm_messageConsumer = None
         self._tsipfsm_messages = []
@@ -89,7 +89,7 @@ class SipTransportFSM(transport.ActiveTransportFSM):
     #
     def _tsfsm_consumeBytes(self, data):
         log.debug(
-            "SipTransportFSM attempting to consume %d bytes.", len(data))
+            "SipTransport attempting to consume %d bytes.", len(data))
         log.debug("%r", data)
 
         # SIP messages always have \r\n\r\n after the headers and before any
@@ -113,5 +113,5 @@ class SipTransportFSM(transport.ActiveTransportFSM):
         return message_end
 
 
-class SipListenTransport(transport.ListenTransportFSM):
-    ConnectedTransportClass = SipTransportFSM
+class SipListenTransport(transport.ListenTransport):
+    ConnectedTransportClass = SipTransport
