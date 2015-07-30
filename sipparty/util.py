@@ -642,6 +642,19 @@ def WaitFor(condition, timeout_s, action_on_timeout=None, resolution=0.0001):
             raise Timeout("Timed out waiting for %r" % condition)
 
 
+class Singleton(object):
+    """Classes inheriting from this will only have one instance."""
+
+    _St_SharedInstance = None
+
+    @classmethod
+    def __new__(cls, name):
+        log.debug("New with class %r, name %r", cls, name)
+        if cls._St_SharedInstance is None:
+            cls._St_SharedInstance = super(type, cls).__new__(name)
+        return cls._St_SharedInstance
+
+
 class TestCaseREMixin(object):
 
     def assertMatchesPattern(self, value, pattern):

@@ -17,19 +17,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
+
+from sipparty import util
+
 log = logging.getLogger(__name__)
 
 
-class ActiveTransportManager(object):
-
-    sharedInstance = None
-
-    @classmethod
-    def __new__(cls, name):
-        log.debug("New with class %r, name %r", cls, name)
-        if cls.sharedInstance is None:
-            cls.sharedInstance = super(type, cls).__new__(name)
-        return cls.sharedInstance
+class ActiveTransportManager(util.Singleton):
 
     def AddConnectedTransport(cls, tp):
         rkey = (tp.remoteAddressHost, tp.remoteAddressPort)
@@ -115,3 +109,8 @@ class ActiveTransportManager(object):
 
             if len(cis2) == 0:
                 del cis1[key1]
+
+
+class ListenTransportManager(util.Singleton):
+    pass
+

@@ -38,5 +38,6 @@ class TestTM(unittest.TestCase, object):
     def testSingleton(self):
 
         tm1 = transportmanager.ActiveTransportManager()
+        self.assertTrue(tm1 is not None)
         tm2 = transportmanager.ActiveTransportManager()
         self.assertTrue(tm1 is tm2)
