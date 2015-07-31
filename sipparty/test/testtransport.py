@@ -134,8 +134,8 @@ class TestTransport(unittest.TestCase):
 
         t1.send("hello world")
 
-        self.assertEqual(
-            len(transport.ActiveTransport.ConnectedInstances), 2)
+        sipTM = transportmanager.ActiveTransportManager(name="SIP")
+        self.assertEqual(len(sipTM.connectedInstances), 2)
 
         t1.close()
         self.wait_for(lambda: t1.state == t1.States.closed)

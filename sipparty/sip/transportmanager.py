@@ -25,12 +25,17 @@ log = logging.getLogger(__name__)
 
 class ActiveTransportManager(util.Singleton):
 
-    def AddConnectedTransport(cls, tp):
+    connectedInstances = {}
+
+    def __init__(self, **kwargs):
+        super(ActiveTransportManager, self).__init__(self, **kwargs)
+
+    def addConnectedTransport(self, tp):
         rkey = (tp.remoteAddressHost, tp.remoteAddressPort)
         log.debug("Adding Connected Transport to %r", rkey)
         typ = tp.socketType
         lkey = (tp.localAddressHost, tp.localAddressPort)
-        cis1 = cls.ConnectedInstances
+        cis1 = self.connectedInstances
 
         for key1, key2, key3 in (rkey, typ, lkey), (rkey, lkey, typ):
             if key1 not in cis1:
@@ -49,8 +54,7 @@ class ActiveTransportManager(util.Singleton):
                     key3))
             cis3[key3] = tp
 
-    @classmethod
-    def GetConnectedTransport(cls, remote_addr, remote_port, local_addr=None,
+    def getConnectedTransport(self, remote_addr, remote_port, local_addr=None,
                               typ=None):
         """Get a connected transport to the given address tuple.
 
@@ -62,7 +66,7 @@ class ActiveTransportManager(util.Singleton):
         assert typ is None, "typ not yet implemented"
         assert local_addr is None, "local_addr not yet implemented"
         key1 = (remote_addr, remote_port)
-        cis1 = cls.ConnectedInstances
+        cis1 = self.connectedInstances
         log.debug("GetConnectedTransport to %r from all %r",
             (remote_addr, remote_port), cis1)
         if key1 in cis1:
@@ -76,13 +80,12 @@ class ActiveTransportManager(util.Singleton):
         # No existing connected transport.
         return None
 
-    @classmethod
-    def RemoveConnectedTransport(cls, tp):
+    def removeConnectedTransport(self, tp):
         rkey = (tp.remoteAddressHost, tp.remoteAddressPort)
         log.debug("Adding Connected Transport to %r", rkey)
         typ = tp.socketType
         lkey = (tp.localAddressHost, tp.localAddressPort)
-        cis1 = cls.ConnectedInstances
+        cis1 = self.connectedInstances
 
         for it, key1, key2, key3 in (1, rkey, typ, lkey), (2, rkey, lkey, typ):
 
@@ -111,6 +114,6 @@ class ActiveTransportManager(util.Singleton):
                 del cis1[key1]
 
 
-class ListenTransportManager(util.Singleton):
+class ListenTransportManager(object):
     pass
 

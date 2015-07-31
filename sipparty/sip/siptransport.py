@@ -19,99 +19,119 @@ limitations under the License.
 import six
 import abc
 import logging
+import socket
 
 from sipparty import (util, vb)
 import prot
-import transport
 import message
 import collections
 
 log = logging.getLogger(__name__)
+bytes = six.binary_type
+itervalues = six.itervalues
 
 
-@six.add_metaclass(abc.ABCMeta)
-class SIPMessageConsumer(object):
-    @abc.abstractmethod
-    def messageConsumer(self):
-        raise AttributeError("messageConsumer not implemented for class %r" % (
-            self.__class__.__name__))
+class SIPSocket(object):
 
+    @property
+    def fromAddr(self):
+        return self._ssck_sock.getpeername()
 
-class SipTransport(transport.ActiveTransport):
+    def __init__(self, sockType, toAddr, fromAddr=None):
 
-    #
-    # =================== CLASS INTERFACE ====================================
-    #
-    MessageConsumers = {}
+        if isinstance(toAddr, bytes):
+            toAddr = (toAddr, 0)
 
-    # These are cumulative with the super classes'.
-    States = util.Enum(
-        ("sendingreq", "waitingrsp"))
+        addrinfos = socket.getaddrinfo(toAddr[0], toAddr[1], )
 
-    @classmethod
-    def AddClassTransitions(cls):
-        log.debug("STFSM's states: %r", cls.States)
-        super(cls, cls).AddClassTransitions()
+        sock = socket.socket(socket.AF_INET, sockType)
 
-    @classmethod
-    def RegisterMessageConsumer(cls, key, consumer):
-        """
-        :param tuple key: Of the form (call_id, local_tag, remote_tag), where
-        each value is the string value.
-        """
-        if not isinstance(consumer, SIPMessageConsumer):
-            raise TypeError(
-                "%r instance is not an instance of SIPMessageConsumer." % (
-                    consumer.__class__.__name__,))
+        if fromAddr is not None:
+            log.debug("Bind socket to %r", fromAddr)
+            sock.bind(fromAddr)
+        self._ssck_sock = sock
 
-        assert key not in cls.MessageConsumers
-        cls.MessageConsumers[key] = consumer
+class SIPTransport(object):
 
-    #
-    # =================== INSTANCE INTERFACE =================================
-    #
-    messages = util.DerivedProperty("_tsipfsm_messages")
-    messageConsumer = util.DerivedProperty(
-        "_tsipfsm_messageConsumer",
-        lambda val: isinstance(val, collections.Callable))
+    DefaultType = socket.SOCK_DGRAM
 
-    def __init__(self, **kwargs):
-        super(SipTransport, self).__init__(**kwargs)
+    def __init__(self):
+        self._sptr_socketsByType = {
+            socket.SOCK_STREAM: {}, socket.SOCK_DGRAM: {}}
+        super(SIPTransport, self).__init__()
 
-        self._tsipfsm_messageConsumer = None
-        self._tsipfsm_messages = []
+    def send(self, data, toAddr, fromAddr=None, sockType=None):
+        if sockType is None:
+            sockType = self.DefaultType
+        sck = self.socket(sockType, toAddr, fromAddr, create=True)
+        sck.send(data)
 
-        self.byteConsumer = util.WeakMethod(
-            self, "_tsfsm_consumeBytes", default_rc=0)
+    def socket(self, sockType, toAddr, fromAddr, create=False):
+        if fromAddr is not None:
+            log.debug(
+                "Get specific socket to %r from %r type %r", toAddr, fromAddr,
+                sockType)
+            return self._sptr_specificSocket(
+                sockType, toAddr, fromAddr, create)
 
-    #
-    # =================== INTERNAL ===========================================
-    #
-    def _tsfsm_consumeBytes(self, data):
-        log.debug(
-            "SipTransport attempting to consume %d bytes.", len(data))
-        log.debug("%r", data)
+        log.debug("Get any socket to %r type %r", toAddr, sockType)
+        return self._sptr_anySocketTo(sockType, toAddr, create)
 
-        # SIP messages always have \r\n\r\n after the headers and before any
-        # bodies.
-        eoleol = prot.EOL * 2
+    def _sptr_specificSocket(self, sockType, toAddr, fromAddr, create):
+        scksByFrom = self._sptr_socketsTo(sockType, toAddr, create)
+        if scksByFrom is None:
+            return None
 
-        eoleol_index = data.find(eoleol)
-        if eoleol_index == -1:
-            # No possibility of a full message yet.
-            log.debug("Data not a full SIP message.")
-            return 0
+        if fromAddr not in scksByFrom:
+            if not create:
+                log.debug("No socket to %r from %r", toAddr, fromAddr)
+                return None
+            log.debug("New socket to %r from %r", toAddr, fromAddr)
+            sck = SIPSocket(sockType, toAddr, fromAddr)
+            scksByFrom[fromAddr] = sck
 
-        # We've got a full message, so parse it.
-        newmessage = message.Message.Parse(data)
-        message_end = eoleol_index + len(eoleol)
+        sck = scksByFrom[fromAddr]
+        log.debug("Existing socket to %r from %r", toAddr, fromAddr)
+        return sck
 
-        self.messages.append(newmessage)
-        if self.messageConsumer is not None:
-            self.messageConsumer(newmessage)
+    def _sptr_anySocketTo(self, sockType, toAddr, create):
+        scksByFrom = self._sptr_socketsTo(sockType, toAddr, create)
+        if scksByFrom is None:
+            return None
 
-        return message_end
+        for sck in itervalues(scksByFrom):
+            log.debug("Existing socket to %r", toAddr)
+            return sck
 
+        if not create:
+            log.debug("No active socket to %r", toAddr)
+            return None
 
-class SipListenTransport(transport.ListenTransport):
-    ConnectedTransportClass = SipTransport
+        log.debug("Create new socket to %r", toAddr)
+        sck = SIPSocket(sockType, toAddr)
+        fromAddr = sck.fromAddr
+        log.debug("Socket from address is %r", fromAddr)
+        scksByFrom[fromAddr] = sck
+        return sck
+
+    def _sptr_socketsTo(self, sockType, toAddr, create):
+        typeScksByTo = self._sptr_socksForType(sockType)
+        if toAddr not in typeScksByTo:
+            if not create:
+                log.debug("No socket to %r", toAddr)
+                return None
+            log.debug("Create sockets to %r", toAddr)
+            scks = {}
+            typeScksByTo[toAddr] = scks
+            return scks
+
+        return typeScksByTo[toAddr]
+
+    def _sptr_socksForType(self, sockType=None):
+        if sockType is None:
+            sockType = self.DefaultType
+        scksByType = self._sptr_socketsByType
+        if sockType not in scksByType:
+            raise ValueError("Can't send to bad socket type %r" % sockType)
+
+        return scksByType[sockType]

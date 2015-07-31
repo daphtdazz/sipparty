@@ -6,22 +6,26 @@ import logging
 import socket
 
 lsck1 = socket.socket(type=socket.SOCK_DGRAM)
+lsck2 = socket.socket(type=socket.SOCK_DGRAM)
 asck2 = socket.socket(type=socket.SOCK_DGRAM)
 
-lsck1.bind(("127.0.0.1", 5060))
+sock1 = 5062
+sock2 = 5063
+sock3 = 5064
 
-asck2.connect(("127.0.0.1", 5060))
+lsck1.bind(("127.0.0.1", sock1))
 
-asck2.send("hello lsck1")
+lsck2.connect(("127.0.0.1", sock1))
 
-data, asck2_address = lsck1.recvfrom(1)
+lsck2.send("hello")
 
-print("%s from %r" % (data, asck2_address))
+print("lsck2 name: %r" % (lsck2.getsockname(),))
 
-asck1 = lsck1
-asck1.connect(asck2_address)
+sname = lsck2.getsockname()
+lsck2.shutdown(socket.SHUT_WR)
+lsck2.close()
+asck2.bind(sname)
 
-lsck1 = socket.socket(type=socket.SOCK_DGRAM)
-lsck1.bind(("127.0.0.1", 5060))
+data, addr = lsck1.recvfrom(4096)
 
-
+print("%r from %r" % (data, addr))

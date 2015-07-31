@@ -645,14 +645,30 @@ def WaitFor(condition, timeout_s, action_on_timeout=None, resolution=0.0001):
 class Singleton(object):
     """Classes inheriting from this will only have one instance."""
 
-    _St_SharedInstance = None
+    _St_SharedInstances = {}
 
     @classmethod
-    def __new__(cls, name):
+    def __new__(cls, *args, **kwargs):
+        if "name" in kwargs:
+            name = kwargs["name"]
+        else:
+            name = ""
+
         log.debug("New with class %r, name %r", cls, name)
-        if cls._St_SharedInstance is None:
-            cls._St_SharedInstance = super(type, cls).__new__(name)
-        return cls._St_SharedInstance
+        if name not in cls._St_SharedInstances:
+            cls._St_SharedInstances[name] = super(Singleton, cls).__new__(
+                *args, **kwargs)
+        return cls._St_SharedInstances[name]
+
+    singletonInited = DerivedProperty("_st_inited")
+    def __init__(self, *args, **kwargs):
+        if "_st_inited" in self.__dict__:
+            log.debug("Singleton already inited.")
+            return
+        self._st_inited = True
+
+        log.debug("Init Singleton")
+        super(Singleton, self).__init__(*args, **kwargs)
 
 
 class TestCaseREMixin(object):

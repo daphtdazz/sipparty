@@ -35,9 +35,26 @@ from sipparty.sip import transportmanager
 
 class TestTM(unittest.TestCase, object):
 
+    def setUp(self):
+        util.log.setLevel(logging.DEBUG)
+
     def testSingleton(self):
 
-        tm1 = transportmanager.ActiveTransportManager()
+        log.info("START TEST")
+        s1 = util.Singleton()
+        s2 = util.Singleton()
+        self.assertTrue(s1 is s2)
+
+        s3 = util.Singleton(name="name3")
+        self.assertFalse(s1 is s3)
+        s4 = util.Singleton(name="name3")
+        self.assertTrue(s3 is s4)
+
+        tm1 = transportmanager.ActiveTransportManager(name="atm1")
         self.assertTrue(tm1 is not None)
-        tm2 = transportmanager.ActiveTransportManager()
+        tm2 = transportmanager.ActiveTransportManager(name="atm1")
         self.assertTrue(tm1 is tm2)
+
+    def testBasicTM(self):
+
+        pass

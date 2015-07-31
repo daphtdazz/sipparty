@@ -176,7 +176,6 @@ class FSM(object):
                 try:
                     ns = transdef[TransitionKeys.NewState]
                 except KeyError:
-                    print("%r" % definition_dict)
                     raise KeyError(
                         "{cls.__name__!r} definition transition dictionary "
                         "for "

@@ -16,6 +16,7 @@ limitations under the License.
 """
 import util
 import vb
+import fsm
 from fsm import (FSM, FSMTimeout)
 import parse
 from parse import (Parser, ParsedProperty, ParseError)
@@ -23,5 +24,7 @@ import sdp
 
 import sip
 from sip.request import (Request,)
+from sip.transportmanager import (
+    ActiveTransportManager, ListenTransportManager)
 
 

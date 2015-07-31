@@ -310,4 +310,4 @@ class Dialog(fsm.FSM, vb.ValueBinder):
                 "Got an error attempting to connect to %r." % (
                     remoteAddress))
 
-siptransport.SIPMessageConsumer.register(Dialog)
+#siptransport.SIPMessageConsumer.register(Dialog)

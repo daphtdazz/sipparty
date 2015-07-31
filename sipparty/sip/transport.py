@@ -106,6 +106,8 @@ class Transport(FSM):
     DefaultType = socket.SOCK_STREAM
     DefaultFamily = socket.AF_INET
 
+    TransportManagerName = ""
+
     #
     # =================== INSTANCE INTERFACE ==================================
     #
@@ -256,100 +258,6 @@ class ActiveTransport(Transport):
         States.error: {}
     }
 
-    # Subclasses should override these so that a set of instances for their
-    # particular subclass is not mixed with the generic transport set.
-    ConnectedInstances = {}
-
-    @classmethod
-    def AddConnectedTransport(cls, tp):
-        rkey = (tp.remoteAddressHost, tp.remoteAddressPort)
-        log.debug("Adding Connected Transport to %r", rkey)
-        typ = tp.socketType
-        lkey = (tp.localAddressHost, tp.localAddressPort)
-        cis1 = cls.ConnectedInstances
-
-        for key1, key2, key3 in (rkey, typ, lkey), (rkey, lkey, typ):
-            if key1 not in cis1:
-                cis1[key1] = {}
-
-            cis2 = cis1[key1]
-
-            if key2 not in cis2:
-                cis2[key2] = {}
-
-            cis3 = cis2[key2]
-
-            if key3 in cis3:
-                raise KeyError(
-                    "Transport to %r is already taken, key %r." % (cis3[key3],
-                    key3))
-            cis3[key3] = tp
-
-    @classmethod
-    def GetConnectedTransport(cls, remote_addr, remote_port, local_addr=None,
-                              typ=None):
-        """Get a connected transport to the given address tuple.
-
-        :param string remote_addr: The address or hostname of the target we
-        want to get a connection to.
-        :param integer remote_port: The port of the target we want to get a
-        connection to.
-        """
-        assert typ is None, "typ not yet implemented"
-        assert local_addr is None, "local_addr not yet implemented"
-        key1 = (remote_addr, remote_port)
-        cis1 = cls.ConnectedInstances
-        log.debug("GetConnectedTransport to %r from all %r",
-            (remote_addr, remote_port), cis1)
-        if key1 in cis1:
-            cis2 = cis1[key1]
-            for cis3 in itervalues(cis2):
-                for tp in itervalues(cis3):
-
-                    log.debug("Got existing connected transport %r", tp)
-                    return tp
-
-        # No existing connected transport.
-        return None
-
-    @classmethod
-    def RemoveConnectedTransport(cls, tp):
-        rkey = (tp.remoteAddressHost, tp.remoteAddressPort)
-        log.debug("Adding Connected Transport to %r", rkey)
-        typ = tp.socketType
-        lkey = (tp.localAddressHost, tp.localAddressPort)
-        cis1 = cls.ConnectedInstances
-
-        for it, key1, key2, key3 in (1, rkey, typ, lkey), (2, rkey, lkey, typ):
-
-            def not_there():
-                raise KeyError(
-                    "No transport to %r from %r registered as connected." % (
-                        key1, key2 if it == 1 else key3))
-
-            if key1 not in cis1:
-                not_there()
-            cis2 = cis1[key1]
-
-            if key2 not in cis2:
-                not_there()
-
-            cis3 = cis2[key2]
-
-            if key3 not in cis3:
-                not_there()
-            del cis3[key3]
-
-            if len(cis3) == 0:
-                del cis2[key2]
-
-            if len(cis2) == 0:
-                del cis1[key1]
-
-    @classmethod
-    def NewWithConnectedSocket(cls, socket):
-        assert 0
-
     #
     # =================== INSTANCE INTERFACE =================================
     #
@@ -442,7 +350,8 @@ class ActiveTransport(Transport):
     def becomesConnected(self):
         "Called when the transport becomes connected"
         log.debug("Becomes connected to %r", self._atfsm_remoteAddress)
-        self.AddConnectedTransport(self)
+        atm = ActiveTransportManager(name=self.TransportManagerName)
+        atm.addConnectedTransport(self)
         if self.socketType == socket.SOCK_STREAM:
             log.debug("Add new FD source")
             self.addFDSource(self._tfsm_sck,

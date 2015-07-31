@@ -31,81 +31,27 @@ if __name__ == "__main__":
 else:
     log = logging.getLogger(__name__)
 
-from sipparty.sip import (components, message, siptransport, transform)
+import sipparty
+from sipparty.sip import siptransport
+SIPTransport = siptransport.SIPTransport
 
 
 class TestSIPTransport(unittest.TestCase):
 
-    def wait_for(self, func, timeout=2):
-        assert timeout > 0.05
-        now = timeit.default_timer()
-        until = now + timeout
-        while timeit.default_timer() < until:
-            if func():
-                break
-            time.sleep(0.01)
-        else:
-            self.assertTrue(0, "Timed out waiting for %r" % func)
+    def testSIPTransport(self):
 
-    def testConnectedTidyUp(self):
-        self.subTestBasicSIPTransport(1)
+        global rcvd_message
+        rcvd_message = None
+        def handler(message):
+            global rcvd_message
+            rcvd_message = message
 
-    def testBasicSIPTransport(self):
-        self.subTestBasicSIPTransport(0)
+        tp = SIPTransport()
+        tp.addToHandler(uri, handler)
+        laddr = tp.listen()
 
-    def subTestBasicSIPTransport(self, finish_point):
-        global t1
-        t1 = None
-        def AcceptConsumer(tp):
-            global t1
-            t1 = tp
-
-        S = siptransport.SipTransport.States
-        I = siptransport.SipTransport.Inputs
-
-        l1 = siptransport.SipListenTransport()
-        l1.acceptConsumer = AcceptConsumer
-        t2 = siptransport.SipTransport()
-
-        l1.listen()
-        log.debug("t1.localAddress: %r", l1.localAddress)
-
-        t2.hit(I.attemptConnect, l1.localAddress)
-
-        self.wait_for(lambda: t2.state == S.connected)
-        self.wait_for(lambda: t1 is not None)
-        self.wait_for(lambda: t1.state == S.connected)
-
-        if finish_point == 1:
-            return
-
-        inv = message.Message.invite()
-        inv.fromHeader.uri.aor = components.AOR(
-            "alice", "atlanta.com")
-        inv.toHeader.field.value.uri.aor = components.AOR("bob", "biloxi.com")
-        inv.contactHeader.field.value.uri.aor.username = "alice"
-        inv.contactHeader.field.value.uri.aor.host = t1.localAddressHost
-
-        t1.send(six.binary_type(inv))
-
-        self.wait_for(lambda: len(t2.messages) > 0)
-
-        rx = t2.messages.pop()
-        resp = message.Response(200)
-        log.debug("t1 state: %r, t2 state: %r.", t1.state, t2.state)
-        rx.applyTransform(resp, transform.default[rx.type][200])
-
-        t2.send(six.binary_type(resp))
-
-        self.wait_for(lambda: len(t1.messages) > 0)
-
-        resp = t1.messages.pop()
-        self.assertEquals(resp.startline.code, 200)
-
-        self.assertEqual(inv.fromHeader.field.parameters["tag"],
-                         resp.fromHeader.field.parameters["tag"])
-
-        t1.hit(I.disconnect)
+        tp.send("hello world", "127.0.0.1")
+        tp.sendMessage(message, address)
 
 if __name__ == "__main__":
     unittest.main()
