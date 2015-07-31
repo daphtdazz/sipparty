@@ -31,12 +31,21 @@ if __name__ == "__main__":
 else:
     log = logging.getLogger(__name__)
 
-import sipparty
-from sipparty.sip import siptransport
+from sipparty import util, sip
+from sipparty.fsm import retrythread, fsm
+from sipparty.sip import transport, siptransport, field
 SIPTransport = siptransport.SIPTransport
 
 
 class TestSIPTransport(unittest.TestCase):
+
+    def setUp(self):
+        self.transLL = siptransport.log.level
+        siptransport.log.setLevel(logging.DEBUG)
+        #retrythread.log.setLevel(logging.DEBUG)
+
+    def tearDown(self):
+        siptransport.log.setLevel(self.transLL)
 
     def testSIPTransport(self):
 
@@ -47,11 +56,20 @@ class TestSIPTransport(unittest.TestCase):
             rcvd_message = message
 
         tp = SIPTransport()
-        tp.addToHandler(uri, handler)
         laddr = tp.listen()
 
-        tp.send("hello world", "127.0.0.1")
-        tp.sendMessage(message, address)
+        msg = sip.Message.invite()
+        msg.ToHeader.field.value.uri.aor.username = "alice"
+        msg.ToHeader.field.value.uri.aor.host.host = "atlanta"
+        msg.FromHeader.field.value.uri.aor.username = "bob"
+        msg.FromHeader.field.value.uri.aor.host.host = "biloxi"
+        msg.ContactHeader.field.value.uri.aor.host.host = laddr[0]
+        msg.ContactHeader.field.value.uri.aor.host.port = laddr[1]
+
+        tp.addToHandler(msg, handler)
+        tp.sendMessage(msg, laddr)
+
+        util.WaitFor(lambda: rcvd_message is not None, 1)
 
 if __name__ == "__main__":
     unittest.main()

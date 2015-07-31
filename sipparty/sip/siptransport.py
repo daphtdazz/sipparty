@@ -17,121 +17,213 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import six
-import abc
 import logging
 import socket
+from socket import (SOCK_STREAM, SOCK_DGRAM, AF_INET, AF_INET6)
+SOCK_TYPES = (SOCK_STREAM, SOCK_DGRAM)
+SOCK_TYPES_NAMES = ("SOCK_STREAM", "SOCK_DGRAM")
+SOCK_FAMILIES = (AF_INET, AF_INET6)
 
-from sipparty import (util, vb)
-import prot
-import message
-import collections
+from sipparty.util import WeakMethod
+from sipparty import RetryThread, util
+import transport
+from transport import (GetBoundSocket,)
+#import prot
+#import message
+#import collections
 
 log = logging.getLogger(__name__)
+prot_log = logging.getLogger("messages")
+prot_log.setLevel(logging.INFO)
 bytes = six.binary_type
 itervalues = six.itervalues
 
 
-class SIPSocket(object):
+if False:
+    class DGramCachedSocket(object):
 
-    @property
-    def fromAddr(self):
-        return self._ssck_sock.getpeername()
+        def __init__(self):
+            super(DGramCachedSocket, self).__init__()
+            self._dcs_sck = sck
+            self._dcs_toAddresses = []
 
-    def __init__(self, sockType, toAddr, fromAddr=None):
+        def addToAddress(self, toAddr):
+            self._dcs_toAddresses.append(toAddr)
 
-        if isinstance(toAddr, bytes):
-            toAddr = (toAddr, 0)
+        def toAddresses(self):
+            for toAddr in self._dcs_toAddresses:
+                yield toAddr
 
-        addrinfos = socket.getaddrinfo(toAddr[0], toAddr[1], )
+        def sockname(self):
+            return self._dcs_sck.sockname()
 
-        sock = socket.socket(socket.AF_INET, sockType)
-
-        if fromAddr is not None:
-            log.debug("Bind socket to %r", fromAddr)
-            sock.bind(fromAddr)
-        self._ssck_sock = sock
 
 class SIPTransport(object):
 
-    DefaultType = socket.SOCK_DGRAM
+    #
+    # =================== CLASS INTERFACE =====================================
+    #
+    DefaultTransportType = SOCK_DGRAM
 
+    #
+    # =================== INSTANCE INTERFACE ==================================
+    #
+    byteConsumer = util.DerivedProperty("_sptr_byteConsumer")
     def __init__(self):
-        self._sptr_socketsByType = {
-            socket.SOCK_STREAM: {}, socket.SOCK_DGRAM: {}}
         super(SIPTransport, self).__init__()
+        self._sptr_byteConsumer = None
+        self._sptr_toHandlers = {}
+        self._sptr_runThread = RetryThread()
+        self._sptr_runThread.start()
 
-    def send(self, data, toAddr, fromAddr=None, sockType=None):
+        # Keyed by (lAddr, rAddr) independent of type.
+        self._sptr_connBuffers = {}
+        # Keyed by local address tuple.
+        self._sptr_dGramSocks = {}
+        # Keyed by toAddr, which is some hashable, so might be a proper tuple
+        # address or it might just be a hostname.
+
+        for fam in SOCK_FAMILIES:
+            self.addDgramSocket(socket.socket(fam, SOCK_DGRAM))
+
+    def addToHandler(self, uri, handler):
+        # TODO: rename this to addNewDialog handler, and split out SIP specific
+        # parts from transport parts.
+
+        hdlrs = self._sptr_toHandlers
+        if handler in hdlrs:
+            raise KeyError(
+                "To handler already registered for URI %r" % bytes(uri))
+
+        hdlrs[handler] = uri
+
+    def removeToHandler(self, uri):
+
+        hdlrs = self._sptr_toHandlers
+        if handler not in hdlrs:
+            raise KeyError(
+                "To handler not registered for URI %r" % bytes(uri))
+
+        del hdlrs[handler]
+
+    def sendMessage(self, msg, toAddr, sockType=None):
+        sockType = self.fixSockType(sockType)
+        if sockType == SOCK_DGRAM:
+            return self.sendDgramMessage(msg, toAddr)
+
+        return self.sendStreamMessage(msg, toAddr)
+
+    def sendDgramMessage(self, msg, toAddr):
+        mbytes = bytes(msg)
+
+        if False:
+            # First see if there's a cached socket we can use. If not, try the
+            # existing sockets in turn. Else create a new one by connecting,
+            # learning, and listening.
+            dgcscks = self._sptr_dGramCachedToSocks
+            log.debug("Cached sockets: %r", dgcscks)
+
+            if toAddr in dgcscks:
+                cachedSock = dgcscks[toAddr]
+                try:
+                    return self.sendDgramToCachedSock(cachedSock)
+                except socket.error as exc:
+                    log.warning(
+                        "Existing socket to %r from %r had error: %s", toAddr,
+                        cachedSock.sockname(), exc)
+                    self.uncacheDgramSock(cachedSock)
+
+        # No cached socket, try existing sockets in turn.
+        for sck in itervalues(self._sptr_dGramSocks):
+            try:
+                sck.sendto(mbytes, toAddr)
+                return
+            except socket.error as exc:
+                log.debug(
+                    "Could not sendto %r with family %d", toAddr, sck.family)
+        else:
+            raise exc
+
+    def addDgramSocket(self, sck):
+        self._sptr_dGramSocks[sck.getsockname()] = sck
+
+    def cacheDgramSock(self, toAddr, sck):
+        assert 0
+        sck.addToAddress(toAddr)
+        self._sptr_dGramCachedToSocks[toAddr] = sck
+
+    def uncacheDgramSock(self, cachedSock):
+        assert 0
+        dgcscks = self._sptr_dGramCachedToSocks
+        for toAddr in cachedSock.toAddresses:
+            del dgcscks[toAddr]
+
+    def listen(self, sockType=None, lHostName=None, port=None):
+        sockType = self.fixSockType(sockType)
+        if sockType not in SOCK_TYPES:
+            raise ValueError(
+                "Listen socket type must be one of %r" % (SOCK_TYPES_NAMES,))
+
+        if sockType == SOCK_DGRAM:
+            return self.listenDgram(lHostName, port)
+
+        return self.listenStream(lHostName, port)
+
+    #
+    # =================== MAGIC METHODS =======================================
+    #
+    def __del__(self):
+        log.debug("Deleting SIPTransport")
+        sp = super(SIPTransport, self)
+        if hasattr(sp, "__del__"):
+            sp.__del__()
+
+    #
+    # =================== Divider=======================================
+    #
+    def fixSockType(self, sockType):
         if sockType is None:
-            sockType = self.DefaultType
-        sck = self.socket(sockType, toAddr, fromAddr, create=True)
-        sck.send(data)
+            sockType = self.DefaultTransportType
+        return sockType
 
-    def socket(self, sockType, toAddr, fromAddr, create=False):
-        if fromAddr is not None:
-            log.debug(
-                "Get specific socket to %r from %r type %r", toAddr, fromAddr,
-                sockType)
-            return self._sptr_specificSocket(
-                sockType, toAddr, fromAddr, create)
+    def listenDgram(self, lAddrName, port):
+        sock = GetBoundSocket(None, SOCK_DGRAM, (lAddrName, port))
+        rt = self._sptr_runThread
+        rt.addInputFD(sock, WeakMethod(self, "dgramDataAvailable"))
+        self.addDgramSocket(sock)
+        return sock.getsockname()
 
-        log.debug("Get any socket to %r type %r", toAddr, sockType)
-        return self._sptr_anySocketTo(sockType, toAddr, create)
+    def dgramDataAvailable(self, sck):
+        data, address = sck.recvfrom(4096)
+        self.receivedData(sck.getsockname(), address, data)
 
-    def _sptr_specificSocket(self, sockType, toAddr, fromAddr, create):
-        scksByFrom = self._sptr_socketsTo(sockType, toAddr, create)
-        if scksByFrom is None:
-            return None
+    def receivedData(self, lAddr, rAddr, data):
+        if len(data) > 0:
+            prot_log.info(
+                " received %r -> %r\n<<<<<\n%s\n<<<<<", rAddr, lAddr, data)
+        connkey = (lAddr, rAddr)
+        bufs = self._sptr_connBuffers
+        if connkey not in bufs:
+            buf = bytearray()
+            bufs[connkey] = buf
+        else:
+            buf = bufs[connkey]
 
-        if fromAddr not in scksByFrom:
-            if not create:
-                log.debug("No socket to %r from %r", toAddr, fromAddr)
-                return None
-            log.debug("New socket to %r from %r", toAddr, fromAddr)
-            sck = SIPSocket(sockType, toAddr, fromAddr)
-            scksByFrom[fromAddr] = sck
+        buf.extend(data)
 
-        sck = scksByFrom[fromAddr]
-        log.debug("Existing socket to %r from %r", toAddr, fromAddr)
-        return sck
+        while len(buf) > 0:
+            len_used = self.processReceivedData(buf)
+            if len_used == 0:
+                log.debug("Consumer stopped consuming")
+                break
+            log.debug("Consumer consumed another %d bytes", len_used)
+            del buf[:len_used]
 
-    def _sptr_anySocketTo(self, sockType, toAddr, create):
-        scksByFrom = self._sptr_socketsTo(sockType, toAddr, create)
-        if scksByFrom is None:
-            return None
+    def processReceivedData(self, data):
 
-        for sck in itervalues(scksByFrom):
-            log.debug("Existing socket to %r", toAddr)
-            return sck
+        bc = self.byteConsumer
+        if bc is None:
+            log.debug("No consumer; dumping data: %r.", data)
+            return len(data)
 
-        if not create:
-            log.debug("No active socket to %r", toAddr)
-            return None
-
-        log.debug("Create new socket to %r", toAddr)
-        sck = SIPSocket(sockType, toAddr)
-        fromAddr = sck.fromAddr
-        log.debug("Socket from address is %r", fromAddr)
-        scksByFrom[fromAddr] = sck
-        return sck
-
-    def _sptr_socketsTo(self, sockType, toAddr, create):
-        typeScksByTo = self._sptr_socksForType(sockType)
-        if toAddr not in typeScksByTo:
-            if not create:
-                log.debug("No socket to %r", toAddr)
-                return None
-            log.debug("Create sockets to %r", toAddr)
-            scks = {}
-            typeScksByTo[toAddr] = scks
-            return scks
-
-        return typeScksByTo[toAddr]
-
-    def _sptr_socksForType(self, sockType=None):
-        if sockType is None:
-            sockType = self.DefaultType
-        scksByType = self._sptr_socketsByType
-        if sockType not in scksByType:
-            raise ValueError("Can't send to bad socket type %r" % sockType)
-
-        return scksByType[sockType]
+        data_consumed = bc(bytes(data))

@@ -17,7 +17,7 @@ limitations under the License.
 import util
 import vb
 import fsm
-from fsm import (FSM, FSMTimeout)
+from fsm import (FSM, FSMTimeout, RetryThread)
 import parse
 from parse import (Parser, ParsedProperty, ParseError)
 import sdp

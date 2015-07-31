@@ -54,6 +54,10 @@ def SockTypeName(socktype):
 
 def GetBoundSocket(family, socktype, address):
 
+    if family is None:
+        family = 0
+    if socktype is None:
+        socktype = 0
     assert family in (0, socket.AF_INET, socket.AF_INET6)
     assert socktype in (0, socket.SOCK_STREAM, socket.SOCK_DGRAM)
 
@@ -73,7 +77,7 @@ def GetBoundSocket(family, socktype, address):
 
     _family, _socktype, _proto, _canonname, address = addrinfos[0]
 
-    ssocket = socket.socket(family, socktype)
+    ssocket = socket.socket(_family, socktype)
 
     def port_generator():
         if address[1] != 0:
@@ -81,9 +85,8 @@ def GetBoundSocket(family, socktype, address):
             yield address[1]
             return
 
-        # Guess a port.
-        yield 5060  # Always try 5060 first.
-        for ii in range(15060, 0x10000):
+        # Guess a port from the unregistered range.
+        for ii in range(49152, 0x10000):
             yield ii
 
     for port in port_generator():
@@ -97,6 +100,7 @@ def GetBoundSocket(family, socktype, address):
             "Couldn't bind to address {address}.".format(
                 **locals()))
 
+    log.debug("Socket bound to %r type %r", ssocket.getsockname(), _family)
     return ssocket
 
 

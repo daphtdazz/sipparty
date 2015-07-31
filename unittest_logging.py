@@ -17,9 +17,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 log = logging.getLogger()
-log.debug("unittest logging")
 
 if __name__ == "__main__":
     import unittest
