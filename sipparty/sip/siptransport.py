@@ -58,8 +58,8 @@ if False:
             return self._dcs_sck.sockname()
 
 
-class SIPTransport(object):
-
+class Transport(object):
+    """Manages connection state and transport so You don't have to."""
     #
     # =================== CLASS INTERFACE =====================================
     #
@@ -68,18 +68,17 @@ class SIPTransport(object):
     #
     # =================== INSTANCE INTERFACE ==================================
     #
-    byteConsumer = util.DerivedProperty("_sptr_byteConsumer")
+    byteConsumer = util.DerivedProperty("_tp_byteConsumer")
     def __init__(self):
-        super(SIPTransport, self).__init__()
-        self._sptr_byteConsumer = None
-        self._sptr_toHandlers = {}
-        self._sptr_runThread = RetryThread()
-        self._sptr_runThread.start()
+        super(Transport, self).__init__()
+        self._tp_byteConsumer = None
+        self._tp_retryThread = RetryThread()
+        self._tp_retryThread.start()
 
         # Keyed by (lAddr, rAddr) independent of type.
-        self._sptr_connBuffers = {}
+        self._tp_connBuffers = {}
         # Keyed by local address tuple.
-        self._sptr_dGramSocks = {}
+        self._tp_dGramSockets = {}
         # Keyed by toAddr, which is some hashable, so might be a proper tuple
         # address or it might just be a hostname.
 
@@ -134,9 +133,12 @@ class SIPTransport(object):
                     self.uncacheDgramSock(cachedSock)
 
         # No cached socket, try existing sockets in turn.
-        for sck in itervalues(self._sptr_dGramSocks):
+        for sck in itervalues(self._tp_dGramSockets):
             try:
                 sck.sendto(mbytes, toAddr)
+                prot_log.info(
+                    "Sent %r -> %r\n>>>>>\n%s\n>>>>>", sck.getsockname(),
+                    toAddr, mbytes)
                 return
             except socket.error as exc:
                 log.debug(
@@ -145,18 +147,7 @@ class SIPTransport(object):
             raise exc
 
     def addDgramSocket(self, sck):
-        self._sptr_dGramSocks[sck.getsockname()] = sck
-
-    def cacheDgramSock(self, toAddr, sck):
-        assert 0
-        sck.addToAddress(toAddr)
-        self._sptr_dGramCachedToSocks[toAddr] = sck
-
-    def uncacheDgramSock(self, cachedSock):
-        assert 0
-        dgcscks = self._sptr_dGramCachedToSocks
-        for toAddr in cachedSock.toAddresses:
-            del dgcscks[toAddr]
+        self._tp_dGramSockets[sck.getsockname()] = sck
 
     def listen(self, sockType=None, lHostName=None, port=None):
         sockType = self.fixSockType(sockType)
@@ -173,13 +164,13 @@ class SIPTransport(object):
     # =================== MAGIC METHODS =======================================
     #
     def __del__(self):
-        log.debug("Deleting SIPTransport")
-        sp = super(SIPTransport, self)
+        log.debug("Deleting Transport")
+        sp = super(Transport, self)
         if hasattr(sp, "__del__"):
             sp.__del__()
 
     #
-    # =================== Divider=======================================
+    # =================== INTERNAL METHODS ====================================
     #
     def fixSockType(self, sockType):
         if sockType is None:
@@ -188,7 +179,7 @@ class SIPTransport(object):
 
     def listenDgram(self, lAddrName, port):
         sock = GetBoundSocket(None, SOCK_DGRAM, (lAddrName, port))
-        rt = self._sptr_runThread
+        rt = self._tp_retryThread
         rt.addInputFD(sock, WeakMethod(self, "dgramDataAvailable"))
         self.addDgramSocket(sock)
         return sock.getsockname()
@@ -202,7 +193,7 @@ class SIPTransport(object):
             prot_log.info(
                 " received %r -> %r\n<<<<<\n%s\n<<<<<", rAddr, lAddr, data)
         connkey = (lAddr, rAddr)
-        bufs = self._sptr_connBuffers
+        bufs = self._tp_connBuffers
         if connkey not in bufs:
             buf = bytearray()
             bufs[connkey] = buf
@@ -227,3 +218,50 @@ class SIPTransport(object):
             return len(data)
 
         data_consumed = bc(bytes(data))
+
+
+class SIPTransport(Transport):
+    """SIP specific subclass of Transport."""
+    #
+    # =================== INSTANCE INTERFACE ==================================
+    #
+    def __init__(self):
+        super(SIPTransport, self).__init__()
+        self._sptr_toHandlers = {}
+
+    def addToHandler(self, uri, handler):
+        # TODO: rename this to addNewDialog handler, and split out SIP specific
+        # parts from transport parts.
+
+        hdlrs = self._sptr_toHandlers
+        if handler in hdlrs:
+            raise KeyError(
+                "To handler already registered for URI %r" % bytes(uri))
+
+        hdlrs[handler] = uri
+
+    def removeToHandler(self, uri):
+
+        hdlrs = self._sptr_toHandlers
+        if handler not in hdlrs:
+            raise KeyError(
+                "To handler not registered for URI %r" % bytes(uri))
+
+        del hdlrs[handler]
+
+    def sendMessage(self, msg, toAddr, sockType=None):
+        super(SIPTransport, self).sendMessage(
+            bytes(msg), toAddr, sockType=sockType)
+
+    #
+    # =================== MAGIC METHODS =======================================
+    #
+    def __del__(self):
+        log.debug("Deleting SIPTransport")
+        sp = super(SIPTransport, self)
+        if hasattr(sp, "__del__"):
+            sp.__del__()
+
+    #
+    # =================== INTERNAL METHODS ====================================
+    #
