@@ -26,5 +26,3 @@ import sip
 from sip.request import (Request,)
 from sip.transportmanager import (
     ActiveTransportManager, ListenTransportManager)
-
-

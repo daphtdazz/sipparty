@@ -22,13 +22,14 @@ limitations under the License.
 import six
 
 import prot
-from sipparty import (util, vb, Parser, ParsedProperty)
+from sipparty import (vb, Parser, ParsedProperty)
+from sipparty.util import TwoCompatibleThree, TupleRepresentable
 
 bytes = six.binary_type
 
 
-@util.TwoCompatibleThree
-class Host(Parser, vb.ValueBinder):
+@TwoCompatibleThree
+class Host(Parser, TupleRepresentable, vb.ValueBinder):
 
     parseinfo = {
         Parser.Pattern:
@@ -51,6 +52,9 @@ class Host(Parser, vb.ValueBinder):
         addrScopeID = 0
         return (addrHost, addrPort, addrFlowInfo, addrScopeID)
 
+    #
+    # =================== MAGIC METHODS =======================================
+    #
     def __bytes__(self):
 
         host = self.host
@@ -67,16 +71,12 @@ class Host(Parser, vb.ValueBinder):
 
         return b""
 
-    def __repr__(self):
-        return b"Host(host={host}, port={port})".format(**self.__dict__)
-
-    def __eq__(self, other):
-        return (
-            self.host == other.host and self.port == other.port)
+    def tupleRepr(self):
+        return (self.host, self.port)
 
 
-@util.TwoCompatibleThree
-class AOR(Parser, vb.ValueBinder):
+@TwoCompatibleThree
+class AOR(Parser, TupleRepresentable, vb.ValueBinder):
     """A AOR object."""
 
     parseinfo = {
@@ -98,6 +98,9 @@ class AOR(Parser, vb.ValueBinder):
             host = Host()
         self.host = host
 
+    #
+    # =================== MAGIC METHODS =======================================
+    #
     def __bytes__(self):
 
         host = self.host
@@ -110,19 +113,11 @@ class AOR(Parser, vb.ValueBinder):
 
         return bytes(host)
 
-    def __repr__(self):
-        return (
-            "{0.__class__.__name__}(username={0.username!r}, "
-            "host={0.host!r})"
-            "".format(self))
-
-    def __eq__(self, other):
-        return (
-            other.username == self.username and
-            other.host == self.host)
+    def tupleRepr(self):
+        return (self.username, self.host)
 
 
-@util.TwoCompatibleThree
+@TwoCompatibleThree
 class URI(Parser, vb.ValueBinder):
     """A URI object.
 
@@ -202,7 +197,7 @@ class URI(Parser, vb.ValueBinder):
             "".format(self))
 
 
-@util.TwoCompatibleThree
+@TwoCompatibleThree
 class DNameURI(Parser, vb.ValueBinder):
     """A display name plus a uri value object.
 

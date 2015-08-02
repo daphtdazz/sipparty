@@ -34,6 +34,7 @@ else:
 from sipparty import util, sip
 from sipparty.fsm import retrythread, fsm
 from sipparty.sip import transport, siptransport, field
+from sipparty.sip.components import AOR
 SIPTransport = siptransport.SIPTransport
 
 
@@ -42,7 +43,6 @@ class TestSIPTransport(unittest.TestCase):
     def setUp(self):
         self.transLL = siptransport.log.level
         siptransport.log.setLevel(logging.DEBUG)
-        #retrythread.log.setLevel(logging.DEBUG)
 
     def tearDown(self):
         siptransport.log.setLevel(self.transLL)
@@ -51,22 +51,24 @@ class TestSIPTransport(unittest.TestCase):
 
         global rcvd_message
         rcvd_message = None
-        def handler(message):
+
+        def newDialogHandler(message):
             global rcvd_message
             rcvd_message = message
+            log.debug("NewDialogHandler consumed the message.")
 
         tp = SIPTransport()
         laddr = tp.listen()
 
+        aliceAOR = AOR("alice", "atlanta.com")
+        bobAOR = AOR("bob", "biloxi.com")
         msg = sip.Message.invite()
-        msg.ToHeader.field.value.uri.aor.username = "alice"
-        msg.ToHeader.field.value.uri.aor.host.host = "atlanta"
-        msg.FromHeader.field.value.uri.aor.username = "bob"
-        msg.FromHeader.field.value.uri.aor.host.host = "biloxi"
+        msg.ToHeader.field.value.uri.aor = aliceAOR
+        msg.FromHeader.field.value.uri.aor = bobAOR
         msg.ContactHeader.field.value.uri.aor.host.host = laddr[0]
         msg.ContactHeader.field.value.uri.aor.host.port = laddr[1]
 
-        tp.addToHandler(msg, handler)
+        tp.addDialogHandlerForAOR(newDialogHandler, aliceAOR)
         tp.sendMessage(msg, laddr)
 
         util.WaitFor(lambda: rcvd_message is not None, 1)

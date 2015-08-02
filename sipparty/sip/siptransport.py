@@ -19,18 +19,13 @@ limitations under the License.
 import six
 import logging
 import socket
-from socket import (SOCK_STREAM, SOCK_DGRAM, AF_INET, AF_INET6)
-SOCK_TYPES = (SOCK_STREAM, SOCK_DGRAM)
-SOCK_TYPES_NAMES = ("SOCK_STREAM", "SOCK_DGRAM")
-SOCK_FAMILIES = (AF_INET, AF_INET6)
+from weakref import WeakValueDictionary
 
-from sipparty.util import WeakMethod
-from sipparty import RetryThread, util
-import transport
-from transport import (GetBoundSocket,)
-#import prot
-#import message
-#import collections
+from sipparty.util import DerivedProperty
+from sipparty.parse import ParseError
+from sipparty.sip import Message
+from transport import Transport
+import prot
 
 log = logging.getLogger(__name__)
 prot_log = logging.getLogger("messages")
@@ -39,225 +34,104 @@ bytes = six.binary_type
 itervalues = six.itervalues
 
 
-if False:
-    class DGramCachedSocket(object):
-
-        def __init__(self):
-            super(DGramCachedSocket, self).__init__()
-            self._dcs_sck = sck
-            self._dcs_toAddresses = []
-
-        def addToAddress(self, toAddr):
-            self._dcs_toAddresses.append(toAddr)
-
-        def toAddresses(self):
-            for toAddr in self._dcs_toAddresses:
-                yield toAddr
-
-        def sockname(self):
-            return self._dcs_sck.sockname()
-
-
-class Transport(object):
-    """Manages connection state and transport so You don't have to."""
-    #
-    # =================== CLASS INTERFACE =====================================
-    #
-    DefaultTransportType = SOCK_DGRAM
-
-    @classmethod
-    def FormatBytesForLogging(cls, mbytes):
-        return "\\n\n".join(
-            [repr(bs)[1:-1] for bs in mbytes.split("\n")]).rstrip("\n")
-
-    #
-    # =================== INSTANCE INTERFACE ==================================
-    #
-    byteConsumer = util.DerivedProperty("_tp_byteConsumer")
-    def __init__(self):
-        super(Transport, self).__init__()
-        self._tp_byteConsumer = None
-        self._tp_retryThread = RetryThread()
-        self._tp_retryThread.start()
-
-        # Keyed by (lAddr, rAddr) independent of type.
-        self._tp_connBuffers = {}
-        # Keyed by local address tuple.
-        self._tp_dGramSockets = {}
-        # Keyed by toAddr, which is some hashable, so might be a proper tuple
-        # address or it might just be a hostname.
-
-        for fam in SOCK_FAMILIES:
-            self.addDgramSocket(socket.socket(fam, SOCK_DGRAM))
-
-    def addToHandler(self, uri, handler):
-        # TODO: rename this to addNewDialog handler, and split out SIP specific
-        # parts from transport parts.
-
-        hdlrs = self._sptr_toHandlers
-        if handler in hdlrs:
-            raise KeyError(
-                "To handler already registered for URI %r" % bytes(uri))
-
-        hdlrs[handler] = uri
-
-    def removeToHandler(self, uri):
-
-        hdlrs = self._sptr_toHandlers
-        if handler not in hdlrs:
-            raise KeyError(
-                "To handler not registered for URI %r" % bytes(uri))
-
-        del hdlrs[handler]
-
-    def sendMessage(self, msg, toAddr, sockType=None):
-        sockType = self.fixSockType(sockType)
-        if sockType == SOCK_DGRAM:
-            return self.sendDgramMessage(msg, toAddr)
-
-        return self.sendStreamMessage(msg, toAddr)
-
-    def sendDgramMessage(self, msg, toAddr):
-        mbytes = bytes(msg)
-
-        if False:
-            # First see if there's a cached socket we can use. If not, try the
-            # existing sockets in turn. Else create a new one by connecting,
-            # learning, and listening.
-            dgcscks = self._sptr_dGramCachedToSocks
-            log.debug("Cached sockets: %r", dgcscks)
-
-            if toAddr in dgcscks:
-                cachedSock = dgcscks[toAddr]
-                try:
-                    return self.sendDgramToCachedSock(cachedSock)
-                except socket.error as exc:
-                    log.warning(
-                        "Existing socket to %r from %r had error: %s", toAddr,
-                        cachedSock.sockname(), exc)
-                    self.uncacheDgramSock(cachedSock)
-
-        # No cached socket, try existing sockets in turn.
-        for sck in itervalues(self._tp_dGramSockets):
-            try:
-                sck.sendto(mbytes, toAddr)
-                prot_log.info(
-                    "Sent %r -> %r\n>>>>>\n%s\n>>>>>", sck.getsockname(),
-                    toAddr, self.FormatBytesForLogging(mbytes))
-                return
-            except socket.error as exc:
-                log.debug(
-                    "Could not sendto %r with family %d", toAddr, sck.family)
-        else:
-            raise exc
-
-    def addDgramSocket(self, sck):
-        self._tp_dGramSockets[sck.getsockname()] = sck
-
-    def listen(self, sockType=None, lHostName=None, port=None):
-        sockType = self.fixSockType(sockType)
-        if sockType not in SOCK_TYPES:
-            raise ValueError(
-                "Listen socket type must be one of %r" % (SOCK_TYPES_NAMES,))
-
-        if sockType == SOCK_DGRAM:
-            return self.listenDgram(lHostName, port)
-
-        return self.listenStream(lHostName, port)
-
-    #
-    # =================== MAGIC METHODS =======================================
-    #
-    def __del__(self):
-        log.debug("Deleting Transport")
-        sp = super(Transport, self)
-        if hasattr(sp, "__del__"):
-            sp.__del__()
-
-    #
-    # =================== INTERNAL METHODS ====================================
-    #
-    def fixSockType(self, sockType):
-        if sockType is None:
-            sockType = self.DefaultTransportType
-        return sockType
-
-    def listenDgram(self, lAddrName, port):
-        sock = GetBoundSocket(None, SOCK_DGRAM, (lAddrName, port))
-        rt = self._tp_retryThread
-        rt.addInputFD(sock, WeakMethod(self, "dgramDataAvailable"))
-        self.addDgramSocket(sock)
-        return sock.getsockname()
-
-    def dgramDataAvailable(self, sck):
-        data, address = sck.recvfrom(4096)
-        self.receivedData(sck.getsockname(), address, data)
-
-    def receivedData(self, lAddr, rAddr, data):
-        if len(data) > 0:
-            prot_log.info(
-                " received %r -> %r\n<<<<<\n%s\n<<<<<", rAddr, lAddr,
-                self.FormatBytesForLogging(data))
-        connkey = (lAddr, rAddr)
-        bufs = self._tp_connBuffers
-        if connkey not in bufs:
-            buf = bytearray()
-            bufs[connkey] = buf
-        else:
-            buf = bufs[connkey]
-
-        buf.extend(data)
-
-        while len(buf) > 0:
-            len_used = self.processReceivedData(buf)
-            if len_used == 0:
-                log.debug("Consumer stopped consuming")
-                break
-            log.debug("Consumer consumed another %d bytes", len_used)
-            del buf[:len_used]
-
-    def processReceivedData(self, data):
-
-        bc = self.byteConsumer
-        if bc is None:
-            log.debug("No consumer; dumping data: %r.", data)
-            return len(data)
-
-        data_consumed = bc(bytes(data))
-
-
 class SIPTransport(Transport):
     """SIP specific subclass of Transport."""
     #
     # =================== INSTANCE INTERFACE ==================================
     #
+    messageConsumer = DerivedProperty("_sptr_messageConsumer")
+
     def __init__(self):
         super(SIPTransport, self).__init__()
-        self._sptr_toHandlers = {}
+        self._sptr_messageConsumer = None
+        self._sptr_messages = []
+        # Dialog handler is keyed by AOR.
+        self._sptr_dialogHandlers = {}
+        self._sptr_dialogs = WeakValueDictionary()
 
-    def addToHandler(self, uri, handler):
-        # TODO: rename this to addNewDialog handler, and split out SIP specific
-        # parts from transport parts.
+        self.byteConsumer = self.sipByteConsumer
 
-        hdlrs = self._sptr_toHandlers
+    def addDialogHandlerForAOR(self, handler, aor):
+        """Register a handler to call """
+
+        hdlrs = self._sptr_dialogHandlers
         if handler in hdlrs:
             raise KeyError(
-                "To handler already registered for URI %r" % bytes(uri))
+                "Handler already registered for AOR %r" % bytes(aor))
 
-        hdlrs[handler] = uri
+        log.debug("Adding handler %r for AOR %r", handler, aor)
+        hdlrs[aor] = handler
 
-    def removeToHandler(self, uri):
+    def removeDialogHandlerForAOR(self, aor):
 
-        hdlrs = self._sptr_toHandlers
+        hdlrs = self._sptr_dialogHandlers
         if handler not in hdlrs:
             raise KeyError(
-                "To handler not registered for URI %r" % bytes(uri))
+                "AOR handler not registered for AOR %r" % bytes(aor))
 
-        del hdlrs[handler]
+        del hdlrs[aor]
 
     def sendMessage(self, msg, toAddr, sockType=None):
         super(SIPTransport, self).sendMessage(
             bytes(msg), toAddr, sockType=sockType)
+
+    def sipByteConsumer(self, data):
+        log.debug(
+            "SIPTransport attempting to consume %d bytes.", len(data))
+
+        # SIP messages always have \r\n\r\n after the headers and before any
+        # bodies.
+        eoleol = prot.EOL * 2
+
+        eoleol_index = data.find(eoleol)
+        if eoleol_index == -1:
+            # No possibility of a full message yet.
+            log.debug("Data not a full SIP message.")
+            return 0
+
+        # We're going to consume the whole message, one way or another.
+        mlen = eoleol_index + len(eoleol)
+        self.consumeMessageData(data[:mlen])
+        return mlen
+
+    def consumeMessageData(self, data):
+        # We've got a full message, so parse it.
+        log.debug("Full message")
+        try:
+            msg = Message.Parse(data)
+        except ParseError as pe:
+            return
+
+        self.consumeMessage(msg)
+
+    def consumeMessage(self, msg):
+        self._sptr_messages.append(msg)
+
+        if not hasattr(msg.FromHeader.parameters, "tag"):
+            log.debug("FromHeader: %r", msg.FromHeader)
+            log.info("Message with no from tag is discarded.")
+            return
+        if (
+                not hasattr(msg, "Call_IDHeader") or
+                len(msg.Call_IdHeader.field) == 0):
+            log.debug("Call-ID: %r", msg.Call_IDHeader)
+            log.info("Message with no Call-ID is discarded.")
+            return
+
+        if not hasattr(msg.ToHeader.parameters, "tag"):
+            self.consumeDialogCreatingMessage(msg)
+        else:
+            self.consumeInDialogMessage(msg)
+
+    def consumeDialogCreatingMessage(self, msg):
+        toAOR = msg.ToHeader.field.value.uri.aor
+        hdlrs = self._sptr_dialogHandlers
+
+        if toAOR not in hdlrs:
+            log.info("Message for unregistered AOR %r discarded.", toAOR)
+            return
+
+        hdlrs[toAOR](msg)
 
     #
     # =================== MAGIC METHODS =======================================

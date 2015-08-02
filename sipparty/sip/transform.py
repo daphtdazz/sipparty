@@ -74,6 +74,7 @@ default = {
     }
 }
 
+
 def EntryForMessageType(entry_dict, mtype):
     """
     Attempts to look up the mtype in the dictionary, and return the entry. If
@@ -95,4 +96,3 @@ def EntryForMessageType(entry_dict, mtype):
         mtype = mtype / 100
 
     return entry_dict[mtype]
-

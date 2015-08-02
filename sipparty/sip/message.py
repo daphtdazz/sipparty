@@ -241,7 +241,9 @@ class Message(vb.ValueBinder):
                 for tp in copylist:
                     apply_copy_tuple(targetmsg, self, tp)
 
-            if transform.KeyActCopyFromRequest in tform and request is not None:
+            if (
+                    transform.KeyActCopyFromRequest in tform and
+                    request is not None):
                 orig_list = tform[transform.KeyActCopyFromRequest]
                 for item in orig_list:
                     apply_copy_tuple(targetmsg, request, tp)

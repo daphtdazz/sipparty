@@ -183,7 +183,6 @@ class Party(vb.ValueBinder):
 
         assert 0
 
-
     def waitUntilState(self, state, error_state=None, timeout=None):
         for check_state in (state, error_state):
             if check_state is not None and check_state not in self.States:

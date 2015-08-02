@@ -23,8 +23,14 @@ import time
 import collections
 import logging
 import select
+from socket import (SOCK_STREAM, SOCK_DGRAM, AF_INET, AF_INET6)
+SOCK_TYPES = (SOCK_STREAM, SOCK_DGRAM)
+SOCK_TYPES_NAMES = ("SOCK_STREAM", "SOCK_DGRAM")
+SOCK_FAMILIES = (AF_INET, AF_INET6)
+from numbers import Integral
 
-from sipparty import (util, fsm, FSM)
+from sipparty import (util, fsm, FSM, RetryThread)
+from sipparty.util import DerivedProperty, WeakMethod
 
 log = logging.getLogger(__name__)
 prot_log = logging.getLogger("messages")
@@ -104,638 +110,155 @@ def GetBoundSocket(family, socktype, address):
     return ssocket
 
 
-class Transport(FSM):
-    """Abstract superclass for the listen and active transport FSMs."""
+class Transport(object):
+    """Manages connection state and transport so You don't have to."""
+    #
+    # =================== CLASS INTERFACE =====================================
+    #
+    DefaultTransportType = SOCK_DGRAM
 
-    DefaultType = socket.SOCK_STREAM
-    DefaultFamily = socket.AF_INET
-
-    TransportManagerName = ""
+    @classmethod
+    def FormatBytesForLogging(cls, mbytes):
+        return "\\n\n".join(
+            [repr(bs)[1:-1] for bs in mbytes.split("\n")]).rstrip("\n")
 
     #
     # =================== INSTANCE INTERFACE ==================================
     #
-    family = util.DerivedProperty(
-        "_tfsm_family", lambda val: val in (socket.AF_INET, socket.AF_INET6))
-    socketType = util.DerivedProperty(
-        "_tfsm_socketType",
-        lambda val: val in (socket.SOCK_STREAM, socket.SOCK_DGRAM))
+    byteConsumer = DerivedProperty("_tp_byteConsumer")
 
-    localAddress = util.DerivedProperty("_tfsm_localAddress")
-    localAddressPort = util.DerivedProperty(
-        "_tfsm_localAddressPort",
-        lambda val: 0 <= val <= 0xffff)
-    localAddressHost = util.DerivedProperty("_tfsm_localAddressHost")
+    def __init__(self):
+        super(Transport, self).__init__()
+        self._tp_byteConsumer = None
+        self._tp_retryThread = RetryThread()
+        self._tp_retryThread.start()
 
-    def __init__(self, **kwargs):
+        # Keyed by (lAddr, rAddr) independent of type.
+        self._tp_connBuffers = {}
+        # Keyed by local address tuple.
+        self._tp_dGramSockets = {}
+        # Keyed by toAddr, which is some hashable, so might be a proper tuple
+        # address or it might just be a hostname.
 
-        for keydef_pair in (
-                ("socketType", self.DefaultType),
-                ("family", self.DefaultFamily),
-                ("localAddress", [None, 0, 0, 0])):
-            key = keydef_pair[0]
-            if key in kwargs:
-                self.__dict__["_tfsm_" + key] = kwargs[key]
-                del kwargs[key]
-            else:
-                self.__dict__["_tfsm_" + key] = keydef_pair[1]
+        for fam in SOCK_FAMILIES:
+            self.addDgramSocket(socket.socket(fam, SOCK_DGRAM))
 
-        assert ("asynchronous_timers" not in kwargs or
-                kwargs["asynchronous_timers"])
-        kwargs["asynchronous_timers"] = True
+    def sendMessage(self, msg, toAddr, sockType=None):
+        sockType = self.fixSockType(sockType)
+        if sockType == SOCK_DGRAM:
+            return self.sendDgramMessage(msg, toAddr)
 
-        super(Transport, self).__init__(**kwargs)
+        return self.sendStreamMessage(msg, toAddr)
 
-        self._tfsm_receiveSize = 4096
+    def sendDgramMessage(self, msg, toAddr):
+        mbytes = bytes(msg)
 
-    def transportError(self, msg="unknown error"):
-        "We've hit an error."
-        self._tfsm_errormsg = msg
-        if self._tfsm_sck is not None:
-            log.debug("Error: close listen socket")
-            self._tfsm_sck.close()
-            self._tfsm_sck = None
+        if False:
+            # First see if there's a cached socket we can use. If not, try the
+            # existing sockets in turn. Else create a new one by connecting,
+            # learning, and listening.
+            dgcscks = self._sptr_dGramCachedToSocks
+            log.debug("Cached sockets: %r", dgcscks)
 
-        log.error(msg)
+            if toAddr in dgcscks:
+                cachedSock = dgcscks[toAddr]
+                try:
+                    return self.sendDgramToCachedSock(cachedSock)
+                except socket.error as exc:
+                    log.warning(
+                        "Existing socket to %r from %r had error: %s", toAddr,
+                        cachedSock.sockname(), exc)
+                    self.uncacheDgramSock(cachedSock)
+
+        # No cached socket, try existing sockets in turn.
+        for sck in itervalues(self._tp_dGramSockets):
+            try:
+                sck.sendto(mbytes, toAddr)
+                prot_log.info(
+                    "Sent %r -> %r\n>>>>>\n%s\n>>>>>", sck.getsockname(),
+                    toAddr, self.FormatBytesForLogging(mbytes))
+                return
+            except socket.error as exc:
+                log.debug(
+                    "Could not sendto %r with family %d", toAddr, sck.family)
+        else:
+            raise exc
+
+    def addDgramSocket(self, sck):
+        self._tp_dGramSockets[sck.getsockname()] = sck
+
+    def listen(self, sockType=None, lHostName=None, port=None):
+        sockType = self.fixSockType(sockType)
+        if sockType not in SOCK_TYPES:
+            raise ValueError(
+                "Listen socket type must be one of %r" % (SOCK_TYPES_NAMES,))
+
+        if sockType == SOCK_DGRAM:
+            return self.listenDgram(lHostName, port)
+
+        return self.listenStream(lHostName, port)
 
     #
-    # =================== MAGIC METHODS ======================================
+    # =================== MAGIC METHODS =======================================
     #
     def __del__(self):
-
-        self.hit(self.Inputs.close)
-
-        sck = self._tfsm_sck
-        try:
-            sck.shutdown(socket.SHUT_RDWR)
-        except socket.error:
-            pass
-
-        try:
-            sck.close()
-        except socket.error:
-            pass
-
+        log.debug("Deleting Transport")
         sp = super(Transport, self)
         if hasattr(sp, "__del__"):
-            try:
-                sp.__del__()
-            except NameError:
-                log.exception("NameError calling super.__del__.")
+            sp.__del__()
 
     #
     # =================== INTERNAL METHODS ====================================
     #
-    @property
-    def _tfsm_localAddress(self):
-        for sck in (self._tfsm_sck, self._tfsm_sck):
-            if sck is not None:
-                return sck.getsockname()
+    def fixSockType(self, sockType):
+        if sockType is None:
+            sockType = self.DefaultTransportType
+        return sockType
 
-        la = self.__dict__["_tfsm_localAddress"]
-        return (tuple(la[:2]) if self._tfsm_family == socket.AF_INET else
-                tuple(la))
+    def listenDgram(self, lAddrName, port):
+        sock = GetBoundSocket(None, SOCK_DGRAM, (lAddrName, port))
+        rt = self._tp_retryThread
+        rt.addInputFD(sock, WeakMethod(self, "dgramDataAvailable"))
+        self.addDgramSocket(sock)
+        return sock.getsockname()
 
-    @property
-    def _tfsm_localAddressHost(self):
-        return self._tfsm_localAddress[0]
+    def dgramDataAvailable(self, sck):
+        data, address = sck.recvfrom(4096)
+        self.receivedData(sck.getsockname(), address, data)
 
-    @_tfsm_localAddressHost.setter
-    def _tfsm_localAddressHost(self, val):
-        self.__dict__["_tfsm_localAddress"][0] = val
-
-    @property
-    def _tfsm_localAddressPort(self):
-        return self._tfsm_localAddress[1]
-
-    @_tfsm_localAddressPort.setter
-    def _tfsm_localAddressPort(self, val):
-        self.__dict__["_tfsm_localAddress"][1] = val
-
-
-class ActiveTransport(Transport):
-    """Controls a socket connection.
-    """
-
-    #
-    # =================== CLASS INTERFACE ====================================
-    #
-    States = util.Enum(("connecting", "connected", "closed", "error"))
-    Inputs = util.Enum(
-        ("attemptConnect", "connectUp", "send", "close", "error"))
-    Actions = util.Enum(
-        ("createConnect", "attemptConnect", "becomesConnected",
-         "connectedSend", "becomesDisconnected", "transportError"))
-
-    FSMDefinitions = {
-        fsm.InitialStateKey: {
-            Inputs.attemptConnect: {
-                FSM.KeyNewState: States.connecting,
-                FSM.KeyAction: Actions.createConnect
-            }
-        },
-        States.connecting: {
-            Inputs.error: {
-                FSM.KeyNewState: States.error,
-                FSM.KeyAction: Actions.transportError
-            },
-            Inputs.connectUp: {
-                FSM.KeyNewState: States.connected,
-                FSM.KeyAction: Actions.becomesConnected
-            }
-        },
-        States.connected: {
-            Inputs.send: {
-                FSM.KeyNewState: States.connected,
-                FSM.KeyAction: Actions.connectedSend
-            },
-            Inputs.close: {
-                FSM.KeyNewState: States.closed,
-                FSM.KeyAction: Actions.becomesDisconnected
-            },
-            Inputs.error: {
-                FSM.KeyNewState: States.error,
-                FSM.KeyAction: Actions.transportError
-            }
-        },
-        States.closed: {},
-        States.error: {}
-    }
-
-    #
-    # =================== INSTANCE INTERFACE =================================
-    #
-    byteConsumer = util.DerivedProperty(
-        "_atfsm_byteConsumer",
-        lambda val: isinstance(val, collections.Callable))
-    remoteAddress = util.DerivedProperty("_atfsm_remoteAddress")
-    remoteAddressHost = util.DerivedProperty("_atfsm_remoteAddressHost")
-    remoteAddressPort = util.DerivedProperty("_atfsm_remoteAddressPort")
-
-    def __init__(self, **kwargs):
-
-        for keydef_pair in (
-                ("remoteAddress", None),
-                ("byteConsumer", None)):
-            key = keydef_pair[0]
-            if key in kwargs:
-                self.__dict__["_atfsm_" + key] = kwargs[key]
-                del kwargs[key]
-            else:
-                self.__dict__["_atfsm_" + key] = keydef_pair[1]
-
-        super(ActiveTransport, self).__init__(**kwargs)
-
-        self._tfsm_timeout = 2
-        self._tfsm_sck = None
-        self._tfsm_buffer = bytearray()
-
-    def connect(self, *args, **kwargs):
-        self.hit(self.Inputs.attemptConnect, *args, **kwargs)
-        self.waitForStateCondition(
-            lambda state: state in (
-                ActiveTransport.States.error,
-                ActiveTransport.States.connecting,
-                ActiveTransport.States.connected))
-
-    def send(self, data):
-        self.hit(self.Inputs.send, data)
-
-    def close(self):
-        self.hit(self.Inputs.close)
-        self.waitForStateCondition(
-            lambda state: state in (
-                ActiveTransport.States.error,
-                ActiveTransport.States.closed))
-
-    #
-    # =================== ACTIONS ============================================
-    #
-    # These actions are expected to be done synchronously on the main FSM
-    # thread, therefore they should not block. Blocking function should be
-    # done in the THREADS methods below.
-    #
-    # They should not be called directly; all interaction with the FSM should
-    # be via one of the PUBLIC methods, and in particular the hit() method.
-    #
-    def createConnect(self, addr_tuple):
-
-        log.info("Create connect to %r.", addr_tuple)
-
-        fam = self.family
-        typ = self.socketType
-        adr = self._tfsm_localAddress
-        prt = self._tfsm_localAddressPort
-
-        explen = 2 if fam == socket.AF_INET else 4
-
-        if len(addr_tuple) < explen:
-            self.hit(self.Inputs.error, "Bad address %r for %r socket." %
-                     (addr_tuple, SockFamilyName(fam)))
-            return
-        addr_tuple = addr_tuple[:2]
-
-        try:
-            self._tfsm_sck = GetBoundSocket(fam, typ, adr)
-        # Need to add proper exception handling for socket errors here.
-        except Exception as exc:
-            log.error(
-                "Exception hit getting bound socket for connection: %s", exc)
-            self.hit(self.Inputs.error)
-
-        self._atfsm_remoteAddress = addr_tuple
-
-        if self.socketType == socket.SOCK_STREAM:
-            self._tfsm_sck.connect(addr_tuple)
-
-        log.debug("Connected")
-        self.hit(ActiveTransport.Inputs.connectUp)
-
-    def becomesConnected(self):
-        "Called when the transport becomes connected"
-        log.debug("Becomes connected to %r", self._atfsm_remoteAddress)
-        atm = ActiveTransportManager(name=self.TransportManagerName)
-        atm.addConnectedTransport(self)
-        if self.socketType == socket.SOCK_STREAM:
-            log.debug("Add new FD source")
-            self.addFDSource(self._tfsm_sck,
-                             util.WeakMethod(self, "_atfsm_dataAvailable"))
-
-    def becomesDisconnected(self):
-        "Called when the transport goes down."
-        log.debug("Becomes disconnected from %r", self._atfsm_remoteAddress)
-        self.RemoveConnectedTransport(self)
-        if self.socketType == socket.SOCK_STREAM:
-            sck = self._tfsm_sck
-            self.rmFDSource(sck)
-            if sck is not None:
-                sck.close()
-        self._tfsm_sck = None
-
-    def connectedSend(self, data):
-        "Send some data."
-        datalen = len(data)
-        sck = self._tfsm_sck
-
-        try:
-            if self.socketType == socket.SOCK_STREAM:
-                sent_bytes = sck.send(data)
-            else:
-                sent_bytes = sck.sendto(data, self.remoteAddress)
-            prot_log.info("send\n>>>>>\n%s\n>>>>>", data)
-        except socket.error:
-            log.error("Exception sending bytes to %r", sck.getsockname())
-            raise
-
-        if sent_bytes != datalen:
-            self.error("Failed to send %d bytes of data." %
-                       (datalen - sent_bytes))
-
-    #
-    # =================== THREADS ============================================
-    #
-    def attemptConnect(self):
-        "Attempt to connect out."
-        log.debug("Attempt to connect to %r.", self._atfsm_remoteAddress)
-        sck = self._tfsm_sck
-        if sck is None:
-            log.debug("Create socket failed, so nothing to do.")
-            return
-
-        family = self.family
-        sck_type = self.socketType
-        address = self._tfsm_localAddress
-        remote_address = self._atfsm_remoteAddress
-
-        try:
-            self._tfsm_sck.connect(self._atfsm_remoteAddress)
-        except Exception as exc:
-            self.hit(
-                self.Inputs.error,
-                "Exception connecting to %r: %r." %
-                (self._atfsm_remoteAddress, exc))
-            return
-
-        log.debug("Attempt connect done.")
-        self.hit(self.Inputs.connected)
-
-    #
-    # =================== INTERNAL ===========================================
-    #
-    @property
-    def _atfsm_remoteAddressHost(self):
-        return self.remoteAddress[0]
-
-    @property
-    def _atfsm_remoteAddressPort(self):
-        return self.remoteAddress[1]
-
-    def _atfsm_dataAvailable(self, sck):
-        """This method is registered when connected with the FSM's thread to
-        be called when there is data available on the socket.
-        """
-        data = sck.recv(self._tfsm_receiveSize)
-        self._atfsm_receiveData(data)
-
-    def _atfsm_receiveData(self, data):
-        datalen = len(data)
-        if datalen > 0:
+    def receivedData(self, lAddr, rAddr, data):
+        if len(data) > 0:
             prot_log.info(
-                " received from %r\n<<<<<\n%s\n<<<<<", self.remoteAddress,
-                data)
+                " received %r -> %r\n<<<<<\n%s\n<<<<<", rAddr, lAddr,
+                self.FormatBytesForLogging(data))
+        connkey = (lAddr, rAddr)
+        bufs = self._tp_connBuffers
+        if connkey not in bufs:
+            buf = bytearray()
+            bufs[connkey] = buf
+        else:
+            buf = bufs[connkey]
 
-        self._tfsm_buffer.extend(data)
+        buf.extend(data)
+
+        while len(buf) > 0:
+            len_used = self.processReceivedData(buf)
+            if len_used == 0:
+                log.debug("Consumer stopped consuming")
+                break
+            log.debug("Consumer consumed another %d bytes", len_used)
+            del buf[:len_used]
+
+    def processReceivedData(self, data):
 
         bc = self.byteConsumer
         if bc is None:
-            log.debug("No consumer; dumping data: %r.", self._tfsm_buffer)
-            del self._tfsm_buffer[:]
+            log.debug("No consumer; dumping data: %r.", data)
+            return len(data)
 
-        else:
-            while len(self._tfsm_buffer) > 0:
-                data_consumed = bc(bytes(self._tfsm_buffer))
-                if data_consumed == 0:
-                    log.debug("Consumer has used as much as it can.")
-                    break
-                log.debug("Consumer consumed %d more data.", data_consumed)
-                del self._tfsm_buffer[:data_consumed]
-
-        if datalen == 0:
-            log.debug("Received 0 data: socket has demurely closed.")
-            self.hit(self.Inputs.close)
-
-
-class ListenTransport(Transport):
-    #
-    # =================== CLASS INTERFACE ====================================
-    #
-    States = util.Enum(
-        ("startListen",
-         "listening",
-         "closed",
-         "error"))
-    Inputs = util.Enum(
-        ("listen", "listenup", "accept", "close", "error"))
-    Actions = util.Enum(
-        ("createListen", "startListening", "accept", "becomesDisconnected",
-         "transportError"))
-    FSMDefinitions = {
-        fsm.InitialStateKey: {
-            Inputs.listen: {
-                FSM.KeyNewState: States.startListen,
-                FSM.KeyAction: Actions.createListen,
-            }
-        },
-        States.startListen: {
-            Inputs.listenup: {
-                FSM.KeyNewState: States.listening,
-                FSM.KeyStartThreads: (Actions.startListening,)
-            },
-            Inputs.error: {
-                FSM.KeyNewState: States.error,
-                FSM.KeyAction: Actions.transportError
-            }
-        },
-        States.listening: {
-            Inputs.accept: {
-                FSM.KeyNewState: States.listening,
-                FSM.KeyAction: Actions.accept
-            },
-            Inputs.error: {
-                FSM.KeyNewState: States.error,
-                FSM.KeyAction: Actions.transportError
-            }
-        },
-        States.closed: {},
-        States.error: {}
-    }
-
-    # Subclasses should override these so that a set of instances for their
-    # particular subclass is not mixed with the generic transport set.
-    ConnectedInstances = {}
-    ListeningInstances = {}
-
-    # This can be configured in instances to create different subclasses of
-    # ActiveTransport if desired.
-    ConnectedTransportClass = ActiveTransport
-
-    @classmethod
-    def AddListeningTransport(cls, tp):
-        lkey = (tp.localAddressHost, tp.localAddressPort)
-        lis = cls.ListeningInstances
-
-        if lkey in lis:
-            raise KeyError(
-                "Transport already listening on %r." % (lkey,))
-
-        lis[lkey] = tp
-
-    @classmethod
-    def GetListeningTransport(cls, addr, port):
-        """Get a Listening transport to the given address tuple.
-
-        :param bytes addr: Address (hostname, IPv6 / IPv4) on which to listen.
-        :param int port: port to listen on.
-        """
-        key = (addr, port)
-        lis = cls.ListeningInstances
-        if key in lis:
-            return lis[key]
-
-        # No existing Listening transport.
-        tp = cls()
-        tp.localAddressHost = addr
-        tp.localAddressPort = port
-        tp.listen()
-        AddListeningTransport(tp)
-        return tp
-
-    #
-    # =================== INSTANCE INTERFACE =================================
-    #
-    acceptConsumer = util.DerivedProperty("_ltfsm_acceptConsumer")
-    def __init__(self, **kwargs):
-
-        # The transport FSM is a root level independent FSM that schedules
-        # its own work on a background thread, and to do this it uses the
-        # asynchronous_timers feature of the FSM class.
-        assert ("asynchronous_timers" not in kwargs or
-                kwargs["asynchronous_timers"])
-        kwargs["asynchronous_timers"] = True
-
-        for keydef_pair in (
-                ("acceptConsumer", None),):
-            key = keydef_pair[0]
-            if key in kwargs:
-                self.__dict__["_ltfsm_" + key] = kwargs[key]
-                del kwargs[key]
-            else:
-                self.__dict__["_ltfsm_" + key] = keydef_pair[1]
-
-        super(ListenTransport, self).__init__(**kwargs)
-
-        self._atfsm_remoteAddress = None
-
-        self._tfsm_timeout = 2
-
-        self._tfsm_sck = None
-        self._tfsm_buffer = bytearray()
-        self._tfsm_byteConsumer = None
-
-        # BSD (Mac OS X anyway) seems not to propagate an error to an accept
-        # call on a socket if you close it from a different thread. So need
-        # to use non-blocking sockets so that the accept loop can keep
-        # checking whether the socket is still valid.
-        #
-        # This is also used for Datagram (UDP) sockets which use select to
-        # wait for connections.
-        self._tfsm_acceptSocketTimeout = 0.1
-
-    def listen(self, host=None, port=None):
-        if host is not None:
-            self.localAddressHost = host
-        if port is not None:
-            self.localAddressPort = port
-        self.hit(self.Inputs.listen)
-        self.waitForStateCondition(
-            lambda state: state != fsm.InitialStateKey)
-
-    def send(self, data):
-        self.hit(self.Inputs.send, data)
-
-    def close(self):
-        self.hit(self.Inputs.close)
-        self.waitForStateCondition(
-            lambda state: state != ListenTransport.States.listening)
-
-    #
-    # =================== ACTIONS ============================================
-    #
-    # These actions are expected to be done synchronously on the main FSM
-    # thread, therefore they should not block. Blocking function should be
-    # done in the THREADS methods below.
-    #
-    # They should not be called directly; all interaction with the FSM should
-    # be via one of the PUBLIC methods, and in particular the hit() method.
-    #
-    def createListen(self):
-        try:
-            self._tfsm_sck = GetBoundSocket(
-                self.family, self.socketType, self._tfsm_localAddress)
-        except Exception as exc:
-            log.exception("Exception getting passive socket.")
-            self.hit(self.Inputs.error,
-                     "Exception getting passive socket: %r." % exc)
-            return
-
-        # Listen if it's a stream.
-        if self._tfsm_sck.type == socket.SOCK_STREAM:
-            log.debug("Listening for connections.")
-            self._tfsm_sck.listen(0)
-
-        self._tfsm_sck.settimeout(self._tfsm_acceptSocketTimeout)
-        log.info(
-            "Passive socket created on %r.",
-            self._tfsm_sck.getsockname())
-
-        log.debug("passive listen address: %r", self.localAddress)
-        self.hit(self.Inputs.listenup)
-
-    def becomesDisconnected(self):
-        "Called when the transport goes down."
-        sck = self._tfsm_sck
-        self.rmFDSource(sck)
-        if sck is not None:
-            sck.close()
-        self._tfsm_sck = None
-
-    #
-    # =================== THREADS ============================================
-    #
-    def startListening(self):
-
-        lsck = self._tfsm_sck
-
-        if lsck is None:
-            log.debug("Listen has been cancelled.")
-            return
-
-        # UDP socket.
-        if lsck.type == socket.SOCK_DGRAM:
-            log.debug("Datagram socket; wait for data on the socket.")
-
-            fd = lsck.fileno()
-            rsrcs, _, esrcs = select.select(
-                [fd], [], [fd], self._tfsm_acceptSocketTimeout)
-            if len(esrcs):
-                self.hit(self.Inputs.error,
-                         "Socket error on Datagram listen socket.")
-                return
-
-            if len(rsrcs) == 0:
-                log.debug("No datagram yet, go around.")
-                return 0
-
-            log.debug("Datagram! Fan out.")
-            self._ltfsm_distributeDatagramData(lsck)
-            return 0
-
-        # TCP socket.
-        log.debug("Stream sockets: try and accept.")
-
-        try:
-            conn, addr = lsck.accept()
-            self._ltfsm_handleNewActiveStreamSocket(conn, addr)
-            return 0
-        except socket.timeout:
-            # In this case we are going to try again straight away.
-            log.debug("Socket timeout")
-            return 0
-        except Exception as exc:
-            log.debug("Exception selecting listen socket", exc_info=True)
-            self.hit(self.Inputs.error,
-                     "Exception selecting listen socket %r." % exc)
-            return
-
-        log.debug("Start listening done.")
-
-    #
-    # =================== MAGIC METHODS ======================================
-    #
-
-    #
-    # =================== INTERNAL ===========================================
-    #
-    def _ltfsm_distributeDatagramData(self, lsck):
-        assert self.socketType == socket.SOCK_DGRAM
-        data, raddr = lsck.recvfrom(self._tfsm_receiveSize)
-        assert len(raddr) >= 2
-        ctc = self.ConnectedTransportClass
-        actp = ctc.GetConnectedTransport(raddr[0], raddr[1])
-        if actp is None:
-            actp = self._ltfsm_newActiveTransportWithSck(lsck, raddr)
-            self._ltfsm_distributeNewActTransport(actp)
-
-        actp._atfsm_receiveData(data)
-
-    def _ltfsm_handleNewActiveStreamSocket(self, asck, raddr):
-        assert self.socketType == socket.SOCK_STREAM
-        atp = self._ltfsm_newActiveTransportWithSck(asck, raddr)
-        self._ltfsm_distributeNewActTransport(atp)
-
-    def _ltfsm_newActiveTransportWithSck(self, sck, raddr):
-        ctc = self.ConnectedTransportClass
-        actp = ctc(
-            localAddress=self.localAddress, socketType=self.socketType,
-            family=self.family, remoteAddress=raddr)
-        actp._fsm_state = actp.States.connecting
-        actp._tfsm_sck = sck
-        actp.hit("connectUp")
-        return actp
-
-    def _ltfsm_distributeNewActTransport(self, atp):
-        ac = self.acceptConsumer
-        log.debug("distribute to acceptConsumer %r", ac)
-        if ac is not None:
-            ac(atp)
-
+        data_consumed = bc(bytes(data))
+        if not isinstance(data_consumed, Integral):
+            raise ValueError(
+                "byteConsumer returned %r: must return an integer." % (
+                    data_consumed,))
+        return data_consumed

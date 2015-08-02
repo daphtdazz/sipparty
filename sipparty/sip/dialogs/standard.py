@@ -17,21 +17,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 from ..dialog import (Dialog, Inputs, States)
-#from dialog import Dialog
 from sipparty import util, fsm
-#from sip import Dialog
-
-#tks = sip.scenario.TransitionKeys
-#isk = sip.scenario.InitialStateKey
-#NewState = sip.scenario.TransitionKeys.NewState
-#Action = sip.scenario.TransitionKeys.Action
 
 CallFSMDefn = {
     fsm.InitialStateKey: {
         Inputs.initiate: {
             fsm.TransitionKeys.NewState: States.InitiatingDialog,
             fsm.TransitionKeys.Action: "sendRequest"
-            #fsm.TransitionKeys.Action: "sendRequestINVITE"
         }
     },
     States.InitiatingDialog: {

@@ -23,13 +23,12 @@ import abc
 
 from sipparty import (vb, util, fsm)
 import header
-import param
-import siptransport
+from param import TagParam
 
 log = logging.getLogger(__name__)
 bytes = six.binary_type
 
-States =  util.Enum((
+States = util.Enum((
     fsm.InitialStateKey, "InitiatingDialog", "InDialog", "TerminatingDialog",
     "SuccessCompletion", "ErrorCompletion"))
 Inputs = util.Enum(("initiate", "terminate"))
@@ -68,7 +67,7 @@ class Dialog(fsm.FSM, vb.ValueBinder):
     request = util.FirstListItemProxy("requests")
     localTag = util.DerivedProperty("_dlg_localTag")
     remoteTag = util.DerivedProperty(
-        "_dlg_remoteTag", lambda x: isinstance(x, param.TagParam))
+        "_dlg_remoteTag", lambda x: isinstance(x, TagParam))
     callIDHeader = util.DerivedProperty(
         "_dlg_callIDHeader", lambda x: isinstance(x, header.Header.call_id))
 
@@ -89,7 +88,7 @@ class Dialog(fsm.FSM, vb.ValueBinder):
         super(Dialog, self).__init__()
         self._dlg_currentTransaction = None
         self._dlg_requests = []
-        self._dlg_localTag = param.TagParam()
+        self._dlg_localTag = TagParam()
         self._dlg_remoteTag = None
         if callIDHeader is None:
             callIDHeader = header.Header.call_id()
@@ -175,7 +174,7 @@ class Dialog(fsm.FSM, vb.ValueBinder):
         tp = self._pt_transport
 
         if self.myTag is None:
-            self.myTag = param.TagParam()
+            self.myTag = TagParam()
 
         if callee is not None:
             # Callee can be overridden with various different types of object.
@@ -244,7 +243,6 @@ class Dialog(fsm.FSM, vb.ValueBinder):
     #
     # =================== MAGIC METHODS =======================================
     #
-    sendRequestRE = re.compile("sendRequest", re.IGNORECASE)
     def __getattr__(self, attr):
 
         if Dialog.sendRequestRE.match(attr):
@@ -257,6 +255,7 @@ class Dialog(fsm.FSM, vb.ValueBinder):
             raise AttributeError(
                 "%r instance has no attribute %r." % (
                     self.__class__.__name__, attr))
+    sendRequestRE = re.compile("sendRequest", re.IGNORECASE)
 
     #
     # =================== INTERNAL METHODS ====================================
@@ -265,7 +264,7 @@ class Dialog(fsm.FSM, vb.ValueBinder):
         log.debug("Reply to %r with %r.", request.type, message_type)
 
         if self.myTag is None:
-            self.myTag = param.TagParam()
+            self.myTag = TagParam()
 
         if re.match("\d+$", message_type):
             message_type = int(message_type)
@@ -309,5 +308,3 @@ class Dialog(fsm.FSM, vb.ValueBinder):
             self._pt_stateError(
                 "Got an error attempting to connect to %r." % (
                     remoteAddress))
-
-#siptransport.SIPMessageConsumer.register(Dialog)

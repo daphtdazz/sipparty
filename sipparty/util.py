@@ -17,7 +17,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import six
-import collections
 import copy
 import threading
 import time
@@ -25,6 +24,8 @@ import timeit
 import logging
 import weakref
 import re
+from collections import Callable
+from abc import ABCMeta, abstractmethod
 
 import vb
 
@@ -530,7 +531,7 @@ class DerivedProperty(object):
         # Get might be a method name...
         if isinstance(gt, bytes) and hasattr(target, gt):
             meth = getattr(target, gt)
-            if not isinstance(meth, collections.Callable):
+            if not isinstance(meth, Callable):
                 raise ValueError(
                     "Getter attribute %r of %r object is not callable." % (
                         gt, target.__class__.__name__))
@@ -538,7 +539,7 @@ class DerivedProperty(object):
             return val
 
         # Else getter should be a callable.
-        if not isinstance(gt, collections.Callable):
+        if not isinstance(gt, Callable):
             raise ValueError(
                 "Getter %r object for DerivedValue on %r on %r object is not "
                 "a callable or a method name." % (
@@ -561,7 +562,7 @@ class DerivedProperty(object):
             setattr(obj, pname, value)
         elif isinstance(st, bytes) and hasattr(obj, st):
             meth = getattr(obj, st)
-            if not isinstance(meth, collections.Callable):
+            if not isinstance(meth, Callable):
                 raise ValueError(
                     "Setter attribute %r of %r object is not callable." % (
                         st, obj.__class__.__name__))
@@ -661,6 +662,7 @@ class Singleton(object):
         return cls._St_SharedInstances[name]
 
     singletonInited = DerivedProperty("_st_inited")
+
     def __init__(self, *args, **kwargs):
         if "_st_inited" in self.__dict__:
             log.debug("Singleton already inited.")
@@ -669,6 +671,32 @@ class Singleton(object):
 
         log.debug("Init Singleton")
         super(Singleton, self).__init__(*args, **kwargs)
+
+
+@six.add_metaclass(ABCMeta)
+class TupleRepresentable(object):
+    """Semi-abstract base class for objects that can be represented
+    by Tuples, providing equality and hash function."""
+
+    @abstractmethod
+    def tupleRepr(self):
+        raise AttributeError(
+            "%r needs to implement 'tupleRepr' itself to inherit from "
+            "TupleRepresentable" % (self.__class__.__name__,))
+
+    #
+    # =================== MAGIC METHODS =======================================
+    #
+    def __repr__(self):
+        return "%s%r" % (self.__class__.__name__, self.tupleRepr())
+
+    def __eq__(self, other):
+        if not isinstance(other, TupleRepresentable):
+            return False
+        return self.tupleRepr() == other.tupleRepr()
+
+    def __hash__(self):
+        return hash(self.tupleRepr())
 
 
 class TestCaseREMixin(object):
