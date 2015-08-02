@@ -65,6 +65,11 @@ class Transport(object):
     #
     DefaultTransportType = SOCK_DGRAM
 
+    @classmethod
+    def FormatBytesForLogging(cls, mbytes):
+        return "\\n\n".join(
+            [repr(bs)[1:-1] for bs in mbytes.split("\n")]).rstrip("\n")
+
     #
     # =================== INSTANCE INTERFACE ==================================
     #
@@ -138,7 +143,7 @@ class Transport(object):
                 sck.sendto(mbytes, toAddr)
                 prot_log.info(
                     "Sent %r -> %r\n>>>>>\n%s\n>>>>>", sck.getsockname(),
-                    toAddr, mbytes)
+                    toAddr, self.FormatBytesForLogging(mbytes))
                 return
             except socket.error as exc:
                 log.debug(
@@ -191,7 +196,8 @@ class Transport(object):
     def receivedData(self, lAddr, rAddr, data):
         if len(data) > 0:
             prot_log.info(
-                " received %r -> %r\n<<<<<\n%s\n<<<<<", rAddr, lAddr, data)
+                " received %r -> %r\n<<<<<\n%s\n<<<<<", rAddr, lAddr,
+                self.FormatBytesForLogging(data))
         connkey = (lAddr, rAddr)
         bufs = self._tp_connBuffers
         if connkey not in bufs:
