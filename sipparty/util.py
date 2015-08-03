@@ -648,7 +648,6 @@ class Singleton(object):
 
     _St_SharedInstances = {}
 
-    @classmethod
     def __new__(cls, *args, **kwargs):
         if "name" in kwargs:
             name = kwargs["name"]
@@ -658,7 +657,7 @@ class Singleton(object):
         log.debug("New with class %r, name %r", cls, name)
         if name not in cls._St_SharedInstances:
             cls._St_SharedInstances[name] = super(Singleton, cls).__new__(
-                *args, **kwargs)
+                cls, *args, **kwargs)
         return cls._St_SharedInstances[name]
 
     singletonInited = DerivedProperty("_st_inited")

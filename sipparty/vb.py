@@ -388,7 +388,13 @@ class ValueBinder(object):
         }
 
         currparent = self.vb_parent
-        assert (currparent is None or parent is None or currparent is parent)
+        assert (currparent is None or
+                parent is None or
+                currparent is parent), (
+            "Attempt to bind %r instance with a %r instance parent different "
+            "from its current %r instance one." % (
+                self.__class__.__name__, parent.__class__.__name__,
+                currparent.__class__.__name__))
         if currparent is None:
             self.vb_parent = parent
 

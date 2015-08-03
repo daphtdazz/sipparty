@@ -21,6 +21,27 @@ Is equivalent to:
     a = A()
     a.bind("b.c", "e")
 
+The dictionaries which store binding information for properties of objects are called `_vb_forwardbindings` and `_vb_backwardbindings`. These have the following format:
+
+    {
+        <bound attribute>: {
+            <attribute path of attribute bound>: {
+                <path of attribute bound to>: { <properties of binding> }
+            }
+        }
+    }
+
+So some examples: 
+
+    self.bind('a.b.c', 'd.e.f')
+    self._vb_forwardbindings = {
+        'a': {
+            'b.c': {
+                'd.e.f': {}
+            }
+        }
+    }s
+
 ## Subclassing ##
 
 ### Required work. ###

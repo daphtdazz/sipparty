@@ -41,11 +41,14 @@ SIPTransport = siptransport.SIPTransport
 class TestSIPTransport(unittest.TestCase):
 
     def setUp(self):
-        self.transLL = siptransport.log.level
+        self.transLL = transport.log.level
+        transport.log.setLevel(logging.DEBUG)
+        self.sipTransLL = siptransport.log.level
         siptransport.log.setLevel(logging.DEBUG)
 
     def tearDown(self):
-        siptransport.log.setLevel(self.transLL)
+        transport.log.setLevel(self.transLL)
+        siptransport.log.setLevel(self.sipTransLL)
 
     def testSIPTransport(self):
 

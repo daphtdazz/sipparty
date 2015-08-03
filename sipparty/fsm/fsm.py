@@ -36,8 +36,7 @@ bytes = six.binary_type
 
 __all__ = [
     "FSMError", "UnexpectedInput", "FSMTimeout", "FSM", "FSMType",
-    "FSMClassInitializer",
-    "block_until_states", "InitialStateKey", "TransitionKeys"]
+    "FSMClassInitializer", "InitialStateKey", "TransitionKeys"]
 
 
 class FSMError(Exception):
@@ -50,42 +49,6 @@ class UnexpectedInput(FSMError):
 
 class FSMTimeout(FSMError):
     pass
-
-
-def block_until_states(states):
-    "Decorator factory to block waiting for an FSM transition."
-    log.debug("Create block until for %r.", states)
-
-    def buse_desc(method):
-        def block_until_states_wrapper(self, *args, **kwargs):
-            state_now = self.state
-            log.debug("Block after %r for %.2f secs until %r.",
-                      method.__name__, self._tfsm_timeout, states)
-            method(self, *args, **kwargs)
-
-            end_states = states
-            time_start = util.Clock()
-            time_now = time_start
-            while self.state not in end_states:
-                if time_now - time_start > self._tfsm_timeout:
-                    log.error(
-                        "Timeout (after %f seconds) waiting for states %r",
-                        self._tfsm_timeout, states)
-                    self.hit(self.States.error)
-                    new_end_states = (self.States.error,)
-                    if end_states == new_end_states:
-                        raise FSMError(
-                            "help failed to enter error state.")
-                    end_states = new_end_states
-                    time_start = time_now
-
-                time.sleep(0.00001)
-                time_now = util.Clock()
-
-            if self.state not in end_states:
-                raise FSMTimeout("Timeout reaching end state.")
-        return block_until_states_wrapper
-    return buse_desc
 
 InitialStateKey = "Initial"
 TransitionKeys = util.Enum((
@@ -154,6 +117,7 @@ class FSM(object):
     #
     # =================== CLASS INTERFACE ====================================
     #
+    InitialStateKey = InitialStateKey
     KeyNewState = TransitionKeys.NewState
     KeyAction = TransitionKeys.Action
     KeyStartTimers = TransitionKeys.StartTimers

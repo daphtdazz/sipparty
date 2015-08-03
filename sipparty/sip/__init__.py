@@ -17,11 +17,13 @@ limitations under the License.
 import prot
 import components
 import defaults
+from transport import Transport
 from request import (Request,)
 from header import (Header,)
 from message import (Message,)
 from mediasession import (Session,)
+from siptransport import SIPTransport
 from dialog import (Dialog,)
+import party
 from party import (Party, PartySubclass, NoConnection)
 import scenario
-import party

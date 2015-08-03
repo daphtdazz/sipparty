@@ -22,6 +22,7 @@ import logging
 import abc
 
 from sipparty import (vb, util, fsm)
+from sipparty.fsm import (FSM,)
 import header
 from param import TagParam
 
@@ -51,12 +52,10 @@ class Dialog(fsm.FSM, vb.ValueBinder):
     #
     # =================== CLASS INTERFACE =====================================
     #
-    request_bindings = [
-    ]
-
     vb_bindings = [
     ]
     vb_dependencies = [
+        ("transport", ["sendMessage"])
     ]
 
     #
@@ -70,6 +69,7 @@ class Dialog(fsm.FSM, vb.ValueBinder):
         "_dlg_remoteTag", lambda x: isinstance(x, TagParam))
     callIDHeader = util.DerivedProperty(
         "_dlg_callIDHeader", lambda x: isinstance(x, header.Header.call_id))
+    transport = util.DerivedProperty("_dlg_transport")
 
     @property
     def provisionalDialogID(self):
@@ -90,6 +90,7 @@ class Dialog(fsm.FSM, vb.ValueBinder):
         self._dlg_requests = []
         self._dlg_localTag = TagParam()
         self._dlg_remoteTag = None
+        self._dlg_transport = None
         if callIDHeader is None:
             callIDHeader = header.Header.call_id()
             if callIDHost is not None:
@@ -100,22 +101,12 @@ class Dialog(fsm.FSM, vb.ValueBinder):
 
         self.callIDHeader = callIDHeader
 
-        siptransport.SipTransport.RegisterMessageConsumer((
-            bytes(callIDHeader.field), bytes(self.localTag)), self)
-
     def initiate(self, *args, **kwargs):
+        log.debug("Initiating dialog...")
         self.hit(Inputs.initiate, *args, **kwargs)
 
     def terminate(self, *args, **kwargs):
         self.hit(Inputs.terminate, *args, **kwargs)
-
-    def getTransportForAddrPort(self, addr, port):
-
-        log.debug("  getTransportForHost %r:%r", addr, port)
-
-        tp = siptransport.SipTransport.GetConnectedTransport(
-            addr, port)
-        return tp
 
     def sendRequest(self, request):
         # TODO: write
@@ -123,24 +114,19 @@ class Dialog(fsm.FSM, vb.ValueBinder):
         # Transaction or not?
         #
         # Transform:
-
-        request.FromHeader.parameters["tag"] = self.localTag
+        request.FromHeader.parameters.tag = self.localTag
+        request.ToHeader.parameters.tag = self.remoteTag
         request.Call_IDHeader = self.callIDHeader
 
         log.debug("sendRequest %r", request)
 
         ht = request.ToHeader.field.uri.aor.host
-        tp = self.getTransportForAddrPort(ht.host, int(ht.port))
 
-        tp.waitForStateCondition(lambda st: st != tp.States.connecting)
-
-        request.ContactHeader.field.uri.aor.host.host = tp.localAddressHost
-        request.ContactHeader.field.uri.aor.host.port = tp.localAddressPort
-
-        tp.send(bytes(request))
+        self.transport.sendMessage(request, ht)
 
     def sendResponse(self, response):
-
+        request.FromHeader.parameters.tag = self.remoteTag
+        request.ToHeader.parameters.tag = self.localTag
         assert 0
 
     #

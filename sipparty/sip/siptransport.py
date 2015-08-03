@@ -25,6 +25,7 @@ from sipparty.util import DerivedProperty
 from sipparty.parse import ParseError
 from sipparty.sip import Message
 from transport import Transport
+from components import Host
 import prot
 
 log = logging.getLogger(__name__)
@@ -36,6 +37,17 @@ itervalues = six.itervalues
 
 class SIPTransport(Transport):
     """SIP specific subclass of Transport."""
+
+    #
+    # =================== CLASS INTERFACE =====================================
+    #
+    DefaultPort = 5060
+
+    def __new__(cls, *args, **kwargs):
+        if "name" not in kwargs:
+            kwargs["name"] = "SIP"
+        return super(SIPTransport, cls).__new__(cls, *args, **kwargs)
+
     #
     # =================== INSTANCE INTERFACE ==================================
     #
@@ -72,6 +84,13 @@ class SIPTransport(Transport):
         del hdlrs[aor]
 
     def sendMessage(self, msg, toAddr, sockType=None):
+
+        if isinstance(toAddr, Host):
+            toAddr = self.resolveHost(toAddr.host, toAddr.port)
+
+        if isinstance(toAddr, bytes):
+            toAddr = self.resolveHost(toAddr)
+
         super(SIPTransport, self).sendMessage(
             bytes(msg), toAddr, sockType=sockType)
 

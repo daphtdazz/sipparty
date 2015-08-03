@@ -29,8 +29,9 @@ SOCK_TYPES_NAMES = ("SOCK_STREAM", "SOCK_DGRAM")
 SOCK_FAMILIES = (AF_INET, AF_INET6)
 from numbers import Integral
 
-from sipparty import (util, fsm, FSM, RetryThread)
-from sipparty.util import DerivedProperty, WeakMethod
+from sipparty import (fsm, FSM, RetryThread)
+from sipparty.util import (
+    DerivedProperty, WeakMethod, Singleton, TwoCompatibleThree)
 
 log = logging.getLogger(__name__)
 prot_log = logging.getLogger("messages")
@@ -38,7 +39,21 @@ bytes = six.binary_type
 itervalues = six.itervalues
 
 
-class BadNetwork(Exception):
+class TransportException(Exception):
+    pass
+
+
+@TwoCompatibleThree
+class UnresolvableAddress(TransportException):
+
+    def __init__(self, address):
+        self.address = address
+
+    def __bytes__(self):
+        return "The address %r was not resolvable." % self.address
+
+
+class BadNetwork(TransportException):
     pass
 
 
@@ -110,12 +125,14 @@ def GetBoundSocket(family, socktype, address):
     return ssocket
 
 
-class Transport(object):
+class Transport(Singleton):
     """Manages connection state and transport so You don't have to."""
     #
     # =================== CLASS INTERFACE =====================================
     #
     DefaultTransportType = SOCK_DGRAM
+    DefaultPort = 0
+    DefaultFamily = AF_INET
 
     @classmethod
     def FormatBytesForLogging(cls, mbytes):
@@ -142,6 +159,26 @@ class Transport(object):
 
         for fam in SOCK_FAMILIES:
             self.addDgramSocket(socket.socket(fam, SOCK_DGRAM))
+
+    def resolveHost(self, host, port=None, family=None):
+        """Resolve a host.
+        :param bytes host: A host in `bytes` form that we want to resolve.
+        May be a domain name or an IP address.
+        :param integer,None port: A port we want to connect to on the host.
+        """
+        if port is None:
+            port = self.DefaultPort
+        if family is None:
+            family = self.DefaultFamily
+
+        ais = socket.getaddrinfo(host, port)
+        log.debug(
+            "Options for address %r:%r:%r are %r.", host, port, family, ais)
+        for ai in ais:
+            if ai[0] == family:
+                return ai[4]
+
+        raise(UnresolvableAddress(address=host))
 
     def sendMessage(self, msg, toAddr, sockType=None):
         sockType = self.fixSockType(sockType)

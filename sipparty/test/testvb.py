@@ -191,6 +191,8 @@ class TestVB(unittest.TestCase):
         ab.bind(".c", "c")
         a.c = 2
         self.assertEqual(ab.c, 2)
+        self.assertTrue(ab.vb_parent is a)
+        self.assertTrue(a.vb_parent is ab)
         ab.unbind(".c", "c")
         self.assertEqual(len(ab._vb_forwardbindings), 0)
         self.assertEqual(len(ab._vb_backwardbindings), 0)

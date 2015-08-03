@@ -26,6 +26,7 @@ import time
 import socket
 
 from sipparty import (util, vb, parse, fsm)
+from sipparty.sip import Transport, SIPTransport
 import transport
 import siptransport
 import prot
@@ -85,21 +86,18 @@ class Party(vb.ValueBinder):
     #
     # =================== CLASS INTERFACE ====================================
     #
-    vb_bindings = [
-        ("aor",
-         "_pt_outboundRequest.FromHeader.field.value.uri.aor"),
-        ("_pt_transport.localAddressHost",
-         "_pt_outboundRequest.ContactHeader.field.value.uri.aor.host"),
-        ("_pt_transport.localAddressPort",
-         "_pt_outboundRequest.ContactHeader.field.value.uri.aor.port"),
+    MessageBindings = [
+        ("..aor", "FromHeader.field.value.uri.aor"),
+        (".._pt_contactAddress", "ContactHeader.field.value.uri.aor.host.host",
+         lambda addrTuple: addrTuple[0] if addrTuple is not None else None),
+        (".._pt_contactAddress", "ContactHeader.field.value.uri.aor.host.port",
+         lambda addrTuple: addrTuple[1] if addrTuple is not None else None),
+    ]
+    _vb_bindings = [
         ("_pt_transport.socketType",
          "_pt_outboundRequest.ViaHeader.field.transport",
          lambda x: transport.SockTypeName(x)),
         ("calleeAOR", "_pt_outboundRequest.startline.uri.aor"),
-        ("myTag", "_pt_outboundRequest.FromHeader.field.parameters.tag"),
-        ("theirTag", "_pt_outboundRequest.ToHeader.field.parameters.tag"),
-        ("myTag", "_pt_outboundResponse.ToHeader.field.parameters.tag"),
-        ("theirTag", "_pt_outboundResponse.FromHeader.field.parameters.tag"),
     ]
     vb_dependencies = [
         ("scenario", ["state", "wait", "waitForStateCondition"]),
@@ -151,25 +149,34 @@ class Party(vb.ValueBinder):
         if aor is not None:
             self.aor = self._pt_resolveAORFromObject(aor)
 
+        self._pt_transport = SIPTransport()
+        self._pt_transport.DefaultTransportType = socketType
+        log.debug("transport sock type: %s", transport.SockTypeName(
+            self._pt_transport.DefaultTransportType))
+        self._pt_contactAddress = None
+
         return
 
         # Set up the transform.
         if not hasattr(self, "transform"):
             self.transform = transform.default
 
+    def listen(self):
+        self._pt_contactAddress = self._pt_transport.listen()
+        log.info(
+            "Party listening on %r", self._pt_contactAddress)
+
     def invite(self, target, proxy=None):
 
         if not hasattr(self, "aor"):
-            raise ValueError("Cannot build an")
+            raise AttributeError(
+                "Cannot build a request since we aren't configured with an "
+                "AOR!")
 
         aor = self._pt_resolveAORFromObject(target)
 
         if proxy is None:
             proxy = self._pt_resolveProxyHostFromTarget(target)
-
-        inviteMessage = Message.invite()
-        inviteMessage.FromHeader.field.uri.aor = self.aor
-        inviteMessage.ToHeader.field.uri.aor = aor
 
         invD = CallDialog()
         self._pt_configureDialog(invD)
@@ -179,9 +186,11 @@ class Party(vb.ValueBinder):
         assert pdid not in pdis
         pdis[pdid] = invD
 
-        invD.initiate(inviteMessage)
+        inviteMessage = Message.invite()
+        self._pt_configureRequest(inviteMessage)
+        inviteMessage.startline.uri.aor = aor
 
-        assert 0
+        invD.initiate(inviteMessage)
 
     def waitUntilState(self, state, error_state=None, timeout=None):
         for check_state in (state, error_state):
@@ -281,6 +290,13 @@ class Party(vb.ValueBinder):
         dialog.vb_parent = self
         dialog.bindBindings(self.dialog_bindings)
         dialog.callIDHeader.host = self.aor.host
+        dialog.transport = self._pt_transport
+
+    def _pt_configureRequest(self, req):
+        req.FromHeader.field.value.uri.aor = self.aor
+        contact_host = req.ContactHeader.field.value.uri.aor.host
+        contact_host.host = self._pt_contactAddress[0]
+        contact_host.port = self._pt_contactAddress[1]
 
     def _pt_resolveAORFromObject(self, target):
         if hasattr(target, "aor"):

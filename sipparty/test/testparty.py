@@ -33,8 +33,9 @@ else:
     log = logging.getLogger(__name__)
     log.setLevel(logging.INFO)
 
-from sipparty import (fsm, sip, util, sipscenarios)
-from sipparty.sip import components, transport
+from sipparty import (fsm, sip, util, sipscenarios, vb)
+from sipparty.sip import components, dialog, transport, siptransport, party
+from sipparty.sip.transport import Transport
 
 tks = sip.scenario.TransitionKeys
 
@@ -56,12 +57,20 @@ class TestParty(unittest.TestCase):
     def setUp(self):
         self._tp_sipPartyLogLevel = sip.party.log.level
         sip.party.log.setLevel(logging.DEBUG)
+        dialog.log.setLevel(logging.DEBUG)
         # fsm.fsm.log.setLevel(logging.DEBUG)
         # sip.message.log.setLevel(logging.DEBUG)
         # util.log.setLevel(logging.DEBUG)
+        # vb.log.setLevel(logging.DEBUG)
+        self.transLL = transport.log.level
+        transport.log.setLevel(logging.DEBUG)
+        self.sipTransLL = siptransport.log.level
+        siptransport.log.setLevel(logging.DEBUG)
 
     def tearDown(self):
         sip.party.log.setLevel(self._tp_sipPartyLogLevel)
+        transport.log.setLevel(self.transLL)
+        siptransport.log.setLevel(self.sipTransLL)
 
     def testIncompleteParty(self):
         sipclient = sipscenarios.SimpleParty()
@@ -78,10 +87,10 @@ class TestParty(unittest.TestCase):
         self.subTestBasicParty(socket.SOCK_DGRAM)
 
     def subTestBasicParty(self, socketType):
-
-        transport.Transport.DefaultType = socket.SOCK_DGRAM
-        p1 = sip.party.Party(aor="alice@127.0.0.4:5060")
-        p2 = sip.party.Party(aor="bob@127.0.0.4:5061")
+        p1 = sip.party.Party(aor="alice@127.0.0.4:5060", socketType=socketType)
+        p2 = sip.party.Party(aor="bob@127.0.0.4:5061", socketType=socketType)
+        p1.listen()
+        p2.listen()
         p1.invite(p2)
 
         return
