@@ -108,7 +108,7 @@ class Dialog(fsm.FSM, vb.ValueBinder):
     def terminate(self, *args, **kwargs):
         self.hit(Inputs.terminate, *args, **kwargs)
 
-    def sendRequest(self, request):
+    def sendRequest(self, request, toAddr):
         # TODO: write
         #
         # Transaction or not?
@@ -120,9 +120,7 @@ class Dialog(fsm.FSM, vb.ValueBinder):
 
         log.debug("sendRequest %r", request)
 
-        ht = request.ToHeader.field.uri.aor.host
-
-        self.transport.sendMessage(request, ht)
+        self.transport.sendMessage(request, toAddr)
 
     def sendResponse(self, response):
         request.FromHeader.parameters.tag = self.remoteTag

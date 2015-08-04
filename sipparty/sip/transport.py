@@ -53,8 +53,17 @@ class UnresolvableAddress(TransportException):
         return "The address %r was not resolvable." % self.address
 
 
+@TwoCompatibleThree
 class BadNetwork(TransportException):
-    pass
+
+    def __init__(self, msg, socketError):
+        super(BadNetwork, self).__init__(msg)
+        self.socketError = socketError
+
+    def __bytes__(self):
+        sp = super(BadNetwork, self)
+        sms = sp.__bytes__() if hasattr(sp, "__bytes__") else sp.__str__()
+        return "%s. Socket error: %s" % (sms, self.socketError)
 
 
 def SockFamilyName(family):
@@ -89,8 +98,9 @@ def GetBoundSocket(family, socktype, address):
     # family e.g. AF_INET / AF_INET6
     # socktype e.g. SOCK_STREAM
     # Just grab the first addr info if we haven't
-    log.debug("getaddrinfo addr:%r port:%r family:%r socktype:%r",
-              address[0], address[1], family, socktype)
+    log.debug("GetBoundSocket addr:%r port:%r family:%r socktype:%r",
+              address[0], address[1], family, SockTypeName(socktype))
+
     addrinfos = socket.getaddrinfo(address[0], address[1], family, socktype)
 
     if len(addrinfos) == 0:
@@ -110,16 +120,23 @@ def GetBoundSocket(family, socktype, address):
         for ii in range(49152, 0x10000):
             yield ii
 
+    socketError = None
     for port in port_generator():
         try:
+            # TODO: catch specific errors (e.g. address in use) to bail
+            # immediately rather than inefficiently try all ports.
             ssocket.bind(address)
             break
-        except socket.error:
+        except socket.error as socketError:
             pass
-    else:
+        except socket.gaierror as socketError:
+            break
+
+    if socketError is not None:
         raise BadNetwork(
-            "Couldn't bind to address {address}.".format(
-                **locals()))
+            "Couldn't bind to address {address}".format(
+                **locals()),
+            socketError)
 
     log.debug("Socket bound to %r type %r", ssocket.getsockname(), _family)
     return ssocket
@@ -189,6 +206,7 @@ class Transport(Singleton):
 
     def sendDgramMessage(self, msg, toAddr):
         mbytes = bytes(msg)
+        log.debug("Send to %r", toAddr)
 
         if False:
             # First see if there's a cached socket we can use. If not, try the
@@ -209,15 +227,20 @@ class Transport(Singleton):
 
         # No cached socket, try existing sockets in turn.
         for sck in itervalues(self._tp_dGramSockets):
+            sname = sck.getsockname()
             try:
+                if len(toAddr) != len(sname):
+                    log.debug("Different socket family type skipped.")
+                    continue
                 sck.sendto(mbytes, toAddr)
                 prot_log.info(
-                    "Sent %r -> %r\n>>>>>\n%s\n>>>>>", sck.getsockname(),
+                    "Sent %r -> %r\n>>>>>\n%s\n>>>>>", sname,
                     toAddr, self.FormatBytesForLogging(mbytes))
                 return
             except socket.error as exc:
                 log.debug(
-                    "Could not sendto %r with family %d", toAddr, sck.family)
+                    "Could not sendto %r from %r: %s", toAddr,
+                    sname, exc)
         else:
             raise exc
 

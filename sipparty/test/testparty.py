@@ -58,10 +58,11 @@ class TestParty(unittest.TestCase):
         self._tp_sipPartyLogLevel = sip.party.log.level
         sip.party.log.setLevel(logging.DEBUG)
         dialog.log.setLevel(logging.DEBUG)
-        # fsm.fsm.log.setLevel(logging.DEBUG)
+        fsm.fsm.log.setLevel(logging.DEBUG)
         # sip.message.log.setLevel(logging.DEBUG)
         # util.log.setLevel(logging.DEBUG)
         # vb.log.setLevel(logging.DEBUG)
+        fsm.retrythread.log.setLevel(logging.DEBUG)
         self.transLL = transport.log.level
         transport.log.setLevel(logging.DEBUG)
         self.sipTransLL = siptransport.log.level
@@ -87,8 +88,8 @@ class TestParty(unittest.TestCase):
         self.subTestBasicParty(socket.SOCK_DGRAM)
 
     def subTestBasicParty(self, socketType):
-        p1 = sip.party.Party(aor="alice@127.0.0.4:5060", socketType=socketType)
-        p2 = sip.party.Party(aor="bob@127.0.0.4:5061", socketType=socketType)
+        p1 = sip.party.Party(aor="alice@atlanta.com", socketType=socketType)
+        p2 = sip.party.Party(aor="bob@biloxi.com", socketType=socketType)
         p1.listen()
         p2.listen()
         p1.invite(p2)

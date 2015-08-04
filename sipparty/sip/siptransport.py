@@ -84,7 +84,7 @@ class SIPTransport(Transport):
         del hdlrs[aor]
 
     def sendMessage(self, msg, toAddr, sockType=None):
-
+        log.debug("Send message to %r type %s", toAddr, sockType)
         if isinstance(toAddr, Host):
             toAddr = self.resolveHost(toAddr.host, toAddr.port)
 

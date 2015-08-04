@@ -132,6 +132,14 @@ class Party(vb.ValueBinder):
     #
     aor = util.DerivedProperty("_pt_aor")
 
+    contactAddress = util.DerivedProperty("_pt_contactAddress")
+    contactAddressHost = util.DerivedProperty(
+        "_pt_contactAddress", get=lambda obj, underlying: underlying[0],
+        set=lambda obj, val: obj._pt_contactAddress.__setitem__(0, val))
+    contactAddressPort = util.DerivedProperty(
+        "_pt_contactAddress", get=lambda obj, underlying: underlying[1],
+        set=lambda obj, val: obj._pt_contactAddress.__setitem__(1, val))
+
     def __init__(
             self, aor=None, username=None, host=None, displayname=None,
             socketType=socket.SOCK_STREAM):
@@ -145,24 +153,37 @@ class Party(vb.ValueBinder):
         # Mapping of messages based on type.
         self._pt_requestMessages = {}
         self._pt_aor = None
+        self._pt_contactAddress = None
 
         if aor is not None:
             self.aor = self._pt_resolveAORFromObject(aor)
+
+        if False:
+            lAddr = self.aor.host.host
+            lPort = self.aor.host.port
+            self._pt_contactAddress = (lAddr, lPort)
+            log.debug(
+                "AOR: %r gave contact address %r", aor,
+                self._pt_contactAddress)
 
         self._pt_transport = SIPTransport()
         self._pt_transport.DefaultTransportType = socketType
         log.debug("transport sock type: %s", transport.SockTypeName(
             self._pt_transport.DefaultTransportType))
-        self._pt_contactAddress = None
 
         return
 
-        # Set up the transform.
-        if not hasattr(self, "transform"):
-            self.transform = transform.default
-
     def listen(self):
-        self._pt_contactAddress = self._pt_transport.listen()
+        if self._pt_contactAddress is not None:
+            cAddr = self._pt_contactAddress[0]
+            cPort = self._pt_contactAddress[1]
+        else:
+            cAddr = None
+            cPort = None
+
+        log.debug("Listen on host:%r, port:%r", cAddr, cPort)
+        self._pt_contactAddress = self._pt_transport.listen(
+            lHostName=cAddr, port=cPort)
         log.info(
             "Party listening on %r", self._pt_contactAddress)
 
@@ -190,7 +211,8 @@ class Party(vb.ValueBinder):
         self._pt_configureRequest(inviteMessage)
         inviteMessage.startline.uri.aor = aor
 
-        invD.initiate(inviteMessage)
+        log.debug("Initialize dialog to %r", proxy)
+        invD.initiate(inviteMessage, proxy)
 
     def waitUntilState(self, state, error_state=None, timeout=None):
         for check_state in (state, error_state):
@@ -314,6 +336,9 @@ class Party(vb.ValueBinder):
 
     def _pt_resolveProxyHostFromTarget(self, target):
         try:
+            if hasattr(target, "contactAddress"):
+                return target.contactAddress
+
             aor = self._pt_resolveAORFromObject(target)
             return aor.host
         except TypeError:
