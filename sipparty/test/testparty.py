@@ -33,7 +33,7 @@ else:
     log = logging.getLogger(__name__)
     log.setLevel(logging.INFO)
 
-from sipparty import (fsm, sip, util, sipscenarios, vb)
+from sipparty import (fsm, sip, util, vb)
 from sipparty.sip import components, dialog, transport, siptransport, party
 from sipparty.sip.transport import Transport
 
