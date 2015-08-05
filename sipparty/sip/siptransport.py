@@ -63,7 +63,7 @@ class SIPTransport(Transport):
 
         self.byteConsumer = self.sipByteConsumer
 
-    def addDialogHandlerForAOR(self, handler, aor):
+    def addDialogHandlerForAOR(self, aor, handler):
         """Register a handler to call """
 
         hdlrs = self._sptr_dialogHandlers
@@ -81,6 +81,7 @@ class SIPTransport(Transport):
             raise KeyError(
                 "AOR handler not registered for AOR %r" % bytes(aor))
 
+        log.debug("Remove handler for AOR %r", aor)
         del hdlrs[aor]
 
     def sendMessage(self, msg, toAddr, sockType=None):
@@ -118,7 +119,9 @@ class SIPTransport(Transport):
         log.debug("Full message")
         try:
             msg = Message.Parse(data)
+            log.info("Message parsed.")
         except ParseError as pe:
+            log.error("Parse errror %s parsing message.", pe)
             return
 
         self.consumeMessage(msg)
@@ -138,14 +141,17 @@ class SIPTransport(Transport):
             return
 
         if not hasattr(msg.ToHeader.parameters, "tag"):
+            log.debug("Dialog creating message")
             self.consumeDialogCreatingMessage(msg)
         else:
+            log.debug("In dialog message")
             self.consumeInDialogMessage(msg)
 
     def consumeDialogCreatingMessage(self, msg):
         toAOR = msg.ToHeader.field.value.uri.aor
         hdlrs = self._sptr_dialogHandlers
 
+        log.debug("Is %r in %r?", toAOR, hdlrs)
         if toAOR not in hdlrs:
             log.info("Message for unregistered AOR %r discarded.", toAOR)
             return

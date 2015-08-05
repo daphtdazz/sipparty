@@ -24,6 +24,8 @@ import abc
 from sipparty import (vb, util, fsm)
 from sipparty.fsm import (FSM,)
 import header
+from request import Request
+from message import Message
 from param import TagParam
 
 log = logging.getLogger(__name__)
@@ -32,7 +34,8 @@ bytes = six.binary_type
 States = util.Enum((
     fsm.InitialStateKey, "InitiatingDialog", "InDialog", "TerminatingDialog",
     "SuccessCompletion", "ErrorCompletion"))
-Inputs = util.Enum(("initiate", "terminate"))
+Inputs = util.Enum((
+    "initiate", "receiveRequest", "terminate"))
 
 
 class Dialog(fsm.FSM, vb.ValueBinder):
@@ -45,8 +48,10 @@ class Dialog(fsm.FSM, vb.ValueBinder):
     See https://tools.ietf.org/html/rfc3261#section-12 for the RFC description
     of dialogs. It says:
 
-        A dialog is identified at each UA with a dialog ID ... Call-ID ...
-        local tag ... remote tag.
+        A dialog is identified at each UA with a dialog ID [this is composed
+        of] Call-ID ... local tag ... remote tag.
+
+
     """
 
     #
@@ -108,29 +113,45 @@ class Dialog(fsm.FSM, vb.ValueBinder):
     def terminate(self, *args, **kwargs):
         self.hit(Inputs.terminate, *args, **kwargs)
 
-    def sendRequest(self, request, toAddr):
+    def receiveMessage(self, msg):
+        if msg.type in Request.types:
+            input = "receiveRequest" + msg.type.lower().capitalize()
+            return self.hit(input, msg)
+
+        return getattr(self, b"receiveResponse" + bytes(msg.type))(msg)
+
+    def sendRequest(self, type, toAddr):
         # TODO: write
         #
         # Transaction or not?
         #
         # Transform:
-        request.FromHeader.parameters.tag = self.localTag
-        request.ToHeader.parameters.tag = self.remoteTag
-        request.Call_IDHeader = self.callIDHeader
 
-        log.debug("sendRequest %r", request)
+        req = getattr(Message, type)()
+        req.startline.uri.aor = self.aor
+        req.FromHeader.field.value.uri.aor = self.aor
+        contact_host = req.ContactHeader.field.value.uri.aor.host
+        contact_host.host = self.contactAddress[0]
+        contact_host.port = self.contactAddress[1]
 
-        self.transport.sendMessage(request, toAddr)
+        req.FromHeader.parameters.tag = self.localTag
+        req.ToHeader.parameters.tag = self.remoteTag
+        req.Call_IDHeader = self.callIDHeader
 
-    def sendResponse(self, response):
-        request.FromHeader.parameters.tag = self.remoteTag
-        request.ToHeader.parameters.tag = self.localTag
+        log.debug("send request of type %r", req.type)
+
+        self.transport.sendMessage(bytes(req), toAddr)
+
+    def sendResponse(self, response, req):
+        req.FromHeader.parameters.tag = self.remoteTag
+        req.ToHeader.parameters.tag = self.localTag
         assert 0
 
     #
     # =================== DELEGATE METHODS ====================================
     #
     def messageConsumer(self, message):
+        assert 0
         log.debug("Received a %r message.", message.type)
         tt = None
         cleaor = None
@@ -152,143 +173,35 @@ class Dialog(fsm.FSM, vb.ValueBinder):
             # fsm has already logged the error. We just carry on.
             pass
 
-    def _pt_send(self, message_type, callee=None, contactAddress=None):
-        log.debug("Send message of type %r to %r.", message_type, callee)
-
-        tp = self._pt_transport
-
-        if self.myTag is None:
-            self.myTag = TagParam()
-
-        if callee is not None:
-            # Callee can be overridden with various different types of object.
-            if isinstance(callee, components.AOR):
-                calleeAOR = callee
-            elif hasattr(callee, "aor"):
-                calleeAOR = callee.aor
-            else:
-                calleeAOR = components.AOR.Parse(callee)
-            log.debug("calleeAOR: %r", calleeAOR)
-            self.calleeAOR = calleeAOR
-        else:
-            if self.calleeAOR is None:
-                self._pt_stateError(
-                    "Send message for %r instance (aor: %s) passed no "
-                    "aor." % (
-                        self.__class__.__name__, self.aor))
-            calleeAOR = self.calleeAOR
-
-        if contactAddress is None:
-            if callee is not None and hasattr(callee, "localAddress"):
-                # Looks like we've been passed another sip party to connect
-                # to.
-                contactAddress = callee.localAddress
-            elif tp.state == tp.States.connected:
-                # We're already connected, so use the transport's remote
-                # address.
-                contactAddress = tp.remoteAddress
-            else:
-                # Otherwise try and use the address from the AOR.
-                contactAddress = calleeAOR.host.addrTuple()
-
-        if not isinstance(calleeAOR, components.AOR):
-            # Perhaps we can make an AOR out of it?
-            try:
-                calleeAOR = components.AOR.Parse(calleeAOR)
-                log.debug("Callee: %r, host: %r.", calleeAOR, calleeAOR.host)
-            except TypeError, parse.ParseError:
-                raise ValueError(
-                    "Message recipient is not an AOR: %r." % callee)
-
-        self.calleeAOR = calleeAOR
-        log.debug("%r", self.calleeAOR)
-
-        log.info("Connecting to address %r.", contactAddress)
-        self._pt_connectTransport(contactAddress)
-
-        msg = getattr(Message, message_type)()
-
-        # Hook it onto the outbound message. This does all the work of setting
-        # attributes from ourself as per our bindings.
-        self._pt_outboundRequest = msg
-
-        log.debug("%r", self._pt_outboundRequest)
-
-        try:
-            tp.send(bytes(msg))
-        finally:
-            # Important to delete the message because it is bound to our
-            # properties, and we will have binding conflicts with later
-            # messages if it is not released now.
-            log.debug("Delete outbound message.")
-            self._pt_outboundRequest = None
-            self._pt_lastRequest = msg
-
     #
     # =================== MAGIC METHODS =======================================
     #
+    sendRequestRE = re.compile(
+        "^sendRequest(%s)$" % "|".join(Request.types), re.IGNORECASE)
+    sendResponseRE = re.compile("^sendResponse([0-9]+)$", re.IGNORECASE)
+
     def __getattr__(self, attr):
 
-        if Dialog.sendRequestRE.match(attr):
+        log.debug("Try and get dialog attribute %r", attr)
+        mo = Dialog.sendRequestRE.match(attr)
+        if mo:
+            method = getattr(Request.types, mo.group(1))
+            log.debug("Method is type %r", method)
             return util.WeakMethod(
-                self, "sendRequest", attr.replace("sendRequest", "", 1))
+                self, "sendRequest", static_args=(method,))
+
+        mo = Dialog.sendResponseRE.match(attr)
+        if mo:
+            code = int(mo.group(1))
+            while code < 100:
+                code *= 100
+            return util.WeakMethod(
+                self, "sendResponse", static_args=(code,))
 
         try:
+            log.debgu("Matches nothing so far.")
             return super(Dialog, self).__getattr__(attr)
         except AttributeError:
             raise AttributeError(
                 "%r instance has no attribute %r." % (
                     self.__class__.__name__, attr))
-    sendRequestRE = re.compile("sendRequest", re.IGNORECASE)
-
-    #
-    # =================== INTERNAL METHODS ====================================
-    #
-    def _pt_reply(self, message_type, request):
-        log.debug("Reply to %r with %r.", request.type, message_type)
-
-        if self.myTag is None:
-            self.myTag = TagParam()
-
-        if re.match("\d+$", message_type):
-            message_type = int(message_type)
-            msg = message.Response(code=message_type)
-        else:
-            msg = getattr(message.Message, message_type)()
-
-        tform = self._pt_transformForReply(request.type, message_type)
-        request.applyTransform(msg, tform, request=self._pt_lastRequest)
-
-        self._pt_outboundResponse = msg
-
-        try:
-            self._pt_transport.send(bytes(msg))
-        finally:
-            self._pt_outboundResponse = None
-            del msg
-
-    def _pt_stateError(self, message):
-        self._pt_reset()
-        raise UnexpectedState(message)
-
-    def _pt_reset(self):
-        self._pt_transport.disconnect()
-        self._pt_resetScenario()
-        del self._pt_lastRequest
-
-    def _pt_connectTransport(self, remoteAddress):
-
-        tp = self._pt_transport
-        if tp.state != tp.States.connected:
-            tp.connect(remoteAddress)
-            util.WaitFor(lambda: tp.state in (
-                tp.States.connected,
-                tp.States.error), 10.0)
-
-        assert tp.remoteAddress[:2] == remoteAddress[:2], (
-            "%r != %r" % (tp.remoteAddress, remoteAddress))
-
-        if tp.state == tp.States.error:
-            self._pt_stateError(
-                "Got an error attempting to connect to %r." % (
-                    remoteAddress))

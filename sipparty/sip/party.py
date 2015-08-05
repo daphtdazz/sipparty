@@ -38,7 +38,7 @@ from message import (Message, Response)
 import transform
 import message
 import param
-from dialogs import CallDialog
+from dialogs import SimpleCall
 
 __all__ = ('Party', 'PartySubclass')
 
@@ -103,10 +103,10 @@ class Party(vb.ValueBinder):
         ("scenario", ["state", "wait", "waitForStateCondition"]),
         ("_pt_transport", [
             "localAddress", "localAddressPort", "listen", "connect"])]
-    dialog_bindings = [
-    ]
 
     Scenario = None
+
+    InviteDialog = None
 
     @classmethod
     def SetScenario(cls, scenario_definition):
@@ -130,7 +130,7 @@ class Party(vb.ValueBinder):
     #
     # =================== INSTANCE INTERFACE =================================
     #
-    aor = util.DerivedProperty("_pt_aor")
+    aor = util.DerivedProperty("_pt_aor", set="setAOR")
 
     contactAddress = util.DerivedProperty("_pt_contactAddress")
     contactAddressHost = util.DerivedProperty(
@@ -139,6 +139,7 @@ class Party(vb.ValueBinder):
     contactAddressPort = util.DerivedProperty(
         "_pt_contactAddress", get=lambda obj, underlying: underlying[1],
         set=lambda obj, val: obj._pt_contactAddress.__setitem__(1, val))
+    transport = util.DerivedProperty("_pt_transport")
 
     def __init__(
             self, aor=None, username=None, host=None, displayname=None,
@@ -154,9 +155,10 @@ class Party(vb.ValueBinder):
         self._pt_requestMessages = {}
         self._pt_aor = None
         self._pt_contactAddress = None
+        self._pt_transport = None
 
         if aor is not None:
-            self.aor = self._pt_resolveAORFromObject(aor)
+            self.aor = components.AOR.ExtractAOR(aor)
 
         if False:
             lAddr = self.aor.host.host
@@ -166,14 +168,19 @@ class Party(vb.ValueBinder):
                 "AOR: %r gave contact address %r", aor,
                 self._pt_contactAddress)
 
-        self._pt_transport = SIPTransport()
-        self._pt_transport.DefaultTransportType = socketType
+        tp = SIPTransport()
+        self.transport = tp
+        tp.DefaultTransportType = socketType
         log.debug("transport sock type: %s", transport.SockTypeName(
-            self._pt_transport.DefaultTransportType))
+            tp.DefaultTransportType))
 
         return
 
     def listen(self):
+
+        assert self.aor is not None, (
+            "Need an AOR before we can listen for ")
+
         if self._pt_contactAddress is not None:
             cAddr = self._pt_contactAddress[0]
             cPort = self._pt_contactAddress[1]
@@ -187,6 +194,9 @@ class Party(vb.ValueBinder):
         log.info(
             "Party listening on %r", self._pt_contactAddress)
 
+        self._pt_transport.addDialogHandlerForAOR(
+            self.aor, self.newDialogHandler)
+
     def invite(self, target, proxy=None):
 
         if not hasattr(self, "aor"):
@@ -194,12 +204,26 @@ class Party(vb.ValueBinder):
                 "Cannot build a request since we aren't configured with an "
                 "AOR!")
 
-        aor = self._pt_resolveAORFromObject(target)
+        aor = components.AOR.ExtractAOR(target)
 
         if proxy is None:
             proxy = self._pt_resolveProxyHostFromTarget(target)
 
-        invD = CallDialog()
+        invD = self.addNewInviteDialog()
+        invD.target = target
+
+        log.debug("Initialize dialog to %r", proxy)
+        invD.initiate(proxy)
+        return invD
+
+    def addNewInviteDialog(self):
+        InviteDialog = self.InviteDialog
+        if InviteDialog is None:
+            raise AttributeError(
+                "Cannot build an INVITE dialog since we aren't configured "
+                "with a Dialog Type to use!")
+
+        invD = InviteDialog()
         self._pt_configureDialog(invD)
 
         pdid = invD.provisionalDialogID
@@ -207,12 +231,7 @@ class Party(vb.ValueBinder):
         assert pdid not in pdis
         pdis[pdid] = invD
 
-        inviteMessage = Message.invite()
-        self._pt_configureRequest(inviteMessage)
-        inviteMessage.startline.uri.aor = aor
-
-        log.debug("Initialize dialog to %r", proxy)
-        invD.initiate(inviteMessage, proxy)
+        return invD
 
     def waitUntilState(self, state, error_state=None, timeout=None):
         for check_state in (state, error_state):
@@ -230,6 +249,13 @@ class Party(vb.ValueBinder):
                 "waiting for state %r." % (
                     self.__class__.__name__, error_state, state))
 
+    def setAOR(self, value):
+        if self.aor is not None:
+            raise AttributeError(
+                "Cannot set AOR %s since %r instance already has AOR %s." % (
+                    value, self.__class__.__name__, self.aor))
+        self._pt_aor = value
+
     #
     # =================== DELEGATE IMPLEMENTATIONS ===========================
     #
@@ -237,6 +263,12 @@ class Party(vb.ValueBinder):
         log.debug("Resetting after scenario reset.")
         self.myTag = None
         self.theirTag = None
+
+    def newDialogHandler(self, message):
+        if message.type == Message.types.invite:
+            invD = self.addNewInviteDialog()
+            invD.receiveMessage(message)
+            return
 
     #
     # =================== MAGIC METHODS ======================================
@@ -309,30 +341,8 @@ class Party(vb.ValueBinder):
     # =================== INTERNAL METHODS ===================================
     #
     def _pt_configureDialog(self, dialog):
-        dialog.vb_parent = self
-        dialog.bindBindings(self.dialog_bindings)
-        dialog.callIDHeader.host = self.aor.host
-        dialog.transport = self._pt_transport
-
-    def _pt_configureRequest(self, req):
-        req.FromHeader.field.value.uri.aor = self.aor
-        contact_host = req.ContactHeader.field.value.uri.aor.host
-        contact_host.host = self._pt_contactAddress[0]
-        contact_host.port = self._pt_contactAddress[1]
-
-    def _pt_resolveAORFromObject(self, target):
-        if hasattr(target, "aor"):
-            return target.aor
-
-        if isinstance(target, components.AOR):
-            return target
-
-        if isinstance(target, bytes):
-            return components.AOR.Parse(target)
-
-        raise TypeError(
-            "%r instance cannot be derived from %r instance." % (
-                components.AOR.__class__.__name__, target.__class__.__name__))
+        for attr in ("aor", "transport", "contactAddress"):
+            setattr(dialog, attr, getattr(self, attr))
 
     def _pt_resolveProxyHostFromTarget(self, target):
         try:

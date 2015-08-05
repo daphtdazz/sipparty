@@ -16,27 +16,63 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from ..dialog import (Dialog, Inputs, States)
 from sipparty import util, fsm
+from sipparty.fsm import InitialStateKey as InitialState
+from sipparty.sip.dialog import Dialog
 
-CallFSMDefn = {
-    fsm.InitialStateKey: {
-        Inputs.initiate: {
-            fsm.TransitionKeys.NewState: States.InitiatingDialog,
-            fsm.TransitionKeys.Action: "sendRequest"
-        }
-    },
-    States.InitiatingDialog: {
+# States, Actions and Inputs.
+S = util.Enum((
+    InitialState, "InitiatingDialog", "InDialog", "TerminatingDialog", "Error",
+    "Terminated"))
+A = util.Enum((
+    "sendRequestInvite", "sendResponse200", "errorResponse", "sendRequestBye"))
+I = util.Enum((
+    "initiate", "receiveRequestInvite", "receiveResponse18",
+    "receiveResponse2", "receiveResponse4", "terminate", "receiveRequestBye"))
 
-    },
-    States.InDialog: {
+for transitionKey in fsm.TransitionKeys:
+    locals()[transitionKey] = transitionKey
 
-    },
-    States.TerminatingDialog: {
+class SimpleCall(Dialog):
 
-    },
-    States.ErrorCompletion: {},
-    States.SuccessCompletion: {}
-}
-
-CallDialog = type("CallDialog", (Dialog,), {"FSMDefinitions": CallFSMDefn})
+    FSMDefinitions = {
+        S.Initial: {
+            I.initiate: {
+                NewState: S.InitiatingDialog,
+                Action: A.sendRequestInvite
+            },
+            I.receiveRequestInvite: {
+                NewState: S.InDialog,
+                Action: A.sendResponse200
+            }
+        },
+        S.InitiatingDialog: {
+            I.receiveResponse18: {
+                NewState: S.InitiatingDialog
+            },
+            I.receiveResponse2: {
+                NewState: S.InDialog,
+            },
+            I.receiveResponse4: {
+                NewState: S.Error,
+                Action: A.errorResponse
+            }
+        },
+        S.InDialog: {
+            I.terminate: {
+                NewState: S.TerminatingDialog,
+                Action: A.sendRequestBye
+            },
+            I.receiveRequestBye: {
+                NewState: S.Terminated,
+                Action: A.sendResponse200
+            }
+        },
+        S.TerminatingDialog: {
+            I.receiveResponse2: {
+                NewState: S.Terminated
+            }
+        },
+        S.Error: {},
+        S.Terminated: {}
+    }

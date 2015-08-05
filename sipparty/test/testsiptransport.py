@@ -71,7 +71,7 @@ class TestSIPTransport(unittest.TestCase):
         msg.ContactHeader.field.value.uri.aor.host.host = laddr[0]
         msg.ContactHeader.field.value.uri.aor.host.port = laddr[1]
 
-        tp.addDialogHandlerForAOR(newDialogHandler, aliceAOR)
+        tp.addDialogHandlerForAOR(aliceAOR, newDialogHandler)
         tp.sendMessage(msg, laddr)
 
         util.WaitFor(lambda: rcvd_message is not None, 1)

@@ -88,6 +88,21 @@ class AOR(Parser, TupleRepresentable, vb.ValueBinder):
              ("host", Host)],
     }
 
+    @classmethod
+    def ExtractAOR(cls, target):
+        if hasattr(target, "aor"):
+            return target.aor
+
+        if isinstance(target, AOR):
+            return target
+
+        if isinstance(target, bytes):
+            return cls.Parse(target)
+
+        raise TypeError(
+            "%r instance cannot be derived from %r instance." % (
+                AOR.__class__.__name__, target.__class__.__name__))
+
     host = ParsedProperty("_aor_host", Host)
 
     def __init__(self, username=None, host=None, **kwargs):

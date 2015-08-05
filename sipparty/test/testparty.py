@@ -34,8 +34,10 @@ else:
     log.setLevel(logging.INFO)
 
 from sipparty import (fsm, sip, util, vb)
+from sipparty.util import WaitFor
 from sipparty.sip import components, dialog, transport, siptransport, party
 from sipparty.sip.transport import Transport
+from sipparty.sip.dialogs import SimpleCall
 
 tks = sip.scenario.TransitionKeys
 
@@ -62,7 +64,7 @@ class TestParty(unittest.TestCase):
         # sip.message.log.setLevel(logging.DEBUG)
         # util.log.setLevel(logging.DEBUG)
         # vb.log.setLevel(logging.DEBUG)
-        fsm.retrythread.log.setLevel(logging.DEBUG)
+        #fsm.retrythread.log.setLevel(logging.DEBUG)
         self.transLL = transport.log.level
         transport.log.setLevel(logging.DEBUG)
         self.sipTransLL = siptransport.log.level
@@ -78,7 +80,7 @@ class TestParty(unittest.TestCase):
         tp = weakref.ref(sipclient._pt_transport)
         self.assertIsNotNone(tp())
         del sipclient
-        util.WaitFor(lambda: tp() is None, 2)
+        WaitFor(lambda: tp() is None, 2)
         self.assertIsNone(tp())
 
     def testBasicPartyTCP(self):
@@ -88,11 +90,18 @@ class TestParty(unittest.TestCase):
         self.subTestBasicParty(socket.SOCK_DGRAM)
 
     def subTestBasicParty(self, socketType):
-        p1 = sip.party.Party(aor="alice@atlanta.com", socketType=socketType)
-        p2 = sip.party.Party(aor="bob@biloxi.com", socketType=socketType)
+
+        BasicParty = type(
+            "BasicParty", (sip.party.Party,),
+            {"InviteDialog": SimpleCall})
+
+        p1 = BasicParty(aor="alice@atlanta.com", socketType=socketType)
+        p2 = BasicParty(aor="bob@biloxi.com", socketType=socketType)
         p1.listen()
         p2.listen()
-        p1.invite(p2)
+        invD = p1.invite(p2)
+
+        WaitFor(lambda: invD.state == invD.States.InDialog, 1)
 
         return
 
@@ -129,8 +138,8 @@ class TestParty(unittest.TestCase):
         p2.listen()
         p1.sendInvite(p2)
 
-        util.WaitFor(lambda: wp1().state == wp1().States.InCall, 1)
-        util.WaitFor(lambda: p2.state == p2.States.InCall, 1)
+        WaitFor(lambda: wp1().state == wp1().States.InCall, 1)
+        WaitFor(lambda: p2.state == p2.States.InCall, 1)
 
         self.assertEqual(p2.calleeAOR, p1.aor)
 
@@ -143,8 +152,8 @@ class TestParty(unittest.TestCase):
 
         p1.sendBye()
 
-        util.WaitFor(lambda: wp1().state == wp1().States.CallEnded, 1)
-        util.WaitFor(lambda: p2.state == p2.States.CallEnded, 1)
+        WaitFor(lambda: wp1().state == wp1().States.CallEnded, 1)
+        WaitFor(lambda: p2.state == p2.States.CallEnded, 1)
 
         self.assertEqual(p1tag, p1.myTag)
         self.assertEqual(p2tag, p1.theirTag)
@@ -153,7 +162,7 @@ class TestParty(unittest.TestCase):
 
         wtp = weakref.ref(p1._pt_transport)
         del p1
-        util.WaitFor(lambda: wtp() is None, 1)
+        WaitFor(lambda: wtp() is None, 1)
 
         # Test that we can re-use existing parties.
         p2.reset()
@@ -161,13 +170,13 @@ class TestParty(unittest.TestCase):
         wp1 = weakref.ref(p1)
         p1.listen()
         p2.sendInvite(p1)
-        util.WaitFor(lambda: wp1().state == wp1().States.InCall, 1)
-        util.WaitFor(lambda: p2.state == p2.States.InCall, 1)
+        WaitFor(lambda: wp1().state == wp1().States.InCall, 1)
+        WaitFor(lambda: p2.state == p2.States.InCall, 1)
 
         p1.sendBye()
 
-        util.WaitFor(lambda: wp1().state == wp1().States.CallEnded, 1)
-        util.WaitFor(lambda: p2.state == p2.States.CallEnded, 1)
+        WaitFor(lambda: wp1().state == wp1().States.CallEnded, 1)
+        WaitFor(lambda: p2.state == p2.States.CallEnded, 1)
 
     def testDudParty(self):
 
@@ -206,7 +215,7 @@ class TestParty(unittest.TestCase):
         p2transport.listen("127.0.0.1", 5060)
         p1.sendInvite("sippuser@127.0.0.1")
 
-        util.WaitFor(lambda: len(data) > 0, 0.1)
+        WaitFor(lambda: len(data) > 0, 0.1)
 
         p2transport.send(
             b"SIP/2.0 180 Ringing\r\n"
