@@ -20,6 +20,10 @@ limitations under the License.
 # they must always be declared before defaults is.
 # import defaults
 import six
+import socket
+import logging
+
+log = logging.getLogger(__name__)
 
 import prot
 from sipparty import (vb, Parser, ParsedProperty)
@@ -63,10 +67,26 @@ class Host(Parser, TupleRepresentable, vb.ValueBinder):
         if not port and hasattr(defaults, "useports") and defaults.useports:
             port = defaults.port
 
+        isIpv6 = False
+        if host:
+            log.error("host: %s", bytes(host))
+            try:
+                ais = socket.getaddrinfo(bytes(host), 0)
+                for ai in ais:
+                    if ai[0] == socket.AF_INET:
+                        break
+                    isIpv6 = True
+            except socket.gaierror:
+                pass
+
         if host and port:
+            if isIpv6:
+                return b"[{host}]:{port}".format(**locals())
             return b"{host}:{port}".format(**locals())
 
         if self.host:
+            if isIpv6:
+                return b"[{host}]".format(**locals())
             return b"{host}".format(**locals())
 
         return b""
