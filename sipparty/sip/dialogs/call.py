@@ -18,20 +18,23 @@ limitations under the License.
 """
 from sipparty import util, fsm
 from sipparty.fsm import InitialStateKey as InitialState
-from sipparty.sip.dialog import Dialog
+from sipparty.sip.dialog import Dialog, TransformKeys
+from sipparty.sip.param import Param
 
 # States, Actions and Inputs.
 S = util.Enum((
     InitialState, "InitiatingDialog", "InDialog", "TerminatingDialog", "Error",
     "Terminated"))
 A = util.Enum((
-    "sendRequestInvite", "sendResponse200", "errorResponse", "sendRequestBye"))
+    "sendRequestINVITE", "sendResponse200", "errorResponse", "sendRequestBYE"))
 I = util.Enum((
-    "initiate", "receiveRequestInvite", "receiveResponse18",
-    "receiveResponse2", "receiveResponse4", "terminate", "receiveRequestBye"))
+    "initiate", "receiveRequestINVITE", "receiveResponse18",
+    "receiveResponse2", "receiveResponse4", "terminate", "receiveRequestBYE"))
 
 for transitionKey in fsm.TransitionKeys:
     locals()[transitionKey] = transitionKey
+for transformKey in TransformKeys:
+    locals()[transformKey] = transformKey
 
 class SimpleCall(Dialog):
 
@@ -39,9 +42,9 @@ class SimpleCall(Dialog):
         S.Initial: {
             I.initiate: {
                 NewState: S.InitiatingDialog,
-                Action: A.sendRequestInvite
+                Action: A.sendRequestINVITE
             },
-            I.receiveRequestInvite: {
+            I.receiveRequestINVITE: {
                 NewState: S.InDialog,
                 Action: A.sendResponse200
             }
@@ -61,9 +64,9 @@ class SimpleCall(Dialog):
         S.InDialog: {
             I.terminate: {
                 NewState: S.TerminatingDialog,
-                Action: A.sendRequestBye
+                Action: A.sendRequestBYE
             },
-            I.receiveRequestBye: {
+            I.receiveRequestBYE: {
                 NewState: S.Terminated,
                 Action: A.sendResponse200
             }
@@ -75,4 +78,37 @@ class SimpleCall(Dialog):
         },
         S.Error: {},
         S.Terminated: {}
+    }
+
+    Transforms = {
+        "INVITE": {
+            2: [
+                (Copy, "FromHeader",),
+                (Copy, "ToHeader",),
+                (Copy, "ViaHeader",),
+                (Copy, "Call_IdHeader",),
+                (Copy, "CseqHeader",),
+                (Copy, "startline.protocol",),
+                (Add, "ToHeader.field.parameters.tag", lambda _: Param.tag())
+            ]
+        },
+        "BYE": {
+            2: [
+                (Copy, "FromHeader",),
+                (Copy, "ToHeader",),
+                (Copy, "ViaHeader",),
+                (Copy, "Call_IdHeader",),
+                (Copy, "CseqHeader",),
+                (Copy, "startline.protocol",)
+            ]
+        },
+        2: {
+            "ACK": [
+                (Copy, "startline.protocol",),
+                (Copy, "FromHeader",),
+                (Copy, "ToHeader",),
+                (Copy, "ViaHeader",),
+                (CopyFromRequest, "startline.uri",)
+            ]
+        }
     }

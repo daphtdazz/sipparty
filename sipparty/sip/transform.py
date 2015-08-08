@@ -27,52 +27,7 @@ KeyActRemove = "remove"
 KeyActCopy = "copy"
 KeyActCopyFromRequest = "copy_from_original"
 
-default = {
-    "INVITE": {
-        2: {
-            KeyActCopy: [
-                ("FromHeader",),
-                ("ToHeader",),
-                ("ViaHeader",),
-                ("Call_IdHeader",),
-                ("CseqHeader",),
-                ("startline.protocol",)
-            ],
-            KeyActAdd: [
-                ("ToHeader.field.parameters.tag", param.Param.tag)
-            ]
-        }
-    },
-    "BYE": {
-        2: {
-            KeyActCopy: [
-                ("FromHeader",),
-                ("ToHeader",),
-                ("ViaHeader",),
-                ("Call_IdHeader",),
-                ("CseqHeader",),
-                ("startline.protocol",)
-            ]
-        }
-    },
-    2: {
-        "ACK": [
-            {
-                KeyActCopy: [
-                    ("startline.protocol",),
-                    ("FromHeader",),
-                    ("ToHeader",),
-                    ("ViaHeader",),
-                ]
-            },
-            {
-                KeyActCopyFromRequest: [
-                    ("startline.uri",),
-                ]
-            }
-        ]
-    }
-}
+default = 1
 
 
 def EntryForMessageType(entry_dict, mtype):

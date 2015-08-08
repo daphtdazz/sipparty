@@ -155,6 +155,22 @@ class ValueBinder(object):
         weakp = weakref.ref(newParent)
         self._vb_weakBindingParent = weakp
 
+    def attributeAtPath(self, path):
+        target, attr = self._vb_resolveboundobjectandattr(path)
+        if not hasattr(target, attr):
+            raise AttributeError(
+                "%r instance has no attribute at path %r." % (
+                    self.__class__.__name__, path))
+        return getattr(target, attr)
+
+    def setAttributePath(self, path, value):
+        target, attr = self._vb_resolveboundobjectandattr(path)
+        if target is None:
+            raise AttributeError(
+                "%r instance has no attribute at path %r." % (
+                    self.__class__.__name__, path))
+        setattr(target, attr, value)
+
     #
     # =================== MAGIC METHODS ======================================
     #

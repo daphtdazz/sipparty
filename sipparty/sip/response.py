@@ -57,7 +57,7 @@ class Response(Parser, vb.ValueBinder):
         raise prot.ProtocolError("Unknown response code %d" % code)
 
     codeMessage = util.DerivedProperty(
-        "_rsp_codeMessage", get="getCodeMessage")
+        b"_rsp_codeMessage", get=b"getCodeMessage")
 
     def getCodeMessage(self, underlyingValue):
         if underlyingValue is not None:
@@ -83,6 +83,6 @@ class Response(Parser, vb.ValueBinder):
 
     def __repr__(self):
         return (
-            "{0.__class__.__name__}(code={0.code!r}, "
+            b"{0.__class__.__name__}(code={0.code!r}, "
             "codeMessage={0.codeMessage!r}, protocol={0.protocol!r})"
             "".format(self))

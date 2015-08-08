@@ -25,7 +25,8 @@ from sipparty import (vb, util, fsm)
 from sipparty.fsm import (FSM,)
 import header
 from request import Request
-from message import Message
+from response import Response
+from message import Message, Response
 from param import TagParam
 
 log = logging.getLogger(__name__)
@@ -36,6 +37,9 @@ States = util.Enum((
     "SuccessCompletion", "ErrorCompletion"))
 Inputs = util.Enum((
     "initiate", "receiveRequest", "terminate"))
+TransformKeys = util.Enum((
+    "Copy", "Add", "CopyFromRequest"))
+Tfk = TransformKeys
 
 
 class Dialog(fsm.FSM, vb.ValueBinder):
@@ -62,6 +66,7 @@ class Dialog(fsm.FSM, vb.ValueBinder):
     vb_dependencies = [
         ("transport", ["sendMessage"])
     ]
+    Transforms = None
 
     #
     # =================== INSTANCE INTERFACE ==================================
@@ -114,8 +119,14 @@ class Dialog(fsm.FSM, vb.ValueBinder):
         self.hit(Inputs.terminate, *args, **kwargs)
 
     def receiveMessage(self, msg):
+
+        if self.remoteTag is None:
+            rtag = msg.FromHeader.parameters.tag
+            log.debug("Learning remote tag: %r", rtag)
+            self.remoteTag = rtag
+
         if msg.type in Request.types:
-            input = "receiveRequest" + msg.type.lower().capitalize()
+            input = "receiveRequest" + msg.type.upper()
             return self.hit(input, msg)
 
         return getattr(self, b"receiveResponse" + bytes(msg.type))(msg)
@@ -143,9 +154,66 @@ class Dialog(fsm.FSM, vb.ValueBinder):
         self.transport.sendMessage(bytes(req), toAddr)
 
     def sendResponse(self, response, req):
-        req.FromHeader.parameters.tag = self.remoteTag
-        req.ToHeader.parameters.tag = self.localTag
-        assert 0
+        log.debug("Send response type %r.", response)
+
+        resp = Response(response)
+
+        reqtforms = self.Transforms[req.type]
+
+        code = response
+        while code > 0:
+            if code in reqtforms:
+                break
+            code /= 10
+        else:
+            raise KeyError(
+                "%r instance has no transform for %r -> %r." % (
+                    self.__class__.__name__, req.type, code))
+
+        tform = reqtforms[code]
+
+        self.configureResponse(resp, req, tform)
+        self.transport.sendMessage(
+            bytes(resp), req.ContactHeader.field.value.uri.aor.host)
+
+    def configureResponse(self, resp, req, tform):
+        log.debug("Configure response starting %r, startline %r", resp,
+                  resp.startline)
+
+        def raiseActTupleError(tp, msg):
+            raise ValueError(
+                "%r instance transform action %r is unrecognisable: %s" % (
+                    self.__class__.__name__, tp, msg))
+
+        for actTp in tform:
+            action = actTp[0]
+
+            if action not in Tfk:
+                raiseActTupleError(actTp, "Unrecognised action %r." % action)
+            if action == Tfk.Copy:
+                if len(actTp) < 2:
+                    raiseActTupleError(actTp, "No path to copy.")
+                path = actTp[1]
+                val = req.attributeAtPath(path)
+                resp.setAttributePath(path, val)
+                continue
+
+            if action == Tfk.Add:
+                if len(actTp) < 3:
+                    raiseActTupleError(actTp, "No generator for Add action.")
+                path = actTp[1]
+                gen = actTp[2]
+                resp.setAttributePath(path, gen(req))
+                continue
+
+            if action == Tfk.CopyFromRequest:
+                assert 0
+
+            assert 0
+
+        resp.FromHeader.parameters.tag = self.remoteTag
+        resp.ToHeader.parameters.tag = self.localTag
+        log.debug("Response now %r", resp)
 
     #
     # =================== DELEGATE METHODS ====================================
@@ -182,7 +250,6 @@ class Dialog(fsm.FSM, vb.ValueBinder):
 
     def __getattr__(self, attr):
 
-        log.debug("Try and get dialog attribute %r", attr)
         mo = Dialog.sendRequestRE.match(attr)
         if mo:
             method = getattr(Request.types, mo.group(1))
@@ -199,8 +266,9 @@ class Dialog(fsm.FSM, vb.ValueBinder):
                 self, "sendResponse", static_args=(code,))
 
         try:
-            log.debgu("Matches nothing so far.")
+            log.debug("Matches nothing so far.")
             return super(Dialog, self).__getattr__(attr)
+
         except AttributeError:
             raise AttributeError(
                 "%r instance has no attribute %r." % (

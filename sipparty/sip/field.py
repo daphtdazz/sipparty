@@ -133,7 +133,7 @@ class ViaField(Field):
             "{SLASH}"
             "({transport})"
             "{LWS}"
-            "({sent_by})"  # transport, UDP TCP etc.
+            "({sent_by})"
             "({SEMI}{generic_param})*"  # Parameters.
             "".format(**prot.__dict__),
         parse.Parser.Mappings:
