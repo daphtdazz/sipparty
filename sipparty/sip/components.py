@@ -69,7 +69,7 @@ class Host(Parser, TupleRepresentable, vb.ValueBinder):
 
         isIpv6 = False
         if host:
-            log.error("host: %s", bytes(host))
+            log.detail("Resolve host: %s", bytes(host))
             try:
                 ais = socket.getaddrinfo(bytes(host), 0)
                 for ai in ais:

@@ -589,7 +589,7 @@ class FSM(object):
         5. Start any threads.
         6. If there are any old threads, tidy them up.
         """
-        log.debug("_fsm_hit %r %r %r", input, args, kwargs)
+        log.detail("_fsm_hit %r %r %r", input, args, kwargs)
 
         old_state = self._fsm_state
         ts = self._fsm_transitions

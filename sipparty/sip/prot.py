@@ -316,3 +316,15 @@ ResponseCodeMessages = {
     604: b"Does Not Exist Anywhere",
     606: b"Not Acceptable",
 }
+
+
+def ProvisionalDialogID(CallIDText, localTagText):
+    return (CallIDText, localTagText)
+
+
+def EstablishedDialogID(CallIDText, localTagText, remoteTagText):
+    return (CallIDText, localTagText, remoteTagText)
+
+
+def ProvisionalDialogIDFromEstablishedID(estDID):
+    return estDID[:2]

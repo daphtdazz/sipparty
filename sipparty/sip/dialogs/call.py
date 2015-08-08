@@ -26,7 +26,8 @@ S = util.Enum((
     InitialState, "InitiatingDialog", "InDialog", "TerminatingDialog", "Error",
     "Terminated"))
 A = util.Enum((
-    "sendRequestINVITE", "sendResponse200", "errorResponse", "sendRequestBYE"))
+    "sendRequestINVITE", "sendResponse200", "errorResponse", "sendRequestBYE",
+    "hasTerminated"))
 I = util.Enum((
     "initiate", "receiveRequestINVITE", "receiveResponse18",
     "receiveResponse2", "receiveResponse4", "terminate", "receiveRequestBYE"))

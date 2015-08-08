@@ -20,14 +20,16 @@ import six
 import re
 import logging
 import abc
+import numbers
 
 from sipparty import (vb, util, fsm)
-from sipparty.fsm import (FSM,)
+from sipparty.fsm import (FSM, UnexpectedInput)
 import header
 from request import Request
 from response import Response
 from message import Message, Response
 from param import TagParam
+import prot
 
 log = logging.getLogger(__name__)
 bytes = six.binary_type
@@ -83,7 +85,8 @@ class Dialog(fsm.FSM, vb.ValueBinder):
 
     @property
     def provisionalDialogID(self):
-        return (self._dlg_callIDHeader.field, self.localTag.value)
+        return prot.ProvisionalDialogID(
+            self._dlg_callIDHeader.field, self.localTag.value)
 
     @property
     def dialogID(self):
@@ -92,7 +95,8 @@ class Dialog(fsm.FSM, vb.ValueBinder):
             raise AttributeError(
                 "%r instance has no remote tag so is not yet in a dialog so "
                 "does not have a dialogID." % (self.__class__.__name__,))
-        return (self._dlg_callIDHeader.field, self.localTag.value, rt)
+        return prot.EstablishedDialogID(
+            self._dlg_callIDHeader.field, self.localTag.value, rt)
 
     def __init__(self, callIDHeader=None, callIDHost=None, remoteTag=None):
         super(Dialog, self).__init__()
@@ -120,16 +124,36 @@ class Dialog(fsm.FSM, vb.ValueBinder):
 
     def receiveMessage(self, msg):
 
+        mtype = msg.type
+        def RaiseBadInput(msg=b""):
+            raise(UnexpectedInput(
+                "%r instance fsm has no input for message type %r." % (
+                    self.__class__.__name__, mtype)))
+
         if self.remoteTag is None:
             rtag = msg.FromHeader.parameters.tag
             log.debug("Learning remote tag: %r", rtag)
             self.remoteTag = rtag
+            tp = self.transport
+            if tp is not None:
+                self.transport.updateDialogGrouping(self)
 
-        if msg.type in Request.types:
+        if mtype in Request.types:
             input = "receiveRequest" + msg.type.upper()
             return self.hit(input, msg)
 
-        return getattr(self, b"receiveResponse" + bytes(msg.type))(msg)
+        rcode = mtype
+        if not isinstance(rcode, numbers.Integral):
+            RaiseBadInput()
+
+        while mtype >= 1:
+            attr = b"receiveResponse%d" % mtype
+            if attr in self.Inputs:
+                log.debug("Response input found: %d", mtype)
+                return self.hit(attr, msg)
+            mtype /= 10
+
+        RaiseBadInput()
 
     def sendRequest(self, type, toAddr):
         # TODO: write
@@ -151,7 +175,13 @@ class Dialog(fsm.FSM, vb.ValueBinder):
 
         log.debug("send request of type %r", req.type)
 
-        self.transport.sendMessage(bytes(req), toAddr)
+        tp = self.transport
+        if tp is None:
+            raise AttributeError(
+                "%r instance has no transport attribute so cannot send a "
+                "request." % (self.__class__.__name__,))
+        tp.sendMessage(bytes(req), toAddr)
+        tp.updateDialogGrouping(self)
 
     def sendResponse(self, response, req):
         log.debug("Send response type %r.", response)
@@ -215,6 +245,12 @@ class Dialog(fsm.FSM, vb.ValueBinder):
         resp.ToHeader.parameters.tag = self.localTag
         log.debug("Response now %r", resp)
 
+    def hasTerminated(self):
+        """Dialog is over. Remove it from the transport."""
+        tp = self.transport
+        if tp is not None:
+            tp.removeDialog(self)
+
     #
     # =================== DELEGATE METHODS ====================================
     #
@@ -266,7 +302,7 @@ class Dialog(fsm.FSM, vb.ValueBinder):
                 self, "sendResponse", static_args=(code,))
 
         try:
-            log.debug("Matches nothing so far.")
+            log.detail("Attr %r matches nothing so far.", attr)
             return super(Dialog, self).__getattr__(attr)
 
         except AttributeError:

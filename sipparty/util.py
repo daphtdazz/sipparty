@@ -649,7 +649,7 @@ class Singleton(object):
     _St_SharedInstances = {}
 
     def __new__(cls, *args, **kwargs):
-        log.warning("Singleton.__new__(%r, %r)", args, kwargs)
+        log.detail("Singleton.__new__(%r, %r)", args, kwargs)
         if "singleton" in kwargs:
             name = kwargs["singleton"]
             del kwargs["singleton"]

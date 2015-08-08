@@ -18,7 +18,9 @@ limitations under the License.
 """
 import logging
 assert logging.DEBUG == 10
-logging.addLevelName(5, "DETAIL")
+logging.DETAIL = 5
+logging.addLevelName(logging.DETAIL, "DETAIL")
+
 
 
 class SPLogger(logging.getLoggerClass()):

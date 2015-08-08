@@ -52,13 +52,18 @@ class SIPTransport(Transport):
     # =================== INSTANCE INTERFACE ==================================
     #
     messageConsumer = DerivedProperty("_sptr_messageConsumer")
+    provisionalDialogs = DerivedProperty("_sptr_provisionalDialogs")
+    establishedDialogs = DerivedProperty("_sptr_establishedDialogs")
 
     def __init__(self):
         super(SIPTransport, self).__init__()
         self._sptr_messageConsumer = None
         self._sptr_messages = []
+        self._sptr_provisionalDialogs = {}
+        self._sptr_establishedDialogs = {}
         # Dialog handler is keyed by AOR.
         self._sptr_dialogHandlers = {}
+        # Dialogs are keyed by dialogID
         self._sptr_dialogs = WeakValueDictionary()
 
         self.byteConsumer = self.sipByteConsumer
@@ -157,6 +162,56 @@ class SIPTransport(Transport):
             return
 
         hdlrs[toAOR](msg)
+
+    def consumeInDialogMessage(self, msg):
+        toAOR = msg.ToHeader.field.value.uri.aor
+        estDs = self.establishedDialogs
+        did = prot.EstablishedDialogID(
+            msg.Call_IDHeader.field, msg.FromHeader.parameters.tag.value,
+            msg.ToHeader.parameters.tag.value)
+
+        log.debug("Is established dialog %r in %r?", did, estDs)
+        if did in estDs:
+            return estDs[did].receiveMessage(msg)
+
+        pdid = prot.ProvisionalDialogIDFromEstablishedID(did)
+        provDs = self.provisionalDialogs
+        log.debug("Is provisional dialog %r in %r?", pdid, provDs)
+        if pdid in provDs:
+            return provDs[pdid].receiveMessage(msg)
+
+        log.warning(
+            "Unable to find a dialog for message with dialog ID %r", did)
+        return
+
+    def updateDialogGrouping(self, dlg):
+        pds = self.provisionalDialogs
+        eds = self.establishedDialogs
+        pdid = dlg.provisionalDialogID
+        if hasattr(dlg, "dialogID"):
+            did = dlg.dialogID
+            if pdid in pds:
+                del pds[pdid]
+            if did not in eds:
+                eds[did] = dlg
+
+        else:
+            if pdid not in pds:
+                pds[pdid] = dlg
+
+    def removeDialog(self, dlg):
+        pdid = dlg.provisionalDialogID
+        pdids = self.provisionalDialogs
+        if pdid in pdids:
+            del pdids[pdid]
+
+        try:
+            did = dlg.dialogID
+            eds = tp.establishedDialogs
+            if did in eds:
+                del eds[did]
+        except AttributeError:
+            pass
 
     #
     # =================== MAGIC METHODS =======================================
