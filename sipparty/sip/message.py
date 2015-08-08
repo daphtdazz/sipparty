@@ -25,7 +25,6 @@ from sipparty import (util, vb, parse)
 import prot
 import components
 import param
-import transform
 from param import Param
 import request
 import response
@@ -200,7 +199,8 @@ class Message(vb.ValueBinder):
                     getattr(Param, param_name)())
 
     def applyTransform(self, targetmsg, tform, request=None):
-
+        #!Remove this!
+        assert 0
         def setattratpath(obj, path, val):
             nextobj = obj
             tocomponents = path.split(".")

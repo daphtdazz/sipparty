@@ -35,7 +35,6 @@ import scenario
 import defaults
 import request
 from message import (Message, Response)
-import transform
 import message
 import param
 from dialogs import SimpleCall
@@ -365,6 +364,8 @@ class Party(vb.ValueBinder):
                 self, "scenarioActionCallback")
 
     def _pt_transformForReply(self, inputMessageType, responseType):
+        #! Remove this!
+        assert 0
         indct = transform.EntryForMessageType(self.transform, inputMessageType)
         tform = transform.EntryForMessageType(indct, responseType)
         return tform

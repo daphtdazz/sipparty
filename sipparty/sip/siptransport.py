@@ -44,8 +44,8 @@ class SIPTransport(Transport):
     DefaultPort = 5060
 
     def __new__(cls, *args, **kwargs):
-        if "name" not in kwargs:
-            kwargs["name"] = "SIP"
+        if "singleton" not in kwargs:
+            kwargs["singleton"] = "SIP"
         return super(SIPTransport, cls).__new__(cls, *args, **kwargs)
 
     #

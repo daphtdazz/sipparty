@@ -1,4 +1,6 @@
-"""__init__.py
+"""splogging.py
+
+Utility functions for py-sip.
 
 Copyright 2015 David Park
 
@@ -14,7 +16,13 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from .. import splogging
-from retrythread import *
-from fsmtimer import *
-from fsm import *
+import logging
+assert logging.DEBUG == 10
+logging.addLevelName(5, "DETAIL")
+
+
+class SPLogger(logging.getLoggerClass()):
+    def detail(self, msg, *args, **kwargs):
+        self.log(logging.DETAIL, msg, *args, **kwargs)
+
+logging.setLoggerClass(SPLogger)
