@@ -24,6 +24,10 @@ import timeit
 import logging
 import unittest
 import six
+from sipparty import util, sip
+from sipparty.fsm import retrythread, fsm
+from sipparty.sip import transport, siptransport, field
+from sipparty.sip.components import AOR
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
@@ -31,10 +35,6 @@ if __name__ == "__main__":
 else:
     log = logging.getLogger(__name__)
 
-from sipparty import util, sip
-from sipparty.fsm import retrythread, fsm
-from sipparty.sip import transport, siptransport, field
-from sipparty.sip.components import AOR
 SIPTransport = siptransport.SIPTransport
 
 

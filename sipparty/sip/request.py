@@ -37,9 +37,7 @@ class Request(parse.Parser, vb.ValueBinder):
     Request-Line  =  Method SP Request-URI SP SIP-Version CRLF
     """
 
-    types = util.Enum(
-        ("ACK", "BYE", "CANCEL", "INVITE", "OPTIONS", "REGISTER"),
-        normalize=lambda x: bytes(x).upper())
+    types = prot.RequestTypes
 
     # "type" is a descriptor that returns the type (e.g. ACK or BYE) based on
     # the class type, i.e. by removing "Request" from the class type.

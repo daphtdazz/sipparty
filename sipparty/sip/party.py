@@ -82,16 +82,15 @@ class PartyMetaclass(type):
 
 @six.add_metaclass(PartyMetaclass)
 class Party(
-    DeepClass("_pt_", {
-        "dnameURI": {
-            dck.check: lambda dnu: isinstance(dnu, DNameURI),
-            dck.gen: DNameURI},
-        #"listenAddress": {dck.gen: lambda: None},
-        "contactURI": {
-            dck.descriptor: ParsedPropertyOfClass(URI),
-            dck.gen: URI},
-        "transport": {dck.gen: lambda: None}}),
-    vb.ValueBinder):
+        DeepClass("_pt_", {
+            "dnameURI": {
+                dck.check: lambda dnu: isinstance(dnu, DNameURI),
+                dck.gen: DNameURI},
+            "contactURI": {
+                dck.descriptor: ParsedPropertyOfClass(URI),
+                dck.gen: URI},
+            "transport": {dck.gen: lambda: None}}),
+        vb.ValueBinder):
     """A party in a sip call, aka an endpoint, caller or callee etc.
     """
 
@@ -110,7 +109,7 @@ class Party(
     def listenAddress(self):
         lAddr = self._pt_listenAddress
         if lAddr is None:
-             raise AttributeError(
+            raise AttributeError(
                 "%r listenAddress is read-only." % (obj.__class__.__name__,))
         return lAddr
 
@@ -257,20 +256,6 @@ class Party(
     #
     # =================== MAGIC METHODS ======================================
     #
-    def __getattr__(self, attr):
-
-        #if attr.startswith(b"message"):
-        #    messageType = attr.replace(b"message", b"", 1)
-        #    if messageType in self._pt_requestMessages:
-        #        return self._pt_requestMessages[messageType]
-
-        try:
-            return super(Party, self).__getattr__(attr)
-        except AttributeError:
-            raise AttributeError(
-                "{self.__class__.__name__!r} instance has no attribute "
-                "{attr!r}.."
-                "".format(**locals()))
 
     #
     # =================== INTERNAL METHODS ===================================

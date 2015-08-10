@@ -27,7 +27,3 @@ class SPLogger(logging.getLoggerClass()):
         self.log(logging.DETAIL, msg, *args, **kwargs)
 
 logging.setLoggerClass(SPLogger)
-
-# Change particular logger levels for debugging purposes.
-#logging.getLogger("sipparty.deepclass").setLevel(logging.DETAIL)
-#logging.getLogger("sipparty.util").setLevel(logging.DETAIL)

@@ -16,18 +16,16 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import six
 import logging
 import unittest
+from six import binary_type as bytes
+from sipparty import (sip, util, sdp)
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     log = logging.getLogger()
 else:
     log = logging.getLogger(__name__)
-bytes = six.binary_type
-
-from sipparty import (sip, util, sdp)
 
 
 class TestSDP(util.TestCaseREMixin, unittest.TestCase):

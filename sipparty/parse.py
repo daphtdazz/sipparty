@@ -310,9 +310,10 @@ class Parser(object):
                 log.debug("  no data")
                 continue
 
+            def gen(x): return x
             attr = mapping[0]
             cls = str
-            gen = lambda x: x
+
             if len(mapping) > 1:
                 new_cls = mapping[1]
                 if new_cls is not None:

@@ -25,16 +25,10 @@ import logging
 import weakref
 import unittest
 import socket
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
-    log = logging.getLogger()
-else:
-    log = logging.getLogger(__name__)
-    log.setLevel(logging.INFO)
-
 from sipparty import (fsm, sip, util)
 from sipparty.sip import Dialog
+
+log = logging.getLogger(__name__)
 
 
 class TestDialog(unittest.TestCase):

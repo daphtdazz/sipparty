@@ -24,6 +24,7 @@ import prot
 from sipparty import (util, vb, parse)
 import components
 from components import (DNameURI)
+from request import Request
 import defaults
 import param
 
@@ -194,7 +195,7 @@ class CSeqField(Field):
             "([\w_-]+)$",  # No parameters.
         parse.Parser.Mappings:
             [("number", None, int),
-             ("reqtype", None, lambda x: getattr(request.Request.types, x))]
+             ("reqtype", None, lambda x: getattr(Request.types, x))]
     }
 
     @classmethod
@@ -229,6 +230,3 @@ class Max_ForwardsField(Field):
         super(Max_ForwardsField, self).__init__()
         self.number = number
         self.bind("number", "value")
-
-# These must be imported at the end to avoid ordering issues.
-import request

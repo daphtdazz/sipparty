@@ -19,11 +19,12 @@ limitations under the License.
 """
 import logging
 from six import (iteritems, iterkeys)
-log = logging.getLogger(__name__)
-
 from sipparty.util import Enum, DerivedProperty
+
+log = logging.getLogger(__name__)
 DeepClassKeys = Enum(("check", "get", "set", "gen", "descriptor"))
 dck = DeepClassKeys
+
 
 def DCProperty(tlp, name, attrDesc):
     internalName = tlp + name
@@ -163,4 +164,3 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
                 self.__class__.__name__, b", ".join(self.reprGen())))
 
     return DeepClass
-

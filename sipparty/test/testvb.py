@@ -22,6 +22,7 @@ import os
 import re
 import logging
 import unittest
+from sipparty import vb
 
 # If main get the root logger.
 if __name__ == "__main__":
@@ -29,8 +30,6 @@ if __name__ == "__main__":
     log = logging.getLogger()
 else:
     log = logging.getLogger(__name__)
-
-from sipparty import vb
 
 
 class TestVB(unittest.TestCase):

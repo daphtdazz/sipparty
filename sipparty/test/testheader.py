@@ -19,14 +19,10 @@ limitations under the License.
 import six
 import logging
 import unittest
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
-    log = logging.getLogger()
-else:
-    log = logging.getLogger(__name__)
-
 from sipparty import sip
 from sipparty.sip import prot
+
+log = logging.getLogger(__name__)
 
 
 class TestHeaders(unittest.TestCase):

@@ -43,7 +43,10 @@ class Timer(object):
             if isinstance(retryer, collections.Iterator):
                 raise ValueError("retryer is an Iterator (must be "
                                  "just an Iterable).")
-            retry_generator = lambda: iter(retryer)
+
+            def retry_generator():
+                return iter(retryer)
+
         elif isinstance(retryer, collections.Callable):
             titer = retryer()
             if not isinstance(titer, collections.Iterator):

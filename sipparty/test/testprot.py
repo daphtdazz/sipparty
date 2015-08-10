@@ -1,4 +1,4 @@
-"""tprot.py
+"""testprot.py
 
 Unit tests for sip-party.
 
@@ -16,23 +16,20 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import six
 import sys
 import os
 import re
 import logging
 import unittest
+from six import binary_type as bytes, iteritems, add_metaclass
+from sipparty import (util, sip, vb, ParseError, Request)
+from sipparty.sip import (prot, components)
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     log = logging.getLogger()
 else:
     log = logging.getLogger(__name__)
-bytes = six.binary_type
-iteritems = six.iteritems
-
-from sipparty import (util, sip, vb, ParseError, Request)
-from sipparty.sip import (prot, components)
 
 
 class TestProtocol(unittest.TestCase):
@@ -182,7 +179,7 @@ class TestProtocol(unittest.TestCase):
 
     def testCumulativeProperties(self):
 
-        @six.add_metaclass(util.CCPropsFor(("CPs", "CPList", "CPDict")))
+        @add_metaclass(util.CCPropsFor(("CPs", "CPList", "CPDict")))
         class CCPTestA(object):
             CPs = util.Enum((1, 2))
             CPList = [1, 2]
@@ -230,7 +227,7 @@ class TestProtocol(unittest.TestCase):
         for name, obj in iteritems(prot.__dict__):
             if name.endswith("range") or name in ('STAR',):
                 continue
-            if isinstance(obj, six.binary_type):
+            if isinstance(obj, bytes):
                 try:
                     re.compile(obj)
                 except re.error as exc:

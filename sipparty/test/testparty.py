@@ -25,6 +25,11 @@ import logging
 import weakref
 import unittest
 from socket import SOCK_STREAM, SOCK_DGRAM
+from sipparty import (fsm, sip, util, vb, deepclass, parse)
+from sipparty.util import WaitFor
+from sipparty.sip import components, dialog, transport, siptransport, party
+from sipparty.sip.transport import Transport
+from sipparty.sip.dialogs import SimpleCall
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
@@ -32,14 +37,6 @@ if __name__ == "__main__":
 else:
     log = logging.getLogger(__name__)
     log.setLevel(logging.DEBUG)
-
-from sipparty import (fsm, sip, util, vb, deepclass, parse)
-from sipparty.util import WaitFor
-from sipparty.sip import components, dialog, transport, siptransport, party
-from sipparty.sip.transport import Transport
-from sipparty.sip.dialogs import SimpleCall
-
-tks = sip.scenario.TransitionKeys
 
 
 class TestParty(unittest.TestCase):
@@ -55,20 +52,6 @@ class TestParty(unittest.TestCase):
             return super(TestParty, self).assertIsNone(exp, *args, **kwargs)
 
         return self.assertTrue(exp is None)
-
-    def setUp(self):
-        #sip.party.log.setLevel(logging.DEBUG)
-        #dialog.log.setLevel(logging.DEBUG)
-        # fsm.fsm.log.setLevel(logging.DEBUG)
-        # sip.message.log.setLevel(logging.DEBUG)
-        # util.log.setLevel(logging.DEBUG)
-        #vb.log.setLevel(logging.DEBUG)
-        #deepclass.log.setLevel(logging.DETAIL)
-        # fsm.retrythread.log.setLevel(logging.DEBUG)
-        # parse.log.setLevel(logging.DEBUG)
-        transport.log.setLevel(logging.DEBUG)
-        #siptransport.log.setLevel(logging.DETAIL)
-        pass
 
     def testBasicPartyTCP(self):
         self.skipTest("TCP not yet implemented")
@@ -125,28 +108,6 @@ class TestParty(unittest.TestCase):
         self.assertEqual(len(p1.inCallDialogs), 0)
 
         return
-
-    def testDudParty(self):
-
-        self.assertRaises(
-            KeyError,
-            lambda: type("TestParty", (sip.party.Party,), {}).SetScenario({
-                "state": {
-                    "input": {
-                        tks.NewState: "not declared!"
-                    }
-                }
-            }))
-        for bad_input in ("waitUntilState", "_sendInvite"):
-            self.assertRaises(
-                KeyError,
-                lambda: type("TestParty", (sip.party.Party,), {}).SetScenario({
-                    "first_state": {
-                        bad_input: {
-                            tks.NewState: "first_state"
-                        }
-                    }
-                }))
 
     def testBasicSIPP(self):
         p1 = sipscenarios.SimpleParty(socketType=SOCK_DGRAM)

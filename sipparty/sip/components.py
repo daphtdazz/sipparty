@@ -16,22 +16,16 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-# We import defaults at the bottom, since defaults uses these classes, and so
-# they must always be declared before defaults is.
-# import defaults
-import six
 import socket
 import logging
-
-log = logging.getLogger(__name__)
-
 import prot
+from six import binary_type as bytes
 from sipparty import (vb, Parser, ParsedProperty, ParsedPropertyOfClass)
 from sipparty.util import TwoCompatibleThree, TupleRepresentable
 from sipparty.deepclass import (DeepClass, dck)
 import defaults
 
-bytes = six.binary_type
+log = logging.getLogger(__name__)
 
 
 @TwoCompatibleThree
@@ -104,10 +98,11 @@ class Host(Parser, TupleRepresentable, vb.ValueBinder):
 
 @TwoCompatibleThree
 class AOR(
-    DeepClass("_aor_", {
-        "username": {},
-        "host": {dck.descriptor: ParsedPropertyOfClass(Host), dck.gen: Host}}),
-    Parser, TupleRepresentable, vb.ValueBinder):
+        DeepClass("_aor_", {
+            "username": {},
+            "host": {
+                dck.descriptor: ParsedPropertyOfClass(Host), dck.gen: Host}}),
+        Parser, TupleRepresentable, vb.ValueBinder):
     """A AOR object."""
 
     parseinfo = {
@@ -167,13 +162,13 @@ class AOR(
 
 @TwoCompatibleThree
 class URI(
-    DeepClass("_uri_", {
-        "scheme": {dck.gen: lambda: defaults.scheme},
-        "aor": {dck.descriptor: ParsedPropertyOfClass(AOR), dck.gen: AOR},
-        "parameters": {dck.gen: lambda: b""},
-        "headers": {dck.gen: lambda: b""},
-        "absoluteURIPart": {dck.gen: lambda: None}}),
-    Parser, vb.ValueBinder):
+        DeepClass("_uri_", {
+            "scheme": {dck.gen: lambda: defaults.scheme},
+            "aor": {dck.descriptor: ParsedPropertyOfClass(AOR), dck.gen: AOR},
+            "parameters": {dck.gen: lambda: b""},
+            "headers": {dck.gen: lambda: b""},
+            "absoluteURIPart": {dck.gen: lambda: None}}),
+        Parser, vb.ValueBinder):
     """A URI object.
 
     This decomposes addr-spec from RFC 3261:
@@ -233,22 +228,15 @@ class URI(
                 "URI %r has an empty aor." % self)
         return "{0.scheme}:{0.aor}{0.parameters}{0.headers}".format(self)
 
-    #def __repr__(self):
-    #    return (
-    #        "{0.__class__.__name__}(scheme={0.scheme!r}, aor={0.aor!r}, "
-    #        "absoluteURIPart={0.absoluteURIPart!r}, "
-    #        "parameters={0.parameters!r}, headers={0.headers!r})"
-    #        "".format(self))
-
 
 @TwoCompatibleThree
 class DNameURI(
-    DeepClass("_dnur_", {
-        "uri": {dck.descriptor: ParsedPropertyOfClass(URI), dck.gen: URI},
-        "display_name": {dck.gen: lambda: b""},
-        "headers": {dck.gen: lambda: b""},
-        "absoluteURIPart": {dck.gen: lambda: None}}),
-    Parser, vb.ValueBinder):
+        DeepClass("_dnur_", {
+            "uri": {dck.descriptor: ParsedPropertyOfClass(URI), dck.gen: URI},
+            "display_name": {dck.gen: lambda: b""},
+            "headers": {dck.gen: lambda: b""},
+            "absoluteURIPart": {dck.gen: lambda: None}}),
+        Parser, vb.ValueBinder):
     """A display name plus a uri value object.
 
     This is basically (name-addr/addr-spec) where:

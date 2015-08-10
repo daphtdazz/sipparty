@@ -24,16 +24,16 @@ import collections
 import logging
 import select
 from socket import (SOCK_STREAM, SOCK_DGRAM, AF_INET, AF_INET6)
-SOCK_TYPES = (SOCK_STREAM, SOCK_DGRAM)
-SOCK_TYPES_NAMES = ("SOCK_STREAM", "SOCK_DGRAM")
-SOCK_FAMILIES = (AF_INET, AF_INET6)
 from numbers import Integral
 import re
-
 from sipparty import (fsm, FSM, RetryThread)
 from sipparty.util import (
     DerivedProperty, WeakMethod, Singleton, TwoCompatibleThree)
 
+SOCK_TYPES = (SOCK_STREAM, SOCK_DGRAM)
+SOCK_TYPES_NAMES = ("SOCK_STREAM", "SOCK_DGRAM")
+SOCK_FAMILIES = (AF_INET, AF_INET6)
+SOCK_FAMILY_NAMES = ("IPv4", "IPv6")
 log = logging.getLogger(__name__)
 prot_log = logging.getLogger("messages")
 bytes = six.binary_type
@@ -74,11 +74,7 @@ class BadNetwork(TransportException):
 
 
 def SockFamilyName(family):
-    if family == socket.AF_INET:
-        return "IPv4"
-    if family == socket.AF_INET6:
-        return "IPv6"
-    assert family in (socket.AF_INET, socket.AF_INET6)
+    return SOCK_FAMILY_NAMES[SOCK_FAMILIES.index(family)]
 
 
 def SockTypeName(socktype):
@@ -196,7 +192,7 @@ class Transport(Singleton):
             port = self.DefaultPort
         if not isinstance(port, Integral) or 0 > port > 0xffff:
             raise ValueError("Invalid port: %r", port)
-        if not family in (None, AF_INET, AF_INET6):
+        if family not in (None, AF_INET, AF_INET6):
             raise ValueError("Invalid socket family %r" % family)
 
         try:

@@ -47,15 +47,15 @@ Tfk = TransformKeys
 
 
 class Dialog(
-    DeepClass("_dlg_", {
-        "fromURI": {dck.descriptor: ParsedPropertyOfClass(URI)},
-        "toURI": {dck.descriptor: ParsedPropertyOfClass(URI)},
-        "contactURI": {dck.descriptor: ParsedPropertyOfClass(URI)},
-        "remoteAddress": {},
-        "localTag": {},
-        "remoteTag": {},
-        "transport": {}}),
-    fsm.FSM, vb.ValueBinder):
+        DeepClass("_dlg_", {
+            "fromURI": {dck.descriptor: ParsedPropertyOfClass(URI)},
+            "toURI": {dck.descriptor: ParsedPropertyOfClass(URI)},
+            "contactURI": {dck.descriptor: ParsedPropertyOfClass(URI)},
+            "remoteAddress": {},
+            "localTag": {},
+            "remoteTag": {},
+            "transport": {}}),
+        fsm.FSM, vb.ValueBinder):
     """`Dialog` class has a slightly wider scope than a strict SIP dialog, to
     include one-off request response pairs (e.g. OPTIONS) as well as long-lived
     stateful relationships (Calls, Registrations etc.).
@@ -120,6 +120,7 @@ class Dialog(
         log.detail("%r", msg)
 
         mtype = msg.type
+
         def RaiseBadInput(msg=b""):
             raise(UnexpectedInput(
                 "%r instance fsm has no input for message type %r." % (
@@ -174,7 +175,8 @@ class Dialog(
             self.remoteAddress = remoteAddress
 
         for reqdAttr in (
-            "fromURI", "toURI", "contactURI", "remoteAddress", "transport"):
+                "fromURI", "toURI", "contactURI", "remoteAddress",
+                "transport"):
             attrVal = getattr(self, reqdAttr)
             if attrVal is None:
                 raise ValueError(

@@ -22,15 +22,15 @@ import timeit
 import time
 import logging
 import unittest
+from sipparty import (util, fsm)
+from sipparty.sip import transport
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     log = logging.getLogger()
 else:
     log = logging.getLogger(__name__)
-
-from sipparty import (util, fsm)
-from sipparty.sip import transport
 
 
 class TestTransport(unittest.TestCase):

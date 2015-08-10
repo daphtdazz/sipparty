@@ -20,6 +20,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+from sipparty.util import Enum
 
 # Refer to https://tools.ietf.org/html/rfc3261#section-25.1 for the ABNF.
 CRLF = b"\r\n"
@@ -225,23 +226,9 @@ header_value = (
     b"(?:{TEXT_UTF8charsopts}|{LWS}|{UTF8_CONT})*".format(**locals()))
 extension_header = b"{header_name}{HCOLON}{header_value}".format(**locals())
 
-
-class ProtocolError(Exception):
-    """Something didn't make sense in SIP."""
-    pass
-
-
-class ProtocolSyntaxError(ProtocolError):
-    """Syntax errors are when a request is missing some key bit from the
-    protocol, or is otherwise confused. Like trying to build
-    a request with a response code.
-    """
-
-
-class Incomplete(ProtocolError):
-    """Could not make a SIP message because it was incomplete.
-    """
-
+RequestTypes = Enum((
+    "ACK", "BYE", "CANCEL", "INVITE", "OPTIONS", "REGISTER"),
+    normalize=lambda x: bytes(x).upper())
 
 ResponseCodeMessages = {
     1: b"Unknown Trying Response",
@@ -316,6 +303,23 @@ ResponseCodeMessages = {
     604: b"Does Not Exist Anywhere",
     606: b"Not Acceptable",
 }
+
+
+class ProtocolError(Exception):
+    """Something didn't make sense in SIP."""
+    pass
+
+
+class ProtocolSyntaxError(ProtocolError):
+    """Syntax errors are when a request is missing some key bit from the
+    protocol, or is otherwise confused. Like trying to build
+    a request with a response code.
+    """
+
+
+class Incomplete(ProtocolError):
+    """Could not make a SIP message because it was incomplete.
+    """
 
 
 def ProvisionalDialogID(CallIDText, localTagText):

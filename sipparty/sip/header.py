@@ -99,9 +99,9 @@ class Header(Parser, vb.ValueBinder):
 
         fdc = self.FieldDelegateClass
         if hasattr(fdc, "Parse"):
-            create = lambda x: fdc.Parse(x)
+            def create(x): return fdc.Parse(x)
         else:
-            create = lambda x: fdc(x)
+            def create(x): return fdc(x)
 
         self.fields = [create(f) for f in fields]
 

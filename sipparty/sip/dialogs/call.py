@@ -37,6 +37,7 @@ for transitionKey in fsm.TransitionKeys:
 for transformKey in TransformKeys:
     locals()[transformKey] = transformKey
 
+
 class SimpleCall(Dialog):
 
     FSMDefinitions = {

@@ -208,63 +208,6 @@ class Message(vb.ValueBinder):
                     mheader.field.parameters, param_name,
                     getattr(Param, param_name)())
 
-    def applyTransform(self, targetmsg, tform, request=None):
-        #!Remove this!
-        assert 0
-        def setattratpath(obj, path, val):
-            nextobj = obj
-            tocomponents = path.split(".")
-            for to in tocomponents[:-1]:
-                nextobj = getattr(nextobj, to)
-            to_target = nextobj
-
-            setattr(to_target, tocomponents[-1], val)
-
-        def apply_copy_tuple(to_obj, from_obj, copy_tuple):
-
-            frmattr = copy_tuple[0]
-            if len(copy_tuple) > 1:
-                toattr = copy_tuple[1]
-            else:
-                toattr = frmattr
-            log.debug("Copy %r to %r", frmattr, toattr)
-
-            nextobj = to_obj
-            for fm in frmattr.split("."):
-                nextobj = getattr(nextobj, fm)
-            from_attribute = nextobj
-
-            setattratpath(to_obj, toattr, from_attribute)
-
-        # tform may be a list of transforms to perform in order, or just a
-        # single transform dictionary.
-        if isinstance(tform, collections.Mapping):
-            tform_list = [tform]
-        else:
-            assert isinstance(tform, collections.Sequence), (
-                "tform %r is not a Sequence or mapping type" % tform)
-            tform_list = tform
-
-        for tform in tform_list:
-            if transform.KeyActCopy in tform:
-                copylist = tform[transform.KeyActCopy]
-                for tp in copylist:
-                    apply_copy_tuple(targetmsg, self, tp)
-
-            if (
-                    transform.KeyActCopyFromRequest in tform and
-                    request is not None):
-                orig_list = tform[transform.KeyActCopyFromRequest]
-                for item in orig_list:
-                    apply_copy_tuple(targetmsg, request, tp)
-
-            addlist = tform.get(transform.KeyActAdd, [])
-            for add_tuple in addlist:
-                tpath = add_tuple[0]
-                new_obj = add_tuple[1]()
-                log.debug("Adding %r at path %r", new_obj, tpath)
-                setattratpath(targetmsg, tpath, new_obj)
-
     #
     # =================== INTERNAL METHODS ===================================
     #
@@ -337,9 +280,6 @@ class Message(vb.ValueBinder):
             return
 
         super(Message, self).__setattr__(attr, val)
-
-    def __del__(self):
-        log.debug("Deleting %r instance.", self.__class__.__name__)
 
     def __repr__(self):
         return (
