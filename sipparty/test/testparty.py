@@ -24,7 +24,7 @@ import time
 import logging
 import weakref
 import unittest
-import socket
+from socket import SOCK_STREAM, SOCK_DGRAM
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
@@ -57,43 +57,40 @@ class TestParty(unittest.TestCase):
         return self.assertTrue(exp is None)
 
     def setUp(self):
-        self._tp_sipPartyLogLevel = sip.party.log.level
-        sip.party.log.setLevel(logging.DEBUG)
-        dialog.log.setLevel(logging.DEBUG)
-        fsm.fsm.log.setLevel(logging.DEBUG)
-        sip.message.log.setLevel(logging.DEBUG)
+        #sip.party.log.setLevel(logging.DEBUG)
+        #dialog.log.setLevel(logging.DEBUG)
+        # fsm.fsm.log.setLevel(logging.DEBUG)
+        # sip.message.log.setLevel(logging.DEBUG)
         # util.log.setLevel(logging.DEBUG)
         #vb.log.setLevel(logging.DEBUG)
         #deepclass.log.setLevel(logging.DETAIL)
         # fsm.retrythread.log.setLevel(logging.DEBUG)
         # parse.log.setLevel(logging.DEBUG)
-        self.transLL = transport.log.level
         transport.log.setLevel(logging.DEBUG)
-        self.sipTransLL = siptransport.log.level
-        siptransport.log.setLevel(logging.DETAIL)
-
-    def tearDown(self):
-        sip.party.log.setLevel(self._tp_sipPartyLogLevel)
-        transport.log.setLevel(self.transLL)
-        siptransport.log.setLevel(self.sipTransLL)
+        #siptransport.log.setLevel(logging.DETAIL)
+        pass
 
     def testBasicPartyTCP(self):
-        self.subTestBasicParty(socket.SOCK_STREAM)
+        self.skipTest("TCP not yet implemented")
+        self.subTestBasicParty(SOCK_STREAM, )
 
     def testBasicPartyUDP(self):
-        self.subTestBasicParty(socket.SOCK_DGRAM)
+        self.subTestBasicParty(SOCK_DGRAM, "127.0.0.1")
 
-    def subTestBasicParty(self, socketType):
+    def testBasicPartyUDPIPv6(self):
+        self.subTestBasicParty(SOCK_DGRAM, "::1")
+
+    def subTestBasicParty(self, socketType, contactAddress):
 
         BasicParty = type(
             "BasicParty", (sip.party.Party,),
             {"InviteDialog": SimpleCall})
 
         p1 = BasicParty(
-            aor="alice@atlanta.com", contactURI_address="127.0.0.1",
+            aor="alice@atlanta.com", contactURI_address=contactAddress,
             socketType=socketType)
         p2 = BasicParty(
-            aor="bob@biloxi.com", contactURI_address="127.0.0.1",
+            aor="bob@biloxi.com", contactURI_address=contactAddress,
             socketType=socketType)
         p1.listen()
         p2.listen()
@@ -101,83 +98,33 @@ class TestParty(unittest.TestCase):
 
         WaitFor(lambda: invD.state == invD.States.InDialog, 1)
 
+        self.assertEqual(len(p1.inCallDialogs), 1)
+        self.assertEqual(len(p2.inCallDialogs), 1)
+
         invD.terminate()
         WaitFor(lambda: invD.state == invD.States.Terminated, 1)
 
+        # Try another call.
+        p3 = BasicParty(
+            aor="charlie@charlesville.com", contactURI_address=contactAddress,
+            socketType=socketType)
+        p3.listen()
+        invD3to2 = p2.invite(p3)
+
+        WaitFor(lambda: invD3to2.state == invD3to2.States.InDialog, 1)
+
+        self.assertEqual(len(p3.inCallDialogs), 1)
+        self.assertEqual(len(p2.inCallDialogs), 1)
+        self.assertEqual(len(p1.inCallDialogs), 0)
+
+        invD3to2.terminate()
+        WaitFor(lambda: invD3to2.state == invD3to2.States.Terminated, 1)
+
+        self.assertEqual(len(p3.inCallDialogs), 0)
+        self.assertEqual(len(p2.inCallDialogs), 0)
+        self.assertEqual(len(p1.inCallDialogs), 0)
+
         return
-
-        class SimpleParty(sip.party.Party):
-            pass
-
-        SimpleParty.SetScenario(sipscenarios.Simple)
-
-        self.assertEqual(SimpleParty.Scenario.__name__, "SimplePartyScenario")
-        log.info(SimpleParty.Scenario._fsm_definitionDictionary)
-        self.assertTrue(
-            'INVITE' in
-            SimpleParty.Scenario._fsm_definitionDictionary[
-                sip.scenario.InitialStateKey],
-            SimpleParty.Scenario._fsm_definitionDictionary[
-                sip.scenario.InitialStateKey])
-        self.assertFalse(
-            'invite' in
-            SimpleParty.Scenario._fsm_definitionDictionary[
-                sip.scenario.InitialStateKey])
-        p1 = SimpleParty(socketType=socketType)
-        wp1 = weakref.ref(p1)
-
-        log.warning("{ EXPECTING EXCEPTION UnexpectedState")
-        p1.sendInvite()
-        self.assertRaises(
-            sip.party.UnexpectedState,
-            lambda: wp1().waitUntilState(
-                wp1().States.InCall,
-                error_state=wp1().States.Initial))
-        log.warning("} EXPECTING EXCEPTION UnexpectedState")
-        p2 = SimpleParty(socketType=socketType)
-        wp2 = weakref.ref(p2)
-        p2.listen()
-        p1.sendInvite(p2)
-
-        WaitFor(lambda: wp1().state == wp1().States.InCall, 1)
-        WaitFor(lambda: p2.state == p2.States.InCall, 1)
-
-        self.assertEqual(p2.calleeAOR, p1.aor)
-
-        p1tag = p1.myTag
-        p2tag = p2.myTag
-        self.assertIsNotNone(p1tag)
-        self.assertIsNotNone(p2tag)
-        self.assertEqual(p1tag, p2.theirTag)
-        self.assertEqual(p2tag, p1.theirTag)
-
-        p1.sendBye()
-
-        WaitFor(lambda: wp1().state == wp1().States.CallEnded, 1)
-        WaitFor(lambda: p2.state == p2.States.CallEnded, 1)
-
-        self.assertEqual(p1tag, p1.myTag)
-        self.assertEqual(p2tag, p1.theirTag)
-        self.assertEqual(p1tag, p2.theirTag)
-        self.assertEqual(p2tag, p2.myTag)
-
-        wtp = weakref.ref(p1._pt_transport)
-        del p1
-        WaitFor(lambda: wtp() is None, 1)
-
-        # Test that we can re-use existing parties.
-        p2.reset()
-        p1 = SimpleParty(socketType=socketType)
-        wp1 = weakref.ref(p1)
-        p1.listen()
-        p2.sendInvite(p1)
-        WaitFor(lambda: wp1().state == wp1().States.InCall, 1)
-        WaitFor(lambda: p2.state == p2.States.InCall, 1)
-
-        p1.sendBye()
-
-        WaitFor(lambda: wp1().state == wp1().States.CallEnded, 1)
-        WaitFor(lambda: p2.state == p2.States.CallEnded, 1)
 
     def testDudParty(self):
 
@@ -202,7 +149,7 @@ class TestParty(unittest.TestCase):
                 }))
 
     def testBasicSIPP(self):
-        p1 = sipscenarios.SimpleParty(socketType=socket.SOCK_DGRAM)
+        p1 = sipscenarios.SimpleParty(socketType=SOCK_DGRAM)
 
         data = bytearray()
 
@@ -211,7 +158,7 @@ class TestParty(unittest.TestCase):
             data.extend(bytes)
             return len(bytes)
 
-        p2transport = sip.transport.Transport(socketType=socket.SOCK_DGRAM)
+        p2transport = sip.transport.Transport(socketType=SOCK_DGRAM)
         p2transport.byteConsumer = byteConsumer
         p2transport.listen("127.0.0.1", 5060)
         p1.sendInvite("sippuser@127.0.0.1")

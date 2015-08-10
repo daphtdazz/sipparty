@@ -50,11 +50,14 @@ class TransportException(Exception):
 @TwoCompatibleThree
 class UnresolvableAddress(TransportException):
 
-    def __init__(self, address):
+    def __init__(self, address, port):
+        super(UnresolvableAddress, self).__init__()
         self.address = address
+        self.port = port
 
     def __bytes__(self):
-        return "The address %r was not resolvable." % self.address
+        return "The address:port %r:%r was not resolvable." % (
+            self.address, self.port)
 
 
 @TwoCompatibleThree
@@ -191,17 +194,24 @@ class Transport(Singleton):
         """
         if port is None:
             port = self.DefaultPort
-        if family is None:
-            family = self.DefaultFamily
+        if not isinstance(port, Integral) or 0 > port > 0xffff:
+            raise ValueError("Invalid port: %r", port)
+        if not family in (None, AF_INET, AF_INET6):
+            raise ValueError("Invalid socket family %r" % family)
 
-        ais = socket.getaddrinfo(host, port)
-        log.debug(
-            "Options for address %r:%r:%r are %r.", host, port, family, ais)
-        for ai in ais:
-            if ai[0] == family:
+        try:
+            ais = socket.getaddrinfo(host, port)
+            log.debug(
+                "Options for address %r:%r family %r are %r.", host, port,
+                family, ais)
+            for ai in ais:
+                if family is not None and ai[0] != family:
+                    continue
                 return ai[4]
+        except socket.gaierror as exc:
+            pass
 
-        raise(UnresolvableAddress(address=host))
+        raise(UnresolvableAddress(address=host, port=port))
 
     def sendMessage(self, msg, toAddr, sockType=None):
         sockType = self.fixSockType(sockType)

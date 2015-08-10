@@ -39,11 +39,16 @@ class Host(Parser, TupleRepresentable, vb.ValueBinder):
 
     parseinfo = {
         Parser.Pattern:
-            "({host})(?:{COLON}({port}))?$"
+            # Have to expand {host} because it uses {IPv6reference} instead of
+            # {IPv6address}.
+            "(?:[[]({IPv6address})[]]|({IPv4address})|({hostname}))"
+            "(?:{COLON}({port}))?$"
             "".format(**prot.__dict__),
         Parser.Mappings:
             [("address",),
-             ("port",)],
+             ("address",),
+             ("address",),
+             ("port", int)],
     }
 
     def __init__(self, address=None, port=None, **kwargs):

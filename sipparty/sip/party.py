@@ -24,6 +24,7 @@ import weakref
 import re
 import time
 import socket
+from six import itervalues
 
 from sipparty import (splogging, util, vb, parse, fsm, ParsedPropertyOfClass)
 from sipparty.util import DerivedProperty
@@ -112,6 +113,22 @@ class Party(
              raise AttributeError(
                 "%r listenAddress is read-only." % (obj.__class__.__name__,))
         return lAddr
+
+    @property
+    def inCallDialogs(self):
+        """Return a list dialogs that are currently in call. This is only a
+        snapshot, and nothing should be assumed about how long the dialogs will
+        stay in call for!"""
+        try:
+            icds = [
+                invD
+                for invDs in itervalues(self._pt_inviteDialogs)
+                for invD in invDs
+                if invD.state == invD.States.InDialog]
+        except AttributeError as exc:
+            log.debug(exc, exc_info=True)
+            raise exc
+        return icds
 
     def __init__(self, socketType=None, **kwargs):
         """Create the party.
