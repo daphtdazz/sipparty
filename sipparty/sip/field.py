@@ -23,6 +23,7 @@ import prot
 
 from sipparty import (util, vb, parse)
 import components
+from components import (DNameURI)
 import defaults
 import param
 
@@ -65,7 +66,7 @@ class Field(parse.Parser, vb.ValueBinder):
         if value is not None:
             self.value = value
         else:
-            self.value = components.DNameURI()
+            self.value = DNameURI()
 
     def __bytes__(self):
         rs = b"{self.value}".format(**locals())
@@ -95,7 +96,8 @@ class Field(parse.Parser, vb.ValueBinder):
 
 
 class DNameURIField(Field):
-    delegateattributes = components.DNameURI.delegateattributes
+    delegateattributes = (
+        "uri", "aor", "host", "username", "address")
     vb_dependencies = (("value", delegateattributes),)
 
     parseinfo = {

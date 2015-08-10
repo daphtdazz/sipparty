@@ -76,23 +76,22 @@ class ValueBinder(object):
     #
     # =================== INSTANCE INTERFACE =================================
     #
-    def __init__(self, *args, **kwargs):
-
+    def __init__(self, **kwargs):
         for reqdattr in (
                 ("_vb_forwardbindings", {}), ("_vb_backwardbindings", {}),
                 ("_vb_weakBindingParent", None),
                 ("_vb_leader_res", None),
                 ("_vb_followers", None),
+                ("_vb_settingAttributes", set()),
                 ("_vb_delegate_attributes", {})):
             # Have to set this on dict to avoid recursing, as __setattr__
             # requires these to have already been set.  Also means we need to
             # do this before calling super, in case super sets any attrs.
             self.__dict__[reqdattr[0]] = reqdattr[1]
 
-        super(ValueBinder, self).__init__(*args, **kwargs)
-
         self._vb_initDependencies()
         self._vb_initBindings()
+        super(ValueBinder, self).__init__(**kwargs)
 
     def bind(self, frompath, topath, transformer=None):
         """When any item on frompath or topath changes, set topath to frompath.
@@ -177,9 +176,18 @@ class ValueBinder(object):
     def __getattr__(self, attr):
         """If the attribute is a delegated attribute, gets the attribute from
         the delegate, else calls super."""
-        if attr in self._vb_delegate_attributes:
-            return getattr(getattr(self, self._vb_delegate_attributes[attr]),
-                           attr)
+
+        # Avoid recursion if some subclass has not called init.
+        sd = self.__dict__
+        assert "_vb_delegate_attributes" in sd, (
+            "ValueBinder subclass %r has not called super.__init__()" % (
+                self.__class__.__name__))
+
+        # Check for delegate attributes.
+        das = sd["_vb_delegate_attributes"]
+        if attr in das:
+            log.detail("Delegate attribute %r", attr)
+            return getattr(getattr(self, das[attr]), attr)
 
         if hasattr(super(ValueBinder, self), "__getattr__"):
             return super(ValueBinder, self).__getattr__(attr)
@@ -197,11 +205,21 @@ class ValueBinder(object):
 
         Propagate bindings.
         """
+        log.detail("Set %r.", attr)
+
+        # Avoid recursion if a subclass has not called init (perhaps failed
+        # a part of its own initialization.
+        sd = self.__dict__
+        assert "_vb_delegate_attributes" in sd, (
+            "ValueBinder subclass %r has not called super.__init__()" % (
+                self.__class__.__name__))
 
         # If this is a delegated attribute, pass through.
-        if attr in self._vb_delegate_attributes:
-            deleattr = getattr(self, self._vb_delegate_attributes[attr])
-            log.debug("Passthrough delegate attr %r to %r", attr, deleattr)
+        das = sd["_vb_delegate_attributes"]
+        if attr in das:
+            attrattr = das[attr]
+            log.debug("Pass delegate attr %r to attr %r", attr, attrattr)
+            deleattr = getattr(self, attrattr)
             return setattr(deleattr, attr, val)
 
         if (attr not in set(("_vb_weakBindingParent", )) and
@@ -211,7 +229,15 @@ class ValueBinder(object):
             existing_val = None
 
         try:
+            settingAttributes = sd["_vb_settingAttributes"]
+            if attr in settingAttributes:
+                raise RuntimeError(
+                    "Recursion attempting to set attribute %r on %r "
+                    "instance." % (
+                        attr, self.__class__.__name__))
+            settingAttributes.add(attr)
             super(ValueBinder, self).__setattr__(attr, val)
+            settingAttributes.remove(attr)
         except AttributeError as exc:
             raise AttributeError(
                 "Can't set {attr!r} on {self.__class__.__name__!r} instance: "

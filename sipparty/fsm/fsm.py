@@ -73,10 +73,8 @@ class FSMClassInitializer(type):
 
         # Add any predefined transitions.
         self.AddClassTransitions()
-        log.debug("FSMClass states after AddClassTransitions: %r",
-                  self.States)
-        log.debug("FSMClass inputs after AddClassTransitions: %r",
-                  self.Inputs)
+        log.debug("FSMClass inputs / states after AddClassTransitions: %r / "
+                  "%r", self.States, self.Inputs)
 
 
 FSMType = type(
@@ -195,7 +193,7 @@ class FSM(object):
         stop_timers: list of timer names to stop when doing this transition
         (must have already been added with addTimer).
         """
-        log.debug("addTransition self: %r", self)
+        log.detail("addTransition self: %r", self)
 
         self_is_class = isinstance(self, type)
         timrs_dict = self._fsm_timers
@@ -217,7 +215,7 @@ class FSM(object):
         result[self.KeyNewState] = new_state
         result[self.KeyAction] = self._fsm_makeAction(action)
 
-        log.debug("  addTransition threads: %r", start_threads)
+        log.detail("  addTransition threads: %r", start_threads)
         result[self.KeyStartThreads] = (
             [] if start_threads is None else
             [self._fsm_makeThreadAction(thr) for thr in start_threads]
@@ -259,7 +257,7 @@ class FSM(object):
             if state not in self.States:
                 self.States.add(state)
 
-        log.debug("%r: %r -> %r", old_state, input, result[self.KeyNewState])
+        log.detail("%r: %r -> %r", old_state, input, result[self.KeyNewState])
 
     @util.class_or_instance_method
     def addTimer(self, name, action, retryer):
@@ -302,7 +300,6 @@ class FSM(object):
                  delegate=None):
         """name: a name for this FSM for debugging purposes.
         """
-        log.debug("FSM init")
         super(FSM, self).__init__()
 
         if name is None:
@@ -375,6 +372,9 @@ class FSM(object):
             self._fsm_thread = retrythread.RetryThread(
                 action=check_weak_self_timers)
             self._fsm_thread.start()
+
+        log.detail(
+            "  %r instance after init: %r", self.__class__.__name__, self)
 
     def addFDSource(self, fd, action):
         if not self._fsm_use_async_timers:

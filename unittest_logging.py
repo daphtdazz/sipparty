@@ -18,7 +18,6 @@ limitations under the License.
 """
 import logging
 logging.basicConfig(level=logging.INFO)
-log = logging.getLogger()
 
 if __name__ == "__main__":
     import unittest

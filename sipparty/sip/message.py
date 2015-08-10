@@ -148,6 +148,7 @@ class Message(vb.ValueBinder):
 
     @classmethod
     def isresponse(cls):
+        log.debug("Check if %r class is Response.", cls.__name__)
         return cls.__name__.find("Response") != -1
 
     def __init__(self, startline=None, headers=None, bodies=None,
@@ -176,6 +177,15 @@ class Message(vb.ValueBinder):
         self._establishbindings()
 
     def addHeader(self, hdr):
+        """Adds a header at the start of the first set of headers in the
+        message, if headers of that type exist, else adds it to the end of the
+        list of headers.
+
+        E.g:
+        Message: ToHeader, FromHeader, ViaHeader, ContactHeader
+        addHeader(ViaHeader) ->
+        Message: ToHeader, FromHeader, ViaHeader, ViaHeader, ContactHeader
+        """
         new_headers = []
         for oh in self.headers:
             if hdr is not None and hdr.type == oh.type:

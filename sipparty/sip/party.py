@@ -25,12 +25,14 @@ import re
 import time
 import socket
 
-from sipparty import (util, vb, parse, fsm)
+from sipparty import (splogging, util, vb, parse, fsm, ParsedPropertyOfClass)
+from sipparty.util import DerivedProperty
+from sipparty.deepclass import DeepClass, dck
 from sipparty.sip import Transport, SIPTransport
 import transport
 import siptransport
 import prot
-import components
+from components import (DNameURI, AOR, URI, Host)
 import scenario
 import defaults
 import request
@@ -78,98 +80,62 @@ class PartyMetaclass(type):
 
 
 @six.add_metaclass(PartyMetaclass)
-class Party(vb.ValueBinder):
+class Party(
+    DeepClass("_pt_", {
+        "dnameURI": {
+            dck.check: lambda dnu: isinstance(dnu, DNameURI),
+            dck.gen: DNameURI},
+        #"listenAddress": {dck.gen: lambda: None},
+        "contactURI": {
+            dck.descriptor: ParsedPropertyOfClass(URI),
+            dck.gen: URI},
+        "transport": {dck.gen: lambda: None}}),
+    vb.ValueBinder):
     """A party in a sip call, aka an endpoint, caller or callee etc.
     """
 
     #
     # =================== CLASS INTERFACE ====================================
     #
-    MessageBindings = [
-        ("..aor", "FromHeader.field.value.uri.aor"),
-        (".._pt_contactAddress", "ContactHeader.field.value.uri.aor.host.host",
-         lambda addrTuple: addrTuple[0] if addrTuple is not None else None),
-        (".._pt_contactAddress", "ContactHeader.field.value.uri.aor.host.port",
-         lambda addrTuple: addrTuple[1] if addrTuple is not None else None),
-    ]
-    _vb_bindings = [
-        ("_pt_transport.socketType",
-         "_pt_outboundRequest.ViaHeader.field.transport",
-         lambda x: transport.SockTypeName(x)),
-        ("calleeAOR", "_pt_outboundRequest.startline.uri.aor"),
-    ]
-    vb_dependencies = [
-        ("scenario", ["state", "wait", "waitForStateCondition"]),
-        ("_pt_transport", [
-            "localAddress", "localAddressPort", "listen", "connect"])]
-
-    Scenario = None
-
     InviteDialog = None
 
-    @classmethod
-    def SetScenario(cls, scenario_definition):
-        if cls.Scenario is not None:
-            raise AttributeError(
-                "Scenario for class %r is already set." % (cls.__name__,))
-        SClass = scenario.Scenario.ClassWithDefinition(
-            cls.__name__, scenario_definition)
-
-        log.debug(
-            "Inputs for scenario %r: %r.", SClass.__name__, SClass.Inputs)
-
-        for input in SClass.Inputs:
-            if isinstance(input, bytes) and hasattr(cls(), input):
-                raise KeyError(
-                    "Invalid input %r in scenario: class %r uses that as an "
-                    "attribute!" % (
-                        input, cls.__name__))
-        cls.Scenario = SClass
+    vb_dependencies = [
+        ["dnameURI", ["uri", "aor"]]]
 
     #
     # =================== INSTANCE INTERFACE =================================
     #
-    aor = util.DerivedProperty("_pt_aor", set="setAOR")
+    @property
+    def listenAddress(self):
+        lAddr = self._pt_listenAddress
+        if lAddr is None:
+             raise AttributeError(
+                "%r listenAddress is read-only." % (obj.__class__.__name__,))
+        return lAddr
 
-    contactAddress = util.DerivedProperty("_pt_contactAddress")
-    contactAddressHost = util.DerivedProperty(
-        "_pt_contactAddress", get=lambda obj, underlying: underlying[0],
-        set=lambda obj, val: obj._pt_contactAddress.__setitem__(0, val))
-    contactAddressPort = util.DerivedProperty(
-        "_pt_contactAddress", get=lambda obj, underlying: underlying[1],
-        set=lambda obj, val: obj._pt_contactAddress.__setitem__(1, val))
-    transport = util.DerivedProperty("_pt_transport")
-
-    def __init__(
-            self, aor=None, username=None, host=None, displayname=None,
-            socketType=socket.SOCK_STREAM):
+    def __init__(self, socketType=None, **kwargs):
         """Create the party.
+
+        :param dnameURI: The display name and URI of this party. To specify
+        child components, use underscores to split the path. So to set the AOR
+        of the URI, use dnameURI_uri_aor=AOR().
+        :param
         """
-        super(Party, self).__init__()
+        super(Party, self).__init__(**kwargs)
+        if log.level <= logging.DETAIL:
+            log.detail(
+                "%r dir after super init: %r", self.__class__.__name__,
+                dir(self))
 
-        self._pt_provInviteDialogs = {}
-        self._pt_establishedInviteDialogs = {}
+        # Invite dialogs: lists of dialogs keyed by remote AOR.
+        self._pt_inviteDialogs = {}
+        self._pt_listenAddress = None
 
-        # Mapping of messages based on type.
-        self._pt_requestMessages = {}
-        self._pt_aor = None
-        self._pt_contactAddress = None
-        self._pt_transport = None
-
-        if aor is not None:
-            self.aor = components.AOR.ExtractAOR(aor)
-
-        if False:
-            lAddr = self.aor.host.host
-            lPort = self.aor.host.port
-            self._pt_contactAddress = (lAddr, lPort)
-            log.debug(
-                "AOR: %r gave contact address %r", aor,
-                self._pt_contactAddress)
-
-        tp = SIPTransport()
-        self.transport = tp
-        tp.DefaultTransportType = socketType
+        if self.transport is None:
+            log.debug("Create new transport for")
+            tp = SIPTransport()
+            self.transport = tp
+            tp.DefaultTransportType = socketType
         log.debug("transport sock type: %s", transport.SockTypeName(
             tp.DefaultTransportType))
 
@@ -177,58 +143,65 @@ class Party(vb.ValueBinder):
 
     def listen(self):
 
-        assert self.aor is not None, (
-            "Need an AOR before we can listen for ")
+        uriHost = self.contactURI.aor.host
 
-        if self._pt_contactAddress is not None:
-            cAddr = self._pt_contactAddress[0]
-            cPort = self._pt_contactAddress[1]
-        else:
-            cAddr = None
-            cPort = None
+        contactAddress = uriHost.address
+        contactPort = uriHost.port
 
-        log.debug("Listen on host:%r, port:%r", cAddr, cPort)
-        self._pt_contactAddress = self._pt_transport.listen(
-            lHostName=cAddr, port=cPort)
-        log.info(
-            "Party listening on %r", self._pt_contactAddress)
+        if not contactAddress:
+            raise ValueError(
+                "%r instance has no contact address so cannot listen." % (
+                    self.__class__.__name__,))
 
-        self._pt_transport.addDialogHandlerForAOR(
-            self.aor, self.newDialogHandler)
+        uri = self.uri
+
+        log.debug("Listen on %r:%r", contactAddress, contactPort)
+
+        tp = self.transport
+        lAddr = tp.listen(lHostName=contactAddress, port=contactPort)
+        log.info("Party listening on %r", lAddr)
+        self._pt_listenAddress = lAddr
+        uriHost.address = lAddr[0]
+        uriHost.port = lAddr[1]
+
+        tp.addDialogHandlerForAOR(self.uri.aor, self.newDialogHandler)
 
     def invite(self, target, proxy=None):
 
-        if not hasattr(self, "aor"):
+        log.debug("Invite %r proxy %r", target, proxy)
+        if not hasattr(self, "uri"):
             raise AttributeError(
                 "Cannot build a request since we aren't configured with an "
-                "AOR!")
+                "URI!")
 
-        aor = components.AOR.ExtractAOR(target)
+        toURI = self._pt_resolveTargetURI(target)
+        if proxy is not None:
+            assert 0
+        else:
+            remoteAddress = self._pt_resolveProxyAddress(target)
 
-        if proxy is None:
-            proxy = self._pt_resolveProxyHostFromTarget(target)
-
-        invD = self.addNewInviteDialog()
-        invD.target = target
+        invD = self.newInviteDialog(toURI)
 
         log.debug("Initialize dialog to %r", proxy)
-        invD.initiate(proxy)
+        invD.initiate(remoteAddress=remoteAddress)
         return invD
 
-    def addNewInviteDialog(self):
+    def newInviteDialog(self, toURI):
         InviteDialog = self.InviteDialog
         if InviteDialog is None:
             raise AttributeError(
                 "Cannot build an INVITE dialog since we aren't configured "
                 "with a Dialog Type to use!")
 
-        invD = InviteDialog()
-        self._pt_configureDialog(invD)
+        invD = InviteDialog(
+            fromURI=self.uri, toURI=toURI, contactURI=self.contactURI,
+            transport=self.transport)
 
-        pdid = invD.provisionalDialogID
-        pdis = self._pt_provInviteDialogs
-        assert pdid not in pdis
-        pdis[pdid] = invD
+        ids = self._pt_inviteDialogs
+        if toURI not in ids:
+            ids[toURI] = [invD]
+        else:
+            ids[toURI].append(invD)
 
         return invD
 
@@ -248,13 +221,6 @@ class Party(vb.ValueBinder):
                 "waiting for state %r." % (
                     self.__class__.__name__, error_state, state))
 
-    def setAOR(self, value):
-        if self.aor is not None:
-            raise AttributeError(
-                "Cannot set AOR %s since %r instance already has AOR %s." % (
-                    value, self.__class__.__name__, self.aor))
-        self._pt_aor = value
-
     #
     # =================== DELEGATE IMPLEMENTATIONS ===========================
     #
@@ -265,19 +231,21 @@ class Party(vb.ValueBinder):
 
     def newDialogHandler(self, message):
         if message.type == Message.types.invite:
-            invD = self.addNewInviteDialog()
+            invD = self.newInviteDialog(
+                message.FromHeader.uri)
             invD.receiveMessage(message)
             return
+        assert 0
 
     #
     # =================== MAGIC METHODS ======================================
     #
     def __getattr__(self, attr):
 
-        if attr.startswith(b"message"):
-            messageType = attr.replace(b"message", b"", 1)
-            if messageType in self._pt_requestMessages:
-                return self._pt_requestMessages[messageType]
+        #if attr.startswith(b"message"):
+        #    messageType = attr.replace(b"message", b"", 1)
+        #    if messageType in self._pt_requestMessages:
+        #        return self._pt_requestMessages[messageType]
 
         try:
             return super(Party, self).__getattr__(attr)
@@ -287,89 +255,53 @@ class Party(vb.ValueBinder):
                 "{attr!r}.."
                 "".format(**locals()))
 
-        if attr == "States":
-            try:
-                return getattr(self.Scenario, attr)
-            except AttributeError:
-                raise AttributeError(
-                    "%r instance has no attribute %r as it is not "
-                    "configured with a Scenario." % (
-                        self.__class__.__name__, attr))
-
-        internalSendPrefix = "_send"
-        if attr.startswith(internalSendPrefix):
-            message = attr.replace(internalSendPrefix, "", 1)
-            try:
-                send_action = util.WeakMethod(
-                    self, "_pt_send", static_args=[message])
-            except:
-                log.exception("")
-                raise
-            return send_action
-
-        internalReplyPrefix = "_reply"
-        if attr.startswith(internalReplyPrefix):
-            message = attr.replace(internalReplyPrefix, "", 1)
-            try:
-                send_action = util.WeakMethod(
-                    self, "_pt_reply", static_args=[message])
-            except:
-                log.exception("")
-                raise
-            return send_action
-
-        scn = self.scenario
-        if scn is not None and attr in scn.Inputs:
-            try:
-                scn_action = util.WeakMethod(
-                    scn, "hit", static_args=[attr])
-                return scn_action
-            except:
-                log.exception("")
-                raise
-
-        try:
-            return super(Party, self).__getattr__(attr)
-        except AttributeError:
-            raise AttributeError(
-                "{self.__class__.__name__!r} instance has no attribute "
-                "{attr!r}; scenario inputs were {scn.Inputs}."
-                "".format(**locals()))
-
     #
     # =================== INTERNAL METHODS ===================================
     #
-    def _pt_configureDialog(self, dialog):
-        for attr in ("aor", "transport", "contactAddress"):
-            setattr(dialog, attr, getattr(self, attr))
+    def _pt_resolveTargetURI(self, target):
+        if hasattr(target, "uri"):
+            log.debug("Target has a URI to use.")
+            return target.uri
+
+        if isinstance(target, URI):
+            log.debug("Target is a URI.")
+            return target
+
+        if isinstance(target, bytes):
+            log.debug("Attempt to parse a URI from the target.")
+            return URI.Parse(target)
+
+        raise ValueError("Can't resolve URI from target %r" % (
+            target))
+
+    def _pt_resolveProxyAddress(self, target):
+        if hasattr(target, "listenAddress"):
+            pAddr = target.listenAddress
+            if pAddr is not None:
+                log.debug("Target has listen address %r", pAddr)
+                return pAddr
+        assert 0, repr(target)
+        if hasattr(target, "contactURI"):
+            log.debug("Target has a proxy contact URI.")
+            cURI = target.contactURI
+            return (cURI.address, cURI.port)
+
+        raise ValueError("Can't resolve proxy from target %r" % (
+            target,))
 
     def _pt_resolveProxyHostFromTarget(self, target):
         try:
-            if hasattr(target, "contactAddress"):
-                return target.contactAddress
+            if hasattr(target, "attributeAtPath"):
+                for apath in ("contactURI.address", ""):
+                    try:
+                        tcURI = target.attributeAtPath(apath)
+                        return tcURI
+                    except AttributeError:
+                        pass
 
-            aor = self._pt_resolveAORFromObject(target)
-            return aor.host
+            assert 0
         except TypeError:
             raise TypeError(
                 "%r instance cannot be derived from %r instance." % (
-                    components.Host.__class__.__name__,
+                    Host.__class__.__name__,
                     target.__class__.__name__))
-
-    def _pt_resetScenario(self):
-        self.scenario = None
-        if self.Scenario is not None:
-            self.scenario = self.Scenario(delegate=self)
-            self.scenario.actionCallback = util.WeakMethod(
-                self, "scenarioActionCallback")
-
-    def _pt_transformForReply(self, inputMessageType, responseType):
-        #! Remove this!
-        assert 0
-        indct = transform.EntryForMessageType(self.transform, inputMessageType)
-        tform = transform.EntryForMessageType(indct, responseType)
-        return tform
-
-
-def PartySubclass(name, transitions):
-    return type(name + "Party", (Party,), {"ScenarioDefinitions": transitions})

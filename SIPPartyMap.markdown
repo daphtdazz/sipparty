@@ -32,6 +32,12 @@
       transport (d field.transport)
       host (d field.host)
 
+    ContactHeader <= FieldDelegateHeader
+      FieldDelegateClass = field.DNameURIField
+      isStar
+      dname (d field.value)
+      uri (d field.value)
+
     Field
       value
       parameters

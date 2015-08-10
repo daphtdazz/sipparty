@@ -514,6 +514,7 @@ class DerivedProperty(object):
         self._rp_check = check
         self._rp_get = get
         self._rp_set = set
+        log.detail("%r", self)
 
     def __get__(self, obj, cls):
         # log.debug("Get derived prop for obj %r class %r.", obj, cls)

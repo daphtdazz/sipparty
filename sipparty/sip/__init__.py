@@ -25,5 +25,4 @@ from mediasession import (Session,)
 from siptransport import SIPTransport
 from dialog import (Dialog,)
 import party
-from party import (Party, PartySubclass, NoConnection)
-import scenario
+from party import (Party, NoConnection)

@@ -46,10 +46,25 @@ class ParsedProperty(object):
         return getattr(obj, self._pp_attr)
 
     def __set__(self, obj, val):
+        cls = self._pp_class
+        atr = self._pp_attr
         if isinstance(val, bytes):
-            val = self._pp_class.Parse(val)
+            val = cls.Parse(val)
+        else:
+            if not isinstance(val, cls):
+                raise ValueError(
+                    "Cannot set unparseable %r instance for attribute %r of "
+                    "%r instance." % (
+                        val.__class__.__name__, atr, cls))
+        setattr(obj, atr, val)
 
-        setattr(obj, self._pp_attr, val)
+
+def ParsedPropertyOfClass(cls):
+
+    def ParsedPropertyOfClassGenerator(name):
+        return ParsedProperty(name, cls)
+
+    return ParsedPropertyOfClassGenerator
 
 
 class Parser(object):

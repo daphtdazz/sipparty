@@ -1,5 +1,16 @@
 # Programming with ValueBinder #
 
+## Declaring bindings for a class. ##
+
+To declare bindings for all instances of a class in the class definition, use a `vb_bindings` class attribute list of bindings, such as:
+
+    class MyValueBinder(vb.ValueBinder):
+        vb_bindings = (
+            ("a", "b"),
+            ("a", "c", lambda a: a.lower()))
+
+The second example illustrates use of a transformer. Whenever `a` is changed, `c` is set to the result of the lambda acting on `a`.
+
 ## Delegated Attributes ##
 ValueBinder provides a way to implement delegated attributes. Say you had an object `a` with attribute `a.b`, and whenever someone set `c` on `a` (e.g. `a.c = 5`) you wanted to pass that through to `b`, essentially doing `a.b.c = 5`. (This can be useful in classes sharing code / interfaces by composition rather than inheritance.) In this case you can declare `vb_dependencies` class attribute for you object that has a list of delegated attributes, such as:
 

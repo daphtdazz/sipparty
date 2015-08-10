@@ -22,9 +22,11 @@ import logging
 import abc
 import numbers
 
-from sipparty import (vb, util, fsm)
+from sipparty import (splogging, vb, util, fsm, ParsedPropertyOfClass)
 from sipparty.fsm import (FSM, UnexpectedInput)
-import header
+from sipparty.deepclass import DeepClass, dck
+from components import (AOR, URI)
+from header import Call_IdHeader
 from request import Request
 from response import Response
 from message import Message, Response
@@ -44,7 +46,16 @@ TransformKeys = util.Enum((
 Tfk = TransformKeys
 
 
-class Dialog(fsm.FSM, vb.ValueBinder):
+class Dialog(
+    DeepClass("_dlg_", {
+        "fromURI": {dck.descriptor: ParsedPropertyOfClass(URI)},
+        "toURI": {dck.descriptor: ParsedPropertyOfClass(URI)},
+        "contactURI": {dck.descriptor: ParsedPropertyOfClass(URI)},
+        "remoteAddress": {},
+        "localTag": {},
+        "remoteTag": {},
+        "transport": {}}),
+    fsm.FSM, vb.ValueBinder):
     """`Dialog` class has a slightly wider scope than a strict SIP dialog, to
     include one-off request response pairs (e.g. OPTIONS) as well as long-lived
     stateful relationships (Calls, Registrations etc.).
@@ -73,15 +84,6 @@ class Dialog(fsm.FSM, vb.ValueBinder):
     #
     # =================== INSTANCE INTERFACE ==================================
     #
-    requests = util.DerivedProperty(
-        "_dlg_requests", lambda x: isinstance(x, list))
-    request = util.FirstListItemProxy("requests")
-    localTag = util.DerivedProperty("_dlg_localTag")
-    remoteTag = util.DerivedProperty(
-        "_dlg_remoteTag", lambda x: isinstance(x, TagParam))
-    callIDHeader = util.DerivedProperty(
-        "_dlg_callIDHeader", lambda x: isinstance(x, header.Header.call_id))
-    transport = util.DerivedProperty("_dlg_transport")
 
     @property
     def provisionalDialogID(self):
@@ -96,24 +98,14 @@ class Dialog(fsm.FSM, vb.ValueBinder):
                 "%r instance has no remote tag so is not yet in a dialog so "
                 "does not have a dialogID." % (self.__class__.__name__,))
         return prot.EstablishedDialogID(
-            self._dlg_callIDHeader.field, self.localTag.value, rt)
+            self._dlg_callIDHeader.field, self.localTag.value, rt.value)
 
-    def __init__(self, callIDHeader=None, callIDHost=None, remoteTag=None):
-        super(Dialog, self).__init__()
-        self._dlg_currentTransaction = None
-        self._dlg_requests = []
+    def __init__(self, **kwargs):
+        super(Dialog, self).__init__(**kwargs)
+
+        self._dlg_callIDHeader = None
         self._dlg_localTag = TagParam()
         self._dlg_remoteTag = None
-        self._dlg_transport = None
-        if callIDHeader is None:
-            callIDHeader = header.Header.call_id()
-            if callIDHost is not None:
-                callIDHeader.host = callIDHost
-        else:
-            assert callIDHost is None, (
-                "Can't pass both callIDHeader and callIDHost")
-
-        self.callIDHeader = callIDHeader
 
     def initiate(self, *args, **kwargs):
         log.debug("Initiating dialog...")
@@ -124,22 +116,38 @@ class Dialog(fsm.FSM, vb.ValueBinder):
 
     def receiveMessage(self, msg):
 
+        log.debug("Dialog receiving message")
+        log.detail("%r", msg)
+
         mtype = msg.type
         def RaiseBadInput(msg=b""):
             raise(UnexpectedInput(
                 "%r instance fsm has no input for message type %r." % (
                     self.__class__.__name__, mtype)))
 
+        if self._dlg_callIDHeader is None:
+            self._dlg_callIDHeader = msg.Call_IdHeader
+
         if self.remoteTag is None:
-            rtag = msg.FromHeader.parameters.tag
+            if msg.isresponse():
+                log.debug("Message is a response")
+                rtag = msg.ToHeader.parameters.tag
+            else:
+                log.debug("Message is a request")
+                rtag = msg.FromHeader.parameters.tag
             log.debug("Learning remote tag: %r", rtag)
             self.remoteTag = rtag
             tp = self.transport
             if tp is not None:
                 self.transport.updateDialogGrouping(self)
 
+        if self.contactURI is None:
+            cURI = msg.ContactHeader.uri
+            log.debug("Learning contactURI: %r", cURI)
+            self.contactURI = cURI
+
         if mtype in Request.types:
-            input = "receiveRequest" + msg.type.upper()
+            input = "receiveRequest" + getattr(Request.types, mtype)
             return self.hit(input, msg)
 
         rcode = mtype
@@ -155,23 +163,36 @@ class Dialog(fsm.FSM, vb.ValueBinder):
 
         RaiseBadInput()
 
-    def sendRequest(self, type, toAddr):
-        # TODO: write
-        #
-        # Transaction or not?
-        #
-        # Transform:
+    def sendRequest(self, type, remoteAddress=None):
+
+        if self._dlg_callIDHeader is None:
+            log.debug("First request, generate call ID header.")
+            self._dlg_callIDHeader = Call_IdHeader()
+
+        if remoteAddress is not None:
+            log.debug("Learning remote address: %r", remoteAddress)
+            self.remoteAddress = remoteAddress
+
+        for reqdAttr in (
+            "fromURI", "toURI", "contactURI", "remoteAddress", "transport"):
+            attrVal = getattr(self, reqdAttr)
+            if attrVal is None:
+                raise ValueError(
+                    "Attribute %r of %r instance required to send a request "
+                    "is None." % (
+                        reqdAttr, self.__class__.__name__))
 
         req = getattr(Message, type)()
-        req.startline.uri.aor = self.aor
-        req.FromHeader.field.value.uri.aor = self.aor
-        contact_host = req.ContactHeader.field.value.uri.aor.host
-        contact_host.host = self.contactAddress[0]
-        contact_host.port = self.contactAddress[1]
+        req.startline.uri = self.toURI
+        req.ToHeader.uri = self.toURI
+
+        req.FromHeader.field.value.uri = self.fromURI
+        req.ContactHeader.uri = self.contactURI
+        req.ViaHeader.field.host = self.contactURI.aor.host
 
         req.FromHeader.parameters.tag = self.localTag
         req.ToHeader.parameters.tag = self.remoteTag
-        req.Call_IDHeader = self.callIDHeader
+        req.Call_IdHeader = self._dlg_callIDHeader
 
         log.debug("send request of type %r", req.type)
 
@@ -180,7 +201,14 @@ class Dialog(fsm.FSM, vb.ValueBinder):
             raise AttributeError(
                 "%r instance has no transport attribute so cannot send a "
                 "request." % (self.__class__.__name__,))
-        tp.sendMessage(bytes(req), toAddr)
+
+        try:
+            reqb = bytes(req)
+        except prot.Incomplete:
+            log.error("Incomplete message: %r", req)
+            raise
+
+        tp.sendMessage(bytes(req), self.remoteAddress)
         tp.updateDialogGrouping(self)
 
     def sendResponse(self, response, req):
@@ -204,7 +232,7 @@ class Dialog(fsm.FSM, vb.ValueBinder):
 
         self.configureResponse(resp, req, tform)
         self.transport.sendMessage(
-            bytes(resp), req.ContactHeader.field.value.uri.aor.host)
+            bytes(resp), req.ContactHeader.host)
 
     def configureResponse(self, resp, req, tform):
         log.debug("Configure response starting %r, startline %r", resp,
@@ -254,28 +282,6 @@ class Dialog(fsm.FSM, vb.ValueBinder):
     #
     # =================== DELEGATE METHODS ====================================
     #
-    def messageConsumer(self, message):
-        assert 0
-        log.debug("Received a %r message.", message.type)
-        tt = None
-        cleaor = None
-        if self.theirTag is None:
-            if message.isrequest():
-                tt = message.FromHeader.field.parameters.tag
-                cleaor = message.FromHeader.field.value.uri.aor
-            else:
-                tt = message.ToHeader.field.parameters.tag
-                cleaor = message.ToHeader.field.value.uri.aor
-            self.theirTag = tt
-            self.calleeAOR = cleaor
-        log.debug("Their tag: %r", tt)
-        log.debug("Their AOR: %r", cleaor)
-
-        try:
-            self.scenario.hit(message.type, message)
-        except fsm.UnexpectedInput as exc:
-            # fsm has already logged the error. We just carry on.
-            pass
 
     #
     # =================== MAGIC METHODS =======================================
@@ -309,3 +315,20 @@ class Dialog(fsm.FSM, vb.ValueBinder):
             raise AttributeError(
                 "%r instance has no attribute %r." % (
                     self.__class__.__name__, attr))
+
+    #
+    # =================== INTERNAL METHODS ====================================
+    #
+    def _dlg_resolveTarget(self, target):
+        if self._dlg_remoteAddress is None:
+            if target is None:
+                raise ValueError("No target set to send to.")
+
+        if target is None:
+            target = self._dlg_remoteAddress
+            log.debug("Use cached address %r", target)
+            return target
+
+        log.debug("Use supplied target %r", target)
+        self._dlg_remoteAddress = target
+        return target

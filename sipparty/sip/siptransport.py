@@ -92,7 +92,7 @@ class SIPTransport(Transport):
     def sendMessage(self, msg, toAddr, sockType=None):
         log.debug("Send message to %r type %s", toAddr, sockType)
         if isinstance(toAddr, Host):
-            toAddr = self.resolveHost(toAddr.host, toAddr.port)
+            toAddr = self.resolveHost(toAddr.address, toAddr.port)
 
         if isinstance(toAddr, bytes):
             toAddr = self.resolveHost(toAddr)
@@ -166,18 +166,28 @@ class SIPTransport(Transport):
     def consumeInDialogMessage(self, msg):
         toAOR = msg.ToHeader.field.value.uri.aor
         estDs = self.establishedDialogs
-        did = prot.EstablishedDialogID(
-            msg.Call_IDHeader.field, msg.FromHeader.parameters.tag.value,
-            msg.ToHeader.parameters.tag.value)
 
-        log.debug("Is established dialog %r in %r?", did, estDs)
+        if msg.isresponse():
+            log.debug("Message is response")
+            did = prot.EstablishedDialogID(
+                msg.Call_IDHeader.field, msg.FromHeader.parameters.tag.value,
+                msg.ToHeader.parameters.tag.value)
+        else:
+            log.debug("Message is request")
+            did = prot.EstablishedDialogID(
+                msg.Call_IDHeader.field, msg.ToHeader.parameters.tag.value,
+                msg.FromHeader.parameters.tag.value)
+
+        log.detail("Is established dialog %r in %r?", did, estDs)
         if did in estDs:
+            log.debug("Found established dialog for %r", did)
             return estDs[did].receiveMessage(msg)
 
         pdid = prot.ProvisionalDialogIDFromEstablishedID(did)
         provDs = self.provisionalDialogs
-        log.debug("Is provisional dialog %r in %r?", pdid, provDs)
+        log.detail("Is provisional dialog %r in %r?", pdid, provDs)
         if pdid in provDs:
+            log.debug("Found provisional dialog for %r", pdid)
             return provDs[pdid].receiveMessage(msg)
 
         log.warning(

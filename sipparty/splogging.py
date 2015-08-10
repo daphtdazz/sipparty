@@ -22,9 +22,12 @@ logging.DETAIL = 5
 logging.addLevelName(logging.DETAIL, "DETAIL")
 
 
-
 class SPLogger(logging.getLoggerClass()):
     def detail(self, msg, *args, **kwargs):
         self.log(logging.DETAIL, msg, *args, **kwargs)
 
 logging.setLoggerClass(SPLogger)
+
+# Change particular logger levels for debugging purposes.
+#logging.getLogger("sipparty.deepclass").setLevel(logging.DETAIL)
+#logging.getLogger("sipparty.util").setLevel(logging.DETAIL)

@@ -17,10 +17,11 @@ limitations under the License.
 import splogging
 import util
 import vb
+from deepclass import DeepClass
 import fsm
 from fsm import (FSM, FSMTimeout, RetryThread)
 import parse
-from parse import (Parser, ParsedProperty, ParseError)
+from parse import (Parser, ParsedProperty, ParsedPropertyOfClass, ParseError)
 import sdp
 
 import sip

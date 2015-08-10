@@ -26,8 +26,10 @@ import logging
 log = logging.getLogger(__name__)
 
 import prot
-from sipparty import (vb, Parser, ParsedProperty)
+from sipparty import (vb, Parser, ParsedProperty, ParsedPropertyOfClass)
 from sipparty.util import TwoCompatibleThree, TupleRepresentable
+from sipparty.deepclass import (DeepClass, dck)
+import defaults
 
 bytes = six.binary_type
 
@@ -40,17 +42,17 @@ class Host(Parser, TupleRepresentable, vb.ValueBinder):
             "({host})(?:{COLON}({port}))?$"
             "".format(**prot.__dict__),
         Parser.Mappings:
-            [("host",),
+            [("address",),
              ("port",)],
     }
 
-    def __init__(self, host=None, port=None):
+    def __init__(self, address=None, port=None, **kwargs):
         super(Host, self).__init__()
-        self.host = host
+        self.address = address
         self.port = port
 
     def addrTuple(self):
-        addrHost = "" if self.host is None else self.host
+        addrHost = "" if self.address is None else self.address
         addrPort = defaults.port if self.port is None else self.port
         addrFlowInfo = 0
         addrScopeID = 0
@@ -61,17 +63,17 @@ class Host(Parser, TupleRepresentable, vb.ValueBinder):
     #
     def __bytes__(self):
 
-        host = self.host
+        address = self.address
         port = self.port
 
         if not port and hasattr(defaults, "useports") and defaults.useports:
             port = defaults.port
 
         isIpv6 = False
-        if host:
-            log.detail("Resolve host: %s", bytes(host))
+        if address:
+            log.detail("Resolve address: %s", bytes(address))
             try:
-                ais = socket.getaddrinfo(bytes(host), 0)
+                ais = socket.getaddrinfo(bytes(address), 0)
                 for ai in ais:
                     if ai[0] == socket.AF_INET:
                         break
@@ -79,24 +81,28 @@ class Host(Parser, TupleRepresentable, vb.ValueBinder):
             except socket.gaierror:
                 pass
 
-        if host and port:
+        if address and port:
             if isIpv6:
-                return b"[{host}]:{port}".format(**locals())
-            return b"{host}:{port}".format(**locals())
+                return b"[{address}]:{port}".format(**locals())
+            return b"{address}:{port}".format(**locals())
 
-        if self.host:
+        if self.address:
             if isIpv6:
-                return b"[{host}]".format(**locals())
-            return b"{host}".format(**locals())
+                return b"[{address}]".format(**locals())
+            return b"{address}".format(**locals())
 
         return b""
 
     def tupleRepr(self):
-        return (self.host, self.port)
+        return (self.address, self.port)
 
 
 @TwoCompatibleThree
-class AOR(Parser, TupleRepresentable, vb.ValueBinder):
+class AOR(
+    DeepClass("_aor_", {
+        "username": {},
+        "host": {dck.descriptor: ParsedPropertyOfClass(Host), dck.gen: Host}}),
+    Parser, TupleRepresentable, vb.ValueBinder):
     """A AOR object."""
 
     parseinfo = {
@@ -107,6 +113,9 @@ class AOR(Parser, TupleRepresentable, vb.ValueBinder):
             [("username",),
              ("host", Host)],
     }
+
+    vb_dependencies = [
+        ["host", ["address", "port"]]]
 
     @classmethod
     def ExtractAOR(cls, target):
@@ -127,7 +136,6 @@ class AOR(Parser, TupleRepresentable, vb.ValueBinder):
 
     def __init__(self, username=None, host=None, **kwargs):
         super(AOR, self).__init__()
-        self._aor_host = None
         self.username = username
         if host is None:
             host = Host()
@@ -153,7 +161,14 @@ class AOR(Parser, TupleRepresentable, vb.ValueBinder):
 
 
 @TwoCompatibleThree
-class URI(Parser, vb.ValueBinder):
+class URI(
+    DeepClass("_uri_", {
+        "scheme": {dck.gen: lambda: defaults.scheme},
+        "aor": {dck.descriptor: ParsedPropertyOfClass(AOR), dck.gen: AOR},
+        "parameters": {dck.gen: lambda: b""},
+        "headers": {dck.gen: lambda: b""},
+        "absoluteURIPart": {dck.gen: lambda: None}}),
+    Parser, vb.ValueBinder):
     """A URI object.
 
     This decomposes addr-spec from RFC 3261:
@@ -187,25 +202,14 @@ class URI(Parser, vb.ValueBinder):
              ("absoluteURIPart",)],
     }
 
-    def __init__(
-            self, scheme=None, aor=None, absoluteURIPart=None, parameters=b"",
-            headers=b""):
-        super(URI, self).__init__()
+    vb_dependencies = [
+        ["aor", ["address", "port", "username", "host"]]]
 
-        if scheme is None:
-            scheme = defaults.scheme
-        self.scheme = scheme
-
-        if aor is None:
-            aor = AOR()
-        self.aor = aor
+    def __init__(self, **kwargs):
+        super(URI, self).__init__(**kwargs)
 
         # If it wasn't a SIP/SIPS URL, this contains the body of the URL (the
         # bit after the scheme).
-        self.absoluteURIPart = absoluteURIPart
-
-        self.parameters = parameters
-        self.headers = headers
 
     def __bytes__(self):
         if not self.scheme:
@@ -216,24 +220,30 @@ class URI(Parser, vb.ValueBinder):
             if not auripart:
                 raise prot.Incomplete(
                     "URI %r has an empty absoluteURIPart" % self)
-            return b"{scheme}:{absoluteURIPart}".format(**self.__dict__)
+            return b"{0.scheme}:{0.absoluteURIPart}".format(self)
 
         aorbytes = bytes(self.aor)
         if not aorbytes:
             raise prot.Incomplete(
                 "URI %r has an empty aor." % self)
-        return "{scheme}:{aor}{parameters}{headers}".format(**self.__dict__)
+        return "{0.scheme}:{0.aor}{0.parameters}{0.headers}".format(self)
 
-    def __repr__(self):
-        return (
-            "{0.__class__.__name__}(scheme={0.scheme!r}, aor={0.aor!r}, "
-            "absoluteURIPart={0.absoluteURIPart!r}, "
-            "parameters={0.parameters!r}, headers={0.headers!r})"
-            "".format(self))
+    #def __repr__(self):
+    #    return (
+    #        "{0.__class__.__name__}(scheme={0.scheme!r}, aor={0.aor!r}, "
+    #        "absoluteURIPart={0.absoluteURIPart!r}, "
+    #        "parameters={0.parameters!r}, headers={0.headers!r})"
+    #        "".format(self))
 
 
 @TwoCompatibleThree
-class DNameURI(Parser, vb.ValueBinder):
+class DNameURI(
+    DeepClass("_dnur_", {
+        "uri": {dck.descriptor: ParsedPropertyOfClass(URI), dck.gen: URI},
+        "display_name": {dck.gen: lambda: b""},
+        "headers": {dck.gen: lambda: b""},
+        "absoluteURIPart": {dck.gen: lambda: None}}),
+    Parser, vb.ValueBinder):
     """A display name plus a uri value object.
 
     This is basically (name-addr/addr-spec) where:
@@ -250,9 +260,10 @@ class DNameURI(Parser, vb.ValueBinder):
 
     """
 
-    delegateattributes = ["dname", "uri"]
+    vb_dependencies = [
+        ("uri", ["aor", "host"])]
 
-    dname_mapping = ("dname", None, lambda x: x.strip())
+    display_name_mapping = ("display_name", None, lambda x: x.strip())
     uri_mapping = ("uri", URI)
     parseinfo = {
         Parser.Pattern:
@@ -263,32 +274,19 @@ class DNameURI(Parser, vb.ValueBinder):
         Parser.Mappings:
             [uri_mapping,
              uri_mapping,
-             dname_mapping,
+             display_name_mapping,
              uri_mapping]
     }
 
-    def __init__(self, dname=None, uri=None):
-        super(DNameURI, self).__init__()
-
-        if uri is None:
-            uri = URI()
-
-        self.dname = dname
-        self.uri = uri
+    def __init__(self, **kwargs):
+        super(DNameURI, self).__init__(**kwargs)
 
     def __bytes__(self):
-        if self.dname and self.uri:
-            return(b"\"{self.dname}\" <{self.uri}>".format(**locals()))
+        if self.display_name and self.uri:
+            return(b"\"{self.display_name}\" <{self.uri}>".format(**locals()))
 
         if self.uri:
             return(b"<{self.uri}>".format(**locals()))
 
         raise prot.Incomplete(
             "DNameURI %r needs at least a URI to mean something." % self)
-
-    def __repr__(self):
-        return (
-            "{0.__class__.__name__}(dname={0.dname!r}, uri={0.uri!r})"
-            "".format(self))
-
-import defaults

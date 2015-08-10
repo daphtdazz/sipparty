@@ -28,6 +28,7 @@ SOCK_TYPES = (SOCK_STREAM, SOCK_DGRAM)
 SOCK_TYPES_NAMES = ("SOCK_STREAM", "SOCK_DGRAM")
 SOCK_FAMILIES = (AF_INET, AF_INET6)
 from numbers import Integral
+import re
 
 from sipparty import (fsm, FSM, RetryThread)
 from sipparty.util import (
@@ -37,6 +38,9 @@ log = logging.getLogger(__name__)
 prot_log = logging.getLogger("messages")
 bytes = six.binary_type
 itervalues = six.itervalues
+IPv4RE = re.compile("([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})")
+assert IPv4RE.match("1.2.3.4")
+assert not IPv4RE.match("1.2.3a4")
 
 
 class TransportException(Exception):
@@ -98,10 +102,12 @@ def GetBoundSocket(family, socktype, address):
     # family e.g. AF_INET / AF_INET6
     # socktype e.g. SOCK_STREAM
     # Just grab the first addr info if we haven't
-    log.debug("GetBoundSocket addr:%r port:%r family:%r socktype:%r",
+    log.debug("GetBoundSocket addr:%r port:%r family:%r socktype:%r...",
               address[0], address[1], family, SockTypeName(socktype))
 
     addrinfos = socket.getaddrinfo(address[0], address[1], family, socktype)
+    log.debug("Got addresses.")
+    log.detail("  %r", addrinfos)
 
     if len(addrinfos) == 0:
         raise BadNetwork("Could not find an address to bind to %r." % address)

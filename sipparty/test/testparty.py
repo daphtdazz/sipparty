@@ -31,9 +31,9 @@ if __name__ == "__main__":
     log = logging.getLogger()
 else:
     log = logging.getLogger(__name__)
-    log.setLevel(logging.INFO)
+    log.setLevel(logging.DEBUG)
 
-from sipparty import (fsm, sip, util, vb)
+from sipparty import (fsm, sip, util, vb, deepclass, parse)
 from sipparty.util import WaitFor
 from sipparty.sip import components, dialog, transport, siptransport, party
 from sipparty.sip.transport import Transport
@@ -61,27 +61,21 @@ class TestParty(unittest.TestCase):
         sip.party.log.setLevel(logging.DEBUG)
         dialog.log.setLevel(logging.DEBUG)
         fsm.fsm.log.setLevel(logging.DEBUG)
-        # sip.message.log.setLevel(logging.DEBUG)
+        sip.message.log.setLevel(logging.DEBUG)
         # util.log.setLevel(logging.DEBUG)
-        # vb.log.setLevel(logging.DEBUG)
-        #fsm.retrythread.log.setLevel(logging.DEBUG)
+        #vb.log.setLevel(logging.DEBUG)
+        #deepclass.log.setLevel(logging.DETAIL)
+        # fsm.retrythread.log.setLevel(logging.DEBUG)
+        # parse.log.setLevel(logging.DEBUG)
         self.transLL = transport.log.level
         transport.log.setLevel(logging.DEBUG)
         self.sipTransLL = siptransport.log.level
-        siptransport.log.setLevel(logging.DEBUG)
+        siptransport.log.setLevel(logging.DETAIL)
 
     def tearDown(self):
         sip.party.log.setLevel(self._tp_sipPartyLogLevel)
         transport.log.setLevel(self.transLL)
         siptransport.log.setLevel(self.sipTransLL)
-
-    def testIncompleteParty(self):
-        sipclient = sipscenarios.SimpleParty()
-        tp = weakref.ref(sipclient._pt_transport)
-        self.assertIsNotNone(tp())
-        del sipclient
-        WaitFor(lambda: tp() is None, 2)
-        self.assertIsNone(tp())
 
     def testBasicPartyTCP(self):
         self.subTestBasicParty(socket.SOCK_STREAM)
@@ -95,13 +89,20 @@ class TestParty(unittest.TestCase):
             "BasicParty", (sip.party.Party,),
             {"InviteDialog": SimpleCall})
 
-        p1 = BasicParty(aor="alice@atlanta.com", socketType=socketType)
-        p2 = BasicParty(aor="bob@biloxi.com", socketType=socketType)
+        p1 = BasicParty(
+            aor="alice@atlanta.com", contactURI_address="127.0.0.1",
+            socketType=socketType)
+        p2 = BasicParty(
+            aor="bob@biloxi.com", contactURI_address="127.0.0.1",
+            socketType=socketType)
         p1.listen()
         p2.listen()
         invD = p1.invite(p2)
 
         WaitFor(lambda: invD.state == invD.States.InDialog, 1)
+
+        invD.terminate()
+        WaitFor(lambda: invD.state == invD.States.Terminated, 1)
 
         return
 
