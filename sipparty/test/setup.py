@@ -29,6 +29,7 @@ class SIPPartyTestCase(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(SIPPartyTestCase, self).__init__(*args, **kwargs)
         self._sptc_logLevels = {}
+        self._sptc_searchedModules = None
 
     def tearDown(self):
         self.popAllLogLevels()
@@ -51,15 +52,22 @@ class SIPPartyTestCase(unittest.TestCase):
 
         # Need to search for the submodule in all modules.
         for attr in mdr:
-            if type(attr) != type(sipparty):
+            if attr in self._sptc_searchedModules:
                 continue
-
+            self._sptc_searchedModules.add(attr)
+            attr = getattr(module, attr)
+            if type(attr) != type(sipparty):
+                #log.detail("%r not a module, is %r", attr, attr.__class__)
+                continue
+            log.detail("Look at module %r", attr)
             res = self.pushLogLevelToSubMod(attr, subModuleName, level)
             if res is not None:
                 return res
 
     def setLogLevel(self, moduleName, level):
+        self._sptc_searchedModules = set()
         lastLevel = self.pushLogLevelToSubMod(sipparty, moduleName, level)
+        self._sptc_searchedModules = None
         if lastLevel is None:
             raise AttributeError("No logger found for module %r" % moduleName)
         return lastLevel

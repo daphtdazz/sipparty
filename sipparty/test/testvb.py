@@ -22,6 +22,7 @@ import os
 import re
 import logging
 import unittest
+from setup import SIPPartyTestCase
 from sipparty import vb
 
 # If main get the root logger.
@@ -32,14 +33,11 @@ else:
     log = logging.getLogger(__name__)
 
 
-class TestVB(unittest.TestCase):
+class TestVB(SIPPartyTestCase):
 
     def setUp(self):
-        self._vb_loggingLevel = vb.log.level
-        vb.log.setLevel(logging.DEBUG)
-
-    def tearDown(self):
-        vb.log.setLevel(self._vb_loggingLevel)
+        super(TestVB, self).setUp()
+        self.pushLogLevel("vb", logging.DEBUG)
 
     def testBindings(self):
         VB = vb.ValueBinder
@@ -198,6 +196,26 @@ class TestVB(unittest.TestCase):
         self.assertEqual(len(a._vb_forwardbindings), 0)
         self.assertEqual(len(a._vb_backwardbindings), 0)
 
+    def testRefreshBindings(self):
+
+        a, ab = [vb.ValueBinder() for _ in range(2)]
+        a.bind("a", "c", lambda x: x * 2 if x is not None else None)
+        a.bind("b.d", "d")
+        a.b = ab
+        a.a = 2
+        a.b.d = 5
+        self.assertEqual(a.d, 5)
+        self.assertEqual(a.c, 4)
+        a.c = 3
+        self.assertEqual(a.c, 3)
+        self.assertEqual(a.a, 2)
+        a.d = 6
+        self.assertEqual(a.b.d, 5)
+        self.assertEqual(a.d, 6)
+        a.refreshBindings()
+        self.assertEqual(a.c, 2)
+        self.assertEqual(a.a, 2)
+        self.assertEqual(a.d, 5)
 
 if __name__ == "__main__":
     sys.exit(unittest.main())

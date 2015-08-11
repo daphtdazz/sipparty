@@ -138,6 +138,22 @@ class ValueBinder(object):
         self._vb_unbinddirection(frompath, topath, self.VB_Forward)
         self._vb_unbinddirection(topath, frompath, self.VB_Backward)
 
+    def refreshBindings(self):
+        """Pushes all forward bindings to their target again."""
+        log.debug("Refresh %r instance bindings", self.__class__.__name__)
+        for fromattr, adict in iteritems(
+                self._vb_bindingsForDirection(self.VB_Forward)):
+            for fromattrattrs, bdict in iteritems(adict):
+                if len(fromattrattrs):
+                    frompath = self.VB_JoinPath((fromattr, fromattrattrs))
+                else:
+                    frompath = fromattr
+                val = self._vb_pullValue(frompath)
+                for topath, cdict in iteritems(bdict):
+                    log.debug("Push %r to %r", frompath, topath)
+                    self._vb_push_value_to_target(val, topath)
+
+
     @property
     def vb_parent(self):
         wp = self._vb_weakBindingParent
@@ -402,12 +418,13 @@ class ValueBinder(object):
         else:
             log.debug("Target not available to push %s", topath)
 
-    def _vb_pull_value_to_self(self, myattr, topath):
+    def _vb_pullValue(self, topath):
         log.debug("Pull value from %r", topath)
         target, toattr = self._vb_resolveboundobjectandattr(topath)
         if target is not None and hasattr(target, toattr):
             val = getattr(target, toattr)
             return val
+        return None
 
     def _vb_binddirection(self, frompath, topath, parent, transformer,
                           direction):
@@ -481,7 +498,7 @@ class ValueBinder(object):
                     self._vb_push_value_to_target(val, resolvedtopath)
             else:
                 log.debug("Pull value.")
-                val = self._vb_pull_value_to_self(fromattr, resolvedtopath)
+                val = self._vb_pullValue(resolvedtopath)
                 if transformer is not None:
                     val = transformer(val)
 
