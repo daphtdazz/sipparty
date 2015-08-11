@@ -28,19 +28,33 @@ from numbers import Integral
 import re
 from sipparty import (fsm, FSM, RetryThread)
 from sipparty.util import (
-    DerivedProperty, WeakMethod, Singleton, TwoCompatibleThree)
+    DerivedProperty, WeakMethod, Singleton, TwoCompatibleThree, Enum)
 
-SOCK_TYPES = (SOCK_STREAM, SOCK_DGRAM)
-SOCK_TYPES_NAMES = ("SOCK_STREAM", "SOCK_DGRAM")
-SOCK_FAMILIES = (AF_INET, AF_INET6)
-SOCK_FAMILY_NAMES = ("IPv4", "IPv6")
+SOCK_TYPES = Enum((SOCK_STREAM, SOCK_DGRAM))
+SOCK_TYPES_NAMES = Enum(("SOCK_STREAM", "SOCK_DGRAM"))
+SOCK_TYPE_IP_NAMES = Enum(("TCP", "UDP"))
+SOCK_FAMILIES = Enum((AF_INET, AF_INET6))
+SOCK_FAMILY_NAMES = Enum(("IPv4", "IPv6"))
 log = logging.getLogger(__name__)
 prot_log = logging.getLogger("messages")
 bytes = six.binary_type
 itervalues = six.itervalues
 IPv4RE = re.compile("([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})")
-assert IPv4RE.match("1.2.3.4")
-assert not IPv4RE.match("1.2.3a4")
+IPv6RE = re.compile("")
+
+# RFC 2373 IPv6 address format definitions.
+digitrange = b"0-9"
+DIGIT = b"[{digitrange}]".format(**locals())
+hexrange = b"{digitrange}a-fA-F".format(**locals())
+HEXDIG = b"[{hexrange}]".format(**locals())
+hex4 = b"{HEXDIG}{{1,4}}".format(**locals())
+# Surely IPv6 address length is limited?
+hexseq = b"{hex4}(?::{hex4})*".format(**locals())
+hexpart = b"(?:{hexseq}|{hexseq}::(?:{hexseq})?|::(?:{hexseq})?)".format(
+    **locals())
+IPv4address = b"{DIGIT}{{1,3}}(?:[.]{DIGIT}{{1,3}}){{3}}".format(**locals())
+IPv6address = b"{hexpart}(?::{IPv4address})?".format(**locals())
+port = b"{DIGIT}+".format(**locals())
 
 
 class TransportException(Exception):

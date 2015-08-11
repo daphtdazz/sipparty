@@ -17,7 +17,6 @@ limitations under the License.
 import prot
 import components
 import defaults
-from transport import Transport
 from request import (Request,)
 from header import (Header,)
 from message import (Message,)

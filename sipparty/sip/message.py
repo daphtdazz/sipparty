@@ -23,6 +23,7 @@ import collections
 
 from sipparty import (util, vb, parse)
 import prot
+from prot import Incomplete
 import components
 import param
 from param import Param
@@ -157,6 +158,12 @@ class Message(vb.ValueBinder):
 
         super(Message, self).__init__()
 
+        for field in ("headers", "bodies"):
+            if locals()[field] is None:
+                setattr(self, field, [])
+            else:
+                setattr(self, field, locals()[field])
+
         if startline is None:
             try:
                 ty = self.type
@@ -165,12 +172,6 @@ class Message(vb.ValueBinder):
             except Exception:
                 raise
         self.startline = startline
-
-        for field in ("headers", "bodies"):
-            if locals()[field] is None:
-                setattr(self, field, [])
-            else:
-                setattr(self, field, locals()[field])
 
         if autofillheaders:
             self.autofillheaders()
@@ -227,7 +228,12 @@ class Message(vb.ValueBinder):
         components.append(b"")  # need a newline at the end.
 
         log.debug("Last line: %r", components[-1])
-        return prot.EOL.join([bytes(_cp) for _cp in components])
+        try:
+            rp = prot.EOL.join([bytes(_cp) for _cp in components])
+            return rp
+        except Incomplete as exc:
+            exc.args += ('Message type %r' % self.type,)
+            raise
 
     def __getattr__(self, attr):
         """Get some part of the message. E.g. get a particular header like:
@@ -322,14 +328,13 @@ class Response(Message):
 class InviteMessage(Message):
     """An INVITE."""
 
-    bindings = [
+    vb_bindings = [
         ("startline.uri", "ToHeader.field.uri"),
         ("startline.protocol", "ViaHeader.field.protocol"),
         ("startline", "ViaHeader.field.parameters.branch.startline"),
         ("FromHeader.field.value.uri.aor.username",
          "ContactHeader.field.value.uri.aor.username"),
-        ("ContactHeader.field.value.uri.aor.host",
-         "ViaHeader.field.host.host"),
+        ("ContactHeader.address", "ViaHeader.address"),
         ("startline.type", "CseqHeader.field.reqtype")]
 
     mandatoryheaders = [

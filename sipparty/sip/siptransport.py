@@ -21,10 +21,10 @@ import logging
 import socket
 from weakref import WeakValueDictionary
 
+from sipparty import Transport
 from sipparty.util import DerivedProperty
 from sipparty.parse import ParseError
 from sipparty.sip import Message
-from transport import Transport
 from components import Host
 import prot
 

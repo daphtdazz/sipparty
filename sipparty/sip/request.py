@@ -20,10 +20,12 @@ import six
 import re
 import logging
 
-from sipparty import (parse, util, vb)
+from sipparty import (parse, util, vb, ParsedPropertyOfClass)
+from sipparty.util import (ClassType,)
+from sipparty.deepclass import (DeepClass, dck)
 import prot
 import defaults
-import components
+from components import (URI)
 
 log = logging.getLogger(__name__)
 bytes = six.binary_type
@@ -31,17 +33,25 @@ bytes = six.binary_type
 
 @six.add_metaclass(util.attributesubclassgen)
 @util.TwoCompatibleThree
-class Request(parse.Parser, vb.ValueBinder):
+class Request(
+        DeepClass("_rq_", {
+            "uri": {dck.descriptor: ParsedPropertyOfClass(URI), dck.gen: URI},
+            "protocol": {
+                dck.check: lambda pcl: pcl in prot.protocols,
+                dck.gen: lambda: defaults.sipprotocol
+            }
+        }),
+        parse.Parser, vb.ValueBinder):
     """Encapsulates a SIP method request line.
 
     Request-Line  =  Method SP Request-URI SP SIP-Version CRLF
     """
 
-    types = prot.RequestTypes
+    vb_dependencies = (
+        ("uri", ("aor", "username", "host", "address", "port")),
+    )
 
-    # "type" is a descriptor that returns the type (e.g. ACK or BYE) based on
-    # the class type, i.e. by removing "Request" from the class type.
-    type = util.ClassType("Request")
+    types = prot.RequestTypes
 
     # Parse description.
     parseinfo = {
@@ -52,20 +62,14 @@ class Request(parse.Parser, vb.ValueBinder):
             (1, lambda a: getattr(Request, a)(autofill=False)),
         parse.Parser.Mappings:
             [None,  # First group is for the constructor.
-             ("uri", components.URI),
+             ("uri", URI),
              ("protocol",)],
     }
 
+    type = ClassType("Request")
+
     def __bytes__(self):
         return "{self.type} {self.uri} {self.protocol}".format(self=self)
-
-    def __init__(self, uri=None, protocol=defaults.sipprotocol, autofill=True):
-        super(Request, self).__init__()
-        if autofill and uri is None:
-            uri = components.URI()
-
-        for prop in ("uri", "protocol"):
-            setattr(self, prop, locals()[prop])
 
     def __repr__(self):
         return (

@@ -52,13 +52,14 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
         for name, attrDesc in iteritems(topLevelAttributeDescs):
             locals()[name] = DCProperty(topLevelPrepend, name, attrDesc)
 
-        # Careful that these don't becomed class attributes!
+        # Careful that these don't become class attributes!
         del attrDesc
         del name
 
         def __init__(self, **kwargs):
 
-            log.detail("DeepClass %r init with %r", self.__class__.__name__,
+            clname = self.__class__.__name__
+            log.detail("DeepClass %r init with %r", clname,
                        kwargs)
 
             # Preload the top level attributes dictionary and our instance
@@ -101,7 +102,7 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
                         raise KeyError(
                             "Attribute %r of %r instance not a valid "
                             "subattribute of attribute %r." % (
-                                kwName, self.__class__.__name__,
+                                kwName, clname,
                                 topLevelAttrName))
                     tlaa[1][subAttr] = kwVal
                 else:
@@ -128,23 +129,36 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
             # generate values for anything that's missing.
             log.detail(
                 "Recurse to %r top level attributes: %r",
-                self.__class__.__name__, topLevelAttrArgs)
+                clname, topLevelAttrArgs)
             for tlattr, (tlval, tlsvals) in iteritems(topLevelAttrArgs):
                 if tlval is None:
+                    if (
+                            hasattr(self, tlattr) and
+                            getattr(self, tlattr) is not None):
+                        log.debug(
+                            "No need to generate %r for %r: already set "
+                            "(probably by bindings) to %r.", tlattr,
+                            clname, getattr(self, tlattr))
+                        continue
+
                     tlad = topLevelAttributeDescs[tlattr]
                     if dck.gen not in tlad:
                         log.debug(
                             "%r attribute not set and doesn't have generator",
                             tlattr)
+                        # Need to set the internal representation, to allow
+                        # check functions not to have to check for None.
                         setattr(self, "%s%s" % (topLevelPrepend, tlattr), None)
                         continue
 
-                    log.debug("Generating %r", tlattr)
+                    log.debug(
+                        "Generating attribute %r of %r instance", tlattr,
+                        clname)
                     gen = tlad[dck.gen]
                     tlval = gen(**tlsvals)
 
                 log.detail(
-                    "Set %r attribute %r to %r", self.__class__.__name__,
+                    "Set %r attribute %r to %r", clname,
                     tlattr, tlval)
                 setattr(self, tlattr, tlval)
 

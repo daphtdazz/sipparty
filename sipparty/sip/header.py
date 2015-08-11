@@ -24,6 +24,7 @@ import logging
 
 from sipparty import (util, vb, Parser)
 import prot
+from prot import Incomplete
 import components
 import field
 
@@ -117,8 +118,12 @@ class Header(Parser, vb.ValueBinder):
         self.fields = fields
 
     def __bytes__(self):
-        return b"{0}: {1}".format(
-            self.type, ",".join([bytes(v) for v in self.fields]))
+        try:
+            return b"{0}: {1}".format(
+                self.type, ",".join([bytes(v) for v in self.fields]))
+        except Incomplete as exc:
+            exc.args += ('Header type %r' % self.__class__.__name__,)
+            raise
 
     def __repr__(self):
         return (

@@ -236,8 +236,10 @@ class ValueBinder(object):
                     "instance." % (
                         attr, self.__class__.__name__))
             settingAttributes.add(attr)
-            super(ValueBinder, self).__setattr__(attr, val)
-            settingAttributes.remove(attr)
+            try:
+                super(ValueBinder, self).__setattr__(attr, val)
+            finally:
+                settingAttributes.remove(attr)
         except AttributeError as exc:
             raise AttributeError(
                 "Can't set {attr!r} on {self.__class__.__name__!r} instance: "

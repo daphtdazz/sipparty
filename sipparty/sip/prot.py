@@ -21,6 +21,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 from sipparty.util import Enum
+from sipparty.transport import (
+    digitrange, DIGIT, hexrange, HEXDIG, hex4, hexseq, hexpart, IPv4address,
+    IPv6address, port)
+
+protocols = Enum(("SIP/2.0",))
 
 # Refer to https://tools.ietf.org/html/rfc3261#section-25.1 for the ABNF.
 CRLF = b"\r\n"
@@ -37,10 +42,6 @@ upper_alpharange = b"A-Z"
 upper_alpha = b"[{upper_alpharange}]".format(**locals())
 alpharange = b"a-z{upper_alpharange}".format(**locals())
 ALPHA = b"[{alpharange}]".format(**locals())
-digitrange = b"0-9"
-DIGIT = b"[{digitrange}]".format(**locals())
-hexrange = b"{digitrange}a-fA-F".format(**locals())
-HEXDIG = b"[{hexrange}]".format(**locals())
 EQUAL = b"{SWS}={SWS}".format(**locals())
 DQUOTE = b"\""
 LAQUOT = b"<"
@@ -123,20 +124,13 @@ EOL = CRLF
 # Magic cookie used in branch parameters.
 BranchMagicCookie = b"z9hG4bK"
 
-hex4 = b"{HEXDIG}{{1,4}}".format(**locals())
-# Surely IPv6 address length is limited?
-hexseq = b"{hex4}(?::{hex4})*".format(**locals())
-hexpart = b"(?:{hexseq}|{hexseq}::(?:{hexseq})?|::(?:{hexseq})?)".format(
-    **locals())
-IPv4address = b"{DIGIT}{{1,3}}(?:[.]{DIGIT}{{1,3}}){{3}}".format(**locals())
-IPv6address = b"{hexpart}(?::{IPv4address})?".format(**locals())
-IPv6reference = b"[[]{IPv6address}[]]".format(**locals())
-port = b"{DIGIT}+".format(**locals())
+
 toplabel = b"{ALPHA}(?:[{alphanumrange}-]*{alphanum})?".format(
     **locals())
 domainlabel = b"(?:{alphanum}|{alphanum}[{alphanumrange}-]*{alphanum})".format(
     **locals())
 hostname = b"(?:{domainlabel}[.])*{toplabel}[.]?".format(**locals())
+IPv6reference = b"[[]{IPv6address}[]]".format(**locals())
 host = b"(?:{hostname}|{IPv4address}|{IPv6reference})".format(**locals())
 hostport = b"{host}(?::{port})?".format(**locals())
 # Should be SIP or token, but just use token.

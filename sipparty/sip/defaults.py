@@ -16,8 +16,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+from prot import protocols
+from sipparty.transport import SOCK_TYPE_IP_NAMES
+
 port = 5060
-sipprotocol = "SIP/2.0"
-transport = "UDP"
+sipprotocol = getattr(protocols, "SIP/2.0")
+transport = SOCK_TYPE_IP_NAMES.UDP
 scheme = "sip"
 max_forwards = 70

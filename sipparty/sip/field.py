@@ -20,10 +20,11 @@ import six
 import random
 import logging
 import prot
-
-from sipparty import (util, vb, parse)
+from sipparty import (util, vb, parse, ParsedPropertyOfClass)
+from sipparty.transport import SOCK_TYPE_IP_NAMES
+from sipparty.deepclass import (DeepClass, dck)
 import components
-from components import (DNameURI)
+from components import (DNameURI, Host)
 from request import Request
 import defaults
 import param
@@ -115,7 +116,21 @@ class DNameURIField(Field):
         super(DNameURIField, self).__init__(components.DNameURI())
 
 
-class ViaField(Field):
+class ViaField(
+        DeepClass("_vf_", {
+            "host": {
+                dck.descriptor: ParsedPropertyOfClass(Host), dck.gen: Host
+            },
+            "protocol": {
+                dck.check: lambda pcl: pcl in prot.protocols,
+                dck.gen: lambda: defaults.sipprotocol
+            },
+            "transport":{
+                dck.check: lambda tp: tp in SOCK_TYPE_IP_NAMES,
+                dck.gen: lambda: defaults.transport
+            }
+        }),
+        Field):
     """Via               =  ( "Via" / "v" ) HCOLON via-parm *(COMMA via-parm)
     via-parm          =  sent-protocol LWS sent-by *( SEMI via-params )
     via-params        =  via-ttl / via-maddr
@@ -128,7 +143,9 @@ class ViaField(Field):
     via-extension     =  generic-param
     """
 
-    delegateattributes = ["protocol", "transport", "host"]
+    delegateattributes = ("protocol", "transport", "host", "address", "port")
+    vb_dependencies = (
+        ("host", ("address", "port")),)
 
     parseinfo = {
         parse.Parser.Pattern:
@@ -145,16 +162,6 @@ class ViaField(Field):
              ("host", components.Host),
              ("parameters", param.Parameters)]
     }
-
-    def __init__(self, host=None, protocol=defaults.sipprotocol,
-                 transport=defaults.transport):
-        super(ViaField, self).__init__()
-        self.protocol = protocol
-        self.transport = transport
-        if host is None:
-            self.host = components.Host()
-        else:
-            self.host = host
 
     # We should always regen value because it is always a one-to-one mapping
     # onto protocol, transport and host.
@@ -178,7 +185,7 @@ class ViaField(Field):
         return rv
 
     def __setattr__(self, attr, val):
-        if attr in self.delegateattributes:
+        if False and attr in self.delegateattributes:
             if hasattr(self, "value"):
                 del self.value
         super(ViaField, self).__setattr__(attr, val)

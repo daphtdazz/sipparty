@@ -19,6 +19,7 @@ limitations under the License.
 import six
 import logging
 import unittest
+import sipparty
 from sipparty import sip
 from sipparty.sip import prot
 
@@ -28,6 +29,8 @@ log = logging.getLogger(__name__)
 class TestHeaders(unittest.TestCase):
 
     def testContactHeaders(self):
+
+        sipparty.parse.log.setLevel(logging.DEBUG)
 
         ch = sip.Header.contact()
 
@@ -41,8 +44,8 @@ class TestHeaders(unittest.TestCase):
 
         ch.isStar = False
         self.assertRaises(prot.Incomplete, lambda: six.binary_type(ch))
-        ch.field.value.uri.aor.username = b"bill"
-        ch.field.value.uri.aor.host = b"billland.com"
+        ch.field.username = b"bill"
+        ch.field.host = b"billland.com"
 
         self.assertEqual(
             six.binary_type(ch),

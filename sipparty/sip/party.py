@@ -29,9 +29,8 @@ from six import itervalues
 from sipparty import (splogging, util, vb, parse, fsm, ParsedPropertyOfClass)
 from sipparty.util import DerivedProperty
 from sipparty.deepclass import DeepClass, dck
-from sipparty.sip import Transport, SIPTransport
-import transport
-import siptransport
+from sipparty.sip import SIPTransport
+from sipparty.transport import SockTypeName
 import prot
 from components import (DNameURI, AOR, URI, Host)
 import scenario
@@ -152,7 +151,7 @@ class Party(
             tp = SIPTransport()
             self.transport = tp
             tp.DefaultTransportType = socketType
-        log.debug("transport sock type: %s", transport.SockTypeName(
+        log.debug("transport sock type: %s", SockTypeName(
             tp.DefaultTransportType))
 
         return
