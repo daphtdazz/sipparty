@@ -192,6 +192,7 @@ class ValueBinder(object):
     def __getattr__(self, attr):
         """If the attribute is a delegated attribute, gets the attribute from
         the delegate, else calls super."""
+        log.debug("%r get %r", self.__class__.__name__, attr)
 
         # Avoid recursion if some subclass has not called init.
         sd = self.__dict__
@@ -329,7 +330,7 @@ class ValueBinder(object):
 
     def __del__(self):
         """We need to remove all our bindings."""
-        self._vb_unbindAllCondition()
+        #self._vb_unbindAllCondition()
         sp = super(ValueBinder, self)
         if hasattr(sp, "__del__"):
             sp.__del__()

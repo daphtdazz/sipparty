@@ -127,6 +127,7 @@ class TestProtocol(SIPPartyTestCase):
         invite.fromheader.field.value.uri.aor.username = "alice"
         invite.fromheader.field.value.uri.aor.host = "atlanta.com"
         invite.contactheader.uri = "sip:localuser@127.0.0.1:5061"
+
         self.assertEqual(invite.contactheader.port, 5061)
         log.debug("Set via header host.")
         self.assertEqual(invite.viaheader.port, 5061)

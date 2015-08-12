@@ -17,6 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import six
+from six import (binary_type as bytes, itervalues, add_metaclass)
 import random
 import logging
 import prot
@@ -33,10 +34,9 @@ from param import (Parameters, Param)
 # More imports at end of file.
 
 log = logging.getLogger(__name__)
-bytes = six.binary_type
 
 
-@six.add_metaclass(util.CCPropsFor(("delegateattributes", "parseinfo")))
+@add_metaclass(util.CCPropsFor(("delegateattributes", "parseinfo")))
 @util.TwoCompatibleThree
 class Field(
         DeepClass("_fld_", {
@@ -67,21 +67,13 @@ class Field(
              ("parameters", Parameters)]
     }
 
-    def asdf__init__(self, **kwargs):
-        super(Field, self).__init__()
-        self.parameters = Parameters()
-        if value is not None:
-            self.value = value
-        else:
-            self.value = DNameURI()
+    def bytesGen(self, value):
+        yield bytes(value)
+        for pval in itervalues(self.parameters):
+            yield bytes(pval)
 
     def __bytes__(self):
-        rs = b"{self.value}".format(**locals())
-        rslist = [rs]
-        rslist.extend(
-            [bytes(val) for val in self.parameters.itervalues()])
-        log.debug(";.join(%r)", rslist)
-        rs = b";".join(rslist)
+        rs = b";".join(self.bytesGen(self.value))
         return rs
 
     def __setattr__(self, attr, val):
@@ -171,32 +163,22 @@ class ViaField(
              ("parameters", Parameters)]
     }
 
-    # We should always regen value because it is always a one-to-one mapping
-    # onto protocol, transport and host.
-    #value = util.GenerateIfNotSet("value", alwaysregen=True)
+    def __bytes__(self):
 
-    def asdf_generate_value(self):
-        prottrans = "/".join((self.protocol, self.transport))
+        pt = self.protocol
+        if pt is None:
+            raise Incomplete("Via header has not protocol.")
+        tp = self.transport
+        if tp is None:
+            raise Incomplete("Via header has no transport.")
 
-        if self.host is not None:
-            log.debug("Viaheader host is %r %s.", self.host, self.host)
-            hoststr = bytes(self.host)
-            if len(hoststr) == 0:
-                hoststr = None
+        ht = self.host
+        if ht is None:
+            raise Incomplete("Via header has no host.")
+        vbytes = b"{pt}/{tp} {ht}".format(**locals())
 
-        if hoststr is not None:
-            rv = "{prottrans} {hoststr}".format(**locals())
-        else:
-            rv = "{prottrans}".format(**locals())
-        log.debug("host:%s, prot: %s, trans: %r, Return %r",
-                  self.host, self.protocol, self.transport, rv)
-        return rv
-
-    #def __setattr__(self, attr, val):
-    #    if False and attr in self.delegateattributes:
-    #        if hasattr(self, "value"):
-    #            del self.value
-    #    super(ViaField, self).__setattr__(attr, val)
+        rs = b";".join(self.bytesGen(vbytes))
+        return rs
 
 
 def GenerateNewNumber():

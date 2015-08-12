@@ -87,12 +87,6 @@ class Header(Parser, vb.ValueBinder):
             (1, lambda type: getattr(Header, type)())
     }
 
-    @classmethod
-    def Parse(cls, string):
-        mo = cls.SimpleParse(string)
-        assert 0
-
-
     def parsecust(self, string, mo):
 
         data = mo.group(2)
@@ -107,12 +101,13 @@ class Header(Parser, vb.ValueBinder):
                         "Result of FieldClass %r Parse was not a list; it may "
                         "use Parser.repeats to ensure it returns a list." % (
                             self.FieldClass.__name__))
-            except AttributeError:
+            except AttributeError as exc:
                 log.debug(
-                    "Can't set 'fields' on instance of %r.", self.__class__)
+                    "Can't set 'fields' on instance of %r: %s",
+                    self.__class__.__name__, exc)
             return
 
-        fdc = self.FieldDelegateClass
+        fdc = self.FieldClass
         if hasattr(fdc, "Parse"):
             def create(x): return fdc.Parse(x)
         else:
@@ -194,9 +189,11 @@ class DNameURIHeader(
             "field": {dck.descriptor: None, dck.gen: DNameURIField}
         }),
         Header):
+    FieldClass = DNameURIField
     vb_dependencies = (
         ("field", (
-            "uri", "displayname", "aor", "username", "host", "address")),
+            "uri", "displayname", "aor", "username", "host", "address",
+            "port")),
     )
 
 
@@ -214,6 +211,7 @@ class ViaHeader(
         }),
         Header):
     """The Via: Header."""
+    FieldClass = ViaField
     vb_dependencies = (
         ("field", (
             "host", "address", "port")),
