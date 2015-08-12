@@ -21,12 +21,12 @@ import datetime
 import random
 import re
 import logging
-
 from sipparty import (util, vb, Parser)
+from sipparty.deepclass import (DeepClass, dck)
 import prot
 from prot import Incomplete
 import components
-import field
+from field import (DNameURIField, CSeqField, Max_ForwardsField, ViaField)
 
 log = logging.getLogger(__name__)
 bytes = six.binary_type
@@ -47,9 +47,12 @@ class Header(Parser, vb.ValueBinder):
     class is just used as an abstract class. To get an instance of a subclass
     of a particular type, do:
 
-    Header.type()
+    Header.<type name case insensitive>()
     # E.g
     Header.accept()
+    >> AcceptHeader()
+    Hader.INVITE()
+    >> InviteHeader()
     """
 
     # The `types` class attribute is used by the attributesubclassgen
@@ -84,15 +87,26 @@ class Header(Parser, vb.ValueBinder):
             (1, lambda type: getattr(Header, type)())
     }
 
+    @classmethod
+    def Parse(cls, string):
+        mo = cls.SimpleParse(string)
+        assert 0
+
+
     def parsecust(self, string, mo):
 
         data = mo.group(2)
         fields = data.split(",")
         log.debug("Header fields: %r", fields)
 
-        if not hasattr(self, "FieldDelegateClass"):
+        if not hasattr(self, "FieldClass"):
             try:
-                self.fields = fields
+                self.fields = self.FieldClass.Parse(string)
+                if not isinstance(self.fields, list):
+                    raise ValueError(
+                        "Result of FieldClass %r Parse was not a list; it may "
+                        "use Parser.repeats to ensure it returns a list." % (
+                            self.FieldClass.__name__))
             except AttributeError:
                 log.debug(
                     "Can't set 'fields' on instance of %r.", self.__class__)
@@ -106,11 +120,13 @@ class Header(Parser, vb.ValueBinder):
 
         self.fields = [create(f) for f in fields]
 
-    def __init__(self, fields=None):
+    #def addField()
+
+    def __init__(self, fields=None, **kwargs):
         """Initialize a header line.
         """
         self.__dict__["_hdr_fields"] = []
-        super(Header, self).__init__()
+        super(Header, self).__init__(**kwargs)
 
         if fields is None:
             fields = list()
@@ -118,9 +134,13 @@ class Header(Parser, vb.ValueBinder):
         self.fields = fields
 
     def __bytes__(self):
+        flds = self.fields
+        if len(flds) == 0:
+            raise Incomplete('Header type %r has no fields.' % (
+                self.__class__.__name__,))
         try:
-            return b"{0}: {1}".format(
-                self.type, ",".join([bytes(v) for v in self.fields]))
+            return b"{0} {1}".format(
+                self._hdr_prepend(), ",".join([bytes(v) for v in self.fields]))
         except Incomplete as exc:
             exc.args += ('Header type %r' % self.__class__.__name__,)
             raise
@@ -129,6 +149,9 @@ class Header(Parser, vb.ValueBinder):
         return (
             "{0.__class__.__name__}(fields={0.fields!r})"
             "".format(self))
+
+    def _hdr_prepend(self):
+        return b"{0.type}:".format(self)
 
 
 class FieldDelegateHeader(Header):
@@ -166,22 +189,45 @@ class FieldDelegateHeader(Header):
                 "{attr!r}.".format(**locals()))
 
 
-class ToHeader(FieldDelegateHeader):
+class DNameURIHeader(
+        DeepClass("_dnurh_", {
+            "field": {dck.descriptor: None, dck.gen: DNameURIField}
+        }),
+        Header):
+    vb_dependencies = (
+        ("field", (
+            "uri", "displayname", "aor", "username", "host", "address")),
+    )
+
+
+class ToHeader(DNameURIHeader):
     """A To: header"""
-    FieldDelegateClass = field.DNameURIField
 
 
-class FromHeader(FieldDelegateHeader):
+class FromHeader(DNameURIHeader):
     """A From: header"""
-    FieldDelegateClass = field.DNameURIField
 
 
-class ViaHeader(FieldDelegateHeader):
+class ViaHeader(
+        DeepClass("_vh_", {
+            "field": {dck.descriptor: None, dck.gen: ViaField}
+        }),
+        Header):
     """The Via: Header."""
-    FieldDelegateClass = field.ViaField
+    vb_dependencies = (
+        ("field", (
+            "host", "address", "port")),
+    )
 
 
-class ContactHeader(FieldDelegateHeader):
+class ContactHeader(
+        DeepClass("_ctcth_", {
+            "isStar": {
+                dck.check: lambda x: x is True or x is False,
+                dck.gen: lambda: False},
+
+            }),
+        DNameURIHeader):
     """ABNF from RFC3261:
     Contact        =  ("Contact" / "m" ) HCOLON
                       ( STAR / (contact-param *(COMMA contact-param)))
@@ -198,24 +244,11 @@ class ContactHeader(FieldDelegateHeader):
     delta-seconds      =  1*DIGIT
     """
 
-    # Fields is a cumulative DerivedProperty attribute, so we can update it
-    # here with a custom getter.
-    fields = util.DerivedProperty(get="_hdrctc_fields")
-
-    isStar = util.DerivedProperty(
-        "_hdrctct_isStar", lambda x: x is True or x is False)
-    FieldDelegateClass = field.DNameURIField
-
-    def __init__(self, *args, **kwargs):
-        self.__dict__["_hdrctct_isStar"] = False
-        super(ContactHeader, self).__init__(*args, **kwargs)
-
-    def _hdrctc_fields(self, underlying):
-
-        if self._hdrctct_isStar:
-            return (prot.STAR,)
-
-        return underlying
+    def __bytes__(self):
+        log.debug("bytes(ContactHeader)")
+        if self.isStar:
+            return b"{0} {1}".format(self._hdr_prepend(), prot.STAR)
+        return super(ContactHeader, self).__bytes__()
 
 
 class Call_IdHeader(Header):
@@ -228,7 +261,7 @@ class Call_IdHeader(Header):
     This value should be generated uniquely over space and time for each new
     dialogue initiated by the UA. It must be the same for all messages during
     a dialogue. It SHOULD also be the same for each REGISTER sent to maintain a
-    registration by the UA. I.e. being registered == being in a dialogue.
+    registration by the UA. I.e. being registered => being in a dialogue.
     """
 
     @classmethod
@@ -272,10 +305,10 @@ class Call_IdHeader(Header):
 
 
 class CseqHeader(FieldDelegateHeader):
-    FieldDelegateClass = field.CSeqField
+    FieldDelegateClass = CSeqField
 
 
 class Max_ForwardsHeader(FieldDelegateHeader):
-    FieldDelegateClass = field.Max_ForwardsField
+    FieldDelegateClass = Max_ForwardsField
 
 Header.addSubclassesFromDict(locals())

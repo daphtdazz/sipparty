@@ -21,11 +21,13 @@ import os
 import re
 import logging
 import unittest
+import setup
 from setup import SIPPartyTestCase
 from six import binary_type as bytes, iteritems, add_metaclass
 from sipparty import (util, sip, vb, ParseError, Request)
 from sipparty.sip import (prot, components)
 from sipparty.sip.components import URI
+from sipparty.sip.prot import (Incomplete)
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DETAIL)
@@ -59,7 +61,7 @@ class TestProtocol(SIPPartyTestCase):
         self.assertRaises(AttributeError, lambda: sip.Message.notareg)
 
         invite = sip.Message.invite()
-        self.assertRaises(prot.Incomplete, lambda: bytes(invite))
+        self.assertRaises(Incomplete, lambda: bytes(invite))
         old_branch = bytes(invite.viaheader.parameters.branch)
         invite.startline.uri = sip.components.URI(aor=bobAOR)
 
@@ -98,13 +100,22 @@ class TestProtocol(SIPPartyTestCase):
 
     def testParse(self):
 
-        self.pushLogLevel("deepclass", logging.DETAIL)
-        self.pushLogLevel("vb", logging.DETAIL)
+        self.pushLogLevel("header", logging.DEBUG)
+        #self.pushLogLevel("vb", logging.DEBUG)
+        #self.pushLogLevel("message", logging.INFO)
+        #self.pushLogLevel("field", logging.INFO)
+        self.pushLogLevel("parse", logging.DEBUG)
+
         invite = sip.Message.invite()
-        assert 0
+        self.assertIsNotNone(invite.viaheader.host)
+        self.assertTrue(invite.viaheader.host is invite.contactheader.host)
+
+        self.assertRaises(Incomplete, lambda: bytes(invite))
+
         # Check the bindings were set up correctly: the Request URI should be
         # the same object as the To URI.
         self.assertIsNotNone(invite.startline.uri)
+        self.assertTrue(invite.startline.uri is invite.toheader.uri)
         turi = invite.toheader.uri
         invite.startline.uri = URI()
         self.assertTrue(
@@ -115,22 +126,24 @@ class TestProtocol(SIPPartyTestCase):
         invite.startline.uri.aor.host = "biloxi.com"
         invite.fromheader.field.value.uri.aor.username = "alice"
         invite.fromheader.field.value.uri.aor.host = "atlanta.com"
+        invite.contactheader.uri = "sip:localuser@127.0.0.1:5061"
+        self.assertEqual(invite.contactheader.port, 5061)
         log.debug("Set via header host.")
-        invite.viaheader.port = "5061"
-        invite.contactheader.uri = "sip:localuser@127.0.0.1"
+        self.assertEqual(invite.viaheader.port, 5061)
+
         invite_str = bytes(invite)
-
-        self.assertTrue(re.match(
-            "",
-            invite_str),
-            repr(invite_str))
-
         log.debug("Invite to stringify and parse: %r", invite_str)
 
         new_inv = sip.message.Message.Parse(invite_str)
         self.assertEqualMessages(invite, new_inv)
 
         new_inv.addHeader(sip.Header.via())
+        assert 0, new_inv.contactheader.field.uri
+        self.assertEqual(new_inv.contactheader.port, 5061)
+        self.assertEqual(new_inv.viaheader.port, 5061)
+        self.assertEqual(bytes(new_inv.viaheader.field.host), b"127.0.0.1:5061")
+        self.assertEqual(bytes(new_inv.viaheader.host.address), b"127.0.0.1")
+
         new_inv.viaheader.address = "arkansas.com"
 
         new_inv.startline.uri.aor.username = "bill"
@@ -143,7 +156,7 @@ class TestProtocol(SIPPartyTestCase):
             # between them.
             "To: <sip:bob@biloxi.com>\r\n"
             "Via: SIP/2.0/UDP arkansas.com\r\n"
-            "Via: SIP/2.0/UDP 127.0.0.1:5060;{1}\r\n"
+            "Via: SIP/2.0/UDP 127.0.0.1:5061;{1}\r\n"
             # 6 random hex digits followed by a date/timestamp
             "Call-ID: {0}\r\n"
             "CSeq: {2} INVITE\r\n"

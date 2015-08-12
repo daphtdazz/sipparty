@@ -59,7 +59,7 @@ class Request(
             b"({Method}){SP}({Request_URI}){SP}({SIP_Version})"
             "".format(**prot.__dict__)),
         parse.Parser.Constructor:
-            (1, lambda a: getattr(Request, a)(autofill=False)),
+            (1, lambda a: getattr(Request, a)()),
         parse.Parser.Mappings:
             [None,  # First group is for the constructor.
              ("uri", URI),

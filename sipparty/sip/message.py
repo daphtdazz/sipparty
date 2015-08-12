@@ -27,8 +27,8 @@ from prot import Incomplete
 import components
 import param
 from param import Param
-import request
-import response
+from request import Request
+from response import Response
 from header import Header
 
 log = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ class Message(vb.ValueBinder):
     this directly.
     """
 
-    types = request.Request.types
+    types = Request.types
 
     mandatoryheaders = [
         Header.types.From,  Header.types.To, Header.types.Via,
@@ -110,14 +110,14 @@ class Message(vb.ValueBinder):
 
         if cls.ResponseRE.match(startline):
             log.debug("Attempt Message Parse of %r as a response.", startline)
-            reqline = response.Response.Parse(startline)
+            reqline = Response.Parse(startline)
             log.debug(reqline)
             message = Response(startline=reqline)
             log.debug("Success. Type: %r.", message.type)
 
         elif cls.MethodRE.match(startline):
             log.debug("Attempt Message Parse of request %r.", startline)
-            requestline = request.Request.Parse(startline)
+            requestline = Request.Parse(startline)
             message = getattr(Message, requestline.type)(
                 startline=requestline, autofillheaders=False)
             log.debug("Message is of type %r", message.type)
@@ -152,6 +152,10 @@ class Message(vb.ValueBinder):
         log.debug("Check if %r class is Response.", cls.__name__)
         return cls.__name__.find("Response") != -1
 
+    @classmethod
+    def HeaderAttrNameFromType(cls, htype):
+        return "%s%s" % (getattr(Header.types, htype), "Header")
+
     def __init__(self, startline=None, headers=None, bodies=None,
                  autofillheaders=True):
         """Initialize a `Message`."""
@@ -168,14 +172,14 @@ class Message(vb.ValueBinder):
             try:
                 ty = self.type
                 log.debug("Make new startline of type %r.", self.type)
-                startline = getattr(request.Request, self.type)()
+                startline = getattr(Request, self.type)()
             except Exception:
                 raise
         self.startline = startline
 
         if autofillheaders:
             self.autofillheaders()
-        self._establishbindings()
+            self.refreshBindings()
 
     def addHeader(self, hdr):
         """Adds a header at the start of the first set of headers in the
@@ -187,23 +191,42 @@ class Message(vb.ValueBinder):
         addHeader(ViaHeader) ->
         Message: ToHeader, FromHeader, ViaHeader, ViaHeader, ContactHeader
         """
+        assert hdr is not None
+        htype = hdr.type
+        clname = self.__class__.__name__
+        log.debug("Add header %r instance type %r", clname, htype)
         new_headers = []
+
+        log.detail("Old headers: %r", [_hdr.type for _hdr in self.headers])
         for oh in self.headers:
-            if hdr is not None and hdr.type == oh.type:
-                new_headers.append(hdr)
-                hdr = None
+            if hdr is not None and htype == oh.type:
+                # We've found the location for the new header to go in the list
+                # (next to the first set of headers of the same type). However,
+                # we can't set it now because this won't update the bindings.
+                # Therefore add the existing first header again, then we can
+                # set the new header via setattr() and it will correctly unbind
+                # the old header and rebind the new one.
+                new_headers.append(oh)
             new_headers.append(oh)
-        if hdr is not None:
-            new_headers.append(hdr)
+
+        log.detail(
+            "Intermediate headers: %r", [_hdr.type for _hdr in new_headers])
         self.headers = new_headers
 
+        hattr = self.HeaderAttrNameFromType(htype)
+        log.debug("Set new header attr %r", hattr)
+        setattr(self, hattr, hdr)
+        log.debug("Headers after add: %r", [_hdr.type for _hdr in self.headers])
+
     def autofillheaders(self):
+        log.debug("Autofill %r headers", self.__class__.__name__)
+        currentHeaderSet = set([_hdr.type for _hdr in self.headers])
         for hdr in self.mandatoryheaders:
-            if hdr not in [_hdr.type for _hdr in self.headers]:
+            if hdr not in currentHeaderSet:
                 self.addHeader(getattr(Header, hdr)())
 
         for mheader_name, mparams in six.iteritems(self.mandatoryparameters):
-            mheader = getattr(self, mheader_name + "Header")
+            mheader = getattr(self, self.HeaderAttrNameFromType(mheader_name))
             for param_name in mparams:
                 setattr(
                     mheader.field.parameters, param_name,
@@ -267,22 +290,27 @@ class Message(vb.ValueBinder):
         """
         assert attr != "value"
         hmo = self.headerattrre.match(attr)
+        log.detail(
+            "%r instance set attribute %r", self.__class__.__name__, attr)
         if hmo is not None:
             htype = (
-                util.attributesubclassgen
-                .NormalizeGeneratingAttributeName(attr.replace("Header", '')))
+                util.attributesubclassgen.NormalizeGeneratingAttributeName(
+                    attr.replace("Header", '')))
             log.debug("Set the %r of type %r", attr, htype)
             index = -1
+            existing_val = None
             for hdr, index in zip(self.headers, range(len(self.headers))):
                 if hdr.type == htype:
                     log.debug("  Found existing one.")
+                    existing_val = hdr
                     self.headers[index] = val
                     break
             else:
                 log.debug("Didn't find existing one")
                 self.headers.append(val)
                 index += 1
-
+            # Update bindings following change.
+            self.vb_updateAttributeBindings(attr, existing_val, val)
             return
 
         super(Message, self).__setattr__(attr, val)
@@ -317,7 +345,7 @@ class Response(Message):
     def __init__(self, code=None, **kwargs):
 
         if code is not None:
-            sl = response.Response(code)
+            sl = Response(code)
             kwargs["startline"] = sl
         if "autofillheaders" not in kwargs:
             kwargs["autofillheaders"] = False
@@ -334,11 +362,15 @@ class InviteMessage(Message):
         ("startline", "ViaHeader.field.parameters.branch.startline"),
         ("FromHeader.field.value.uri.aor.username",
          "ContactHeader.field.value.uri.aor.username"),
-        ("ContactHeader.address", "ViaHeader.address"),
-        ("startline.type", "CseqHeader.field.reqtype")]
+        ("ContactHeader.host", "ViaHeader.host"),
+        ("startline.type", "CseqHeader.field.reqtype")
+    ]
 
     mandatoryheaders = [
-        Header.types.Contact]
+        Header.types.To,
+        Header.types.From,
+        Header.types.Contact,
+        Header.types.Via]
 
     mandatoryparameters = {
         Header.types.From: [Param.types.tag],

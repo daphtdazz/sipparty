@@ -20,6 +20,7 @@ import six
 import random
 import logging
 import prot
+from numbers import Integral
 from sipparty import (util, vb, parse, ParsedPropertyOfClass)
 from sipparty.transport import SOCK_TYPE_IP_NAMES
 from sipparty.deepclass import (DeepClass, dck)
@@ -27,25 +28,29 @@ import components
 from components import (DNameURI, Host)
 from request import Request
 import defaults
-import param
+from param import (Parameters, Param)
 
 # More imports at end of file.
 
 log = logging.getLogger(__name__)
-
 bytes = six.binary_type
 
 
 @six.add_metaclass(util.CCPropsFor(("delegateattributes", "parseinfo")))
 @util.TwoCompatibleThree
-class Field(parse.Parser, vb.ValueBinder):
+class Field(
+        DeepClass("_fld_", {
+            "value": {},
+            "parameters": {
+                dck.descriptor: ParsedPropertyOfClass(Parameters),
+                dck.gen: Parameters}
+        }),
+        parse.Parser, vb.ValueBinder):
 
     # For headers that delegate properties, these are the properties to
     # delegate. Note that these are cumulative, so subclasses declaring their
     # own delegateattributes get added to these.
     delegateattributes = ["parameters"]
-
-    value = util.GenerateIfNotSet("value")
 
     # parseinfo is also cumulative, so any values set here will be overridden
     # if re-set in subclasses.
@@ -59,12 +64,12 @@ class Field(parse.Parser, vb.ValueBinder):
             "",
         parse.Parser.Mappings:
             [("value",),
-             ("parameters", param.Parameters)]
+             ("parameters", Parameters)]
     }
 
-    def __init__(self, value=None):
+    def asdf__init__(self, **kwargs):
         super(Field, self).__init__()
-        self.parameters = param.Parameters()
+        self.parameters = Parameters()
         if value is not None:
             self.value = value
         else:
@@ -80,7 +85,7 @@ class Field(parse.Parser, vb.ValueBinder):
         return rs
 
     def __setattr__(self, attr, val):
-        if attr in param.Param.types:
+        if attr in Param.types:
             return setattr(self.parameters, attr, val)
         if attr != "value" and hasattr(self, "value"):
             delval = self.value
@@ -97,9 +102,15 @@ class Field(parse.Parser, vb.ValueBinder):
             "".format(self))
 
 
-class DNameURIField(Field):
+class DNameURIField(
+        DeepClass("_dnurf_", {
+            "value": {
+                dck.gen: DNameURI,
+                dck.descriptor: ParsedPropertyOfClass(DNameURI)}
+        }),
+        Field):
     delegateattributes = (
-        "uri", "aor", "host", "username", "address")
+        "displayname", "uri", "aor", "host", "username", "address", "port")
     vb_dependencies = (("value", delegateattributes),)
 
     parseinfo = {
@@ -108,12 +119,9 @@ class DNameURIField(Field):
             "((?:;{generic_param})*)"  # Parameters.
             "".format(**prot.__dict__),
         parse.Parser.Mappings:
-            [("value", components.DNameURI),
-             ("parameters", param.Parameters)]
+            [("value", DNameURI),
+             ("parameters", Parameters)]
     }
-
-    def __init__(self):
-        super(DNameURIField, self).__init__(components.DNameURI())
 
 
 class ViaField(
@@ -143,7 +151,7 @@ class ViaField(
     via-extension     =  generic-param
     """
 
-    delegateattributes = ("protocol", "transport", "host", "address", "port")
+    #delegateattributes = ("protocol", "transport", "host", "address", "port")
     vb_dependencies = (
         ("host", ("address", "port")),)
 
@@ -160,14 +168,14 @@ class ViaField(
             [("protocol", None, lambda x: x.replace(" ", "")),
              ("transport",),
              ("host", components.Host),
-             ("parameters", param.Parameters)]
+             ("parameters", Parameters)]
     }
 
     # We should always regen value because it is always a one-to-one mapping
     # onto protocol, transport and host.
-    value = util.GenerateIfNotSet("value", alwaysregen=True)
+    #value = util.GenerateIfNotSet("value", alwaysregen=True)
 
-    def generate_value(self):
+    def asdf_generate_value(self):
         prottrans = "/".join((self.protocol, self.transport))
 
         if self.host is not None:
@@ -184,14 +192,26 @@ class ViaField(
                   self.host, self.protocol, self.transport, rv)
         return rv
 
-    def __setattr__(self, attr, val):
-        if False and attr in self.delegateattributes:
-            if hasattr(self, "value"):
-                del self.value
-        super(ViaField, self).__setattr__(attr, val)
+    #def __setattr__(self, attr, val):
+    #    if False and attr in self.delegateattributes:
+    #        if hasattr(self, "value"):
+    #            del self.value
+    #    super(ViaField, self).__setattr__(attr, val)
 
 
-class CSeqField(Field):
+def GenerateNewNumber():
+    return random.randint(0, 2**31 - 1)
+
+
+class CSeqField(
+        DeepClass("_csf_", {
+            "number": {
+                dck.gen: GenerateNewNumber,
+                dck.check: lambda num: isinstance(num, Integral)},
+            "reqtype": {},
+            "value": {dck.get: lambda csf, under: csf.getValue()}
+        }),
+        Field):
 
     delegateattributes = ["number", "reqtype"]
 
@@ -201,26 +221,12 @@ class CSeqField(Field):
             " "
             "([\w_-]+)$",  # No parameters.
         parse.Parser.Mappings:
-            [("number", None, int),
+            [("number", int),
              ("reqtype", None, lambda x: getattr(Request.types, x))]
     }
 
-    @classmethod
-    def GenerateNewNumber(cls):
-        return random.randint(0, 2**31 - 1)
-
-    def __init__(self, number=None, reqtype=None):
-        super(CSeqField, self).__init__()
-        self.number = number
-        self.reqtype = reqtype
-
-    def generate_number(self):
-        return self.GenerateNewNumber()
-    number = util.GenerateIfNotSet("number")
-
-    def generate_value(self):
-        return "{self.number} {self.reqtype}".format(self=self)
-    value = util.GenerateIfNotSet("value", alwaysregen=True)
+    def getValue(self):
+        return b"{0.number} {0.reqtype}".format(self)
 
     def __setattr__(self, attr, val):
         """The CSeq depends on the number and the request line type, so if

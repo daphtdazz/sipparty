@@ -19,18 +19,20 @@ limitations under the License.
 import six
 import logging
 import unittest
+from setup import SIPPartyTestCase
 import sipparty
 from sipparty import sip
-from sipparty.sip import prot
+from sipparty.vb import ValueBinder
+from sipparty.sip import (prot, Header)
 
 log = logging.getLogger(__name__)
 
 
-class TestHeaders(unittest.TestCase):
+class TestHeaders(SIPPartyTestCase):
 
     def testContactHeaders(self):
 
-        sipparty.parse.log.setLevel(logging.DEBUG)
+        # self.pushLogLevel("header", logging.DEBUG)
 
         ch = sip.Header.contact()
 
@@ -57,6 +59,23 @@ class TestHeaders(unittest.TestCase):
             b"Contact: <sip:bill@billland.com>")
         self.assertEqual(
             ch.field.value.uri.aor.host, sip.components.Host("billland.com"))
+
+    def testBindingContactHeaders(self):
+
+        pvb = ValueBinder()
+
+        pvb.bind("hostaddr", "ch.address")
+        pvb.bind("ch.address", "hostaddr2")
+
+        pvb.ch = Header.contact()
+        assert 0, (
+            pvb.ch._vb_forwardbindings, pvb.ch.field._vb_forwardbindings)
+        pvb.hostaddr = "atlanta.com"
+        self.assertEqual(pvb.ch.address,
+                         "atlanta.com")
+        self.assertEqual(pvb.ch.field.value.uri.aor.host.address,
+                         "atlanta.com")
+        self.assertEqual(pvb.hostaddr2, "atlanta.com")
 
 if __name__ == "__main__":
     unittest.main()

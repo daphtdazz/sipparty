@@ -217,5 +217,20 @@ class TestVB(SIPPartyTestCase):
         self.assertEqual(a.a, 2)
         self.assertEqual(a.d, 5)
 
+    def testBoundThroughBindings(self):
+        a, aa, ab, aaa, aba = [vb.ValueBinder() for _ in range(5)]
+
+        a.bind("a.a.a", "c")
+        a.a = aa
+        a.a.a = aaa
+        a.a.a.a = 4
+        self.assertEqual(a.c, 4)
+
+        # Now if we switch in ab for a.a then what happens to a.c?
+        ab.a = aba
+        ab.a.a = 5
+        a.a = ab
+        self.assertEqual(a.c, 5)
+
 if __name__ == "__main__":
     sys.exit(unittest.main())

@@ -19,10 +19,9 @@ limitations under the License.
 """
 import re
 import logging
-import six
+from six import binary_type as bytes, iteritems
 
 log = logging.getLogger(__name__)
-bytes = six.binary_type
 
 
 class ParseError(Exception):
@@ -46,8 +45,14 @@ class ParsedProperty(object):
         return getattr(obj, self._pp_attr)
 
     def __set__(self, obj, val):
-        cls = self._pp_class
         atr = self._pp_attr
+        if val is None:
+            log.debug(
+                "Set None for %r instance attribute %r",
+                obj.__class__.__name__, atr)
+            return setattr(obj, atr, val)
+
+        cls = self._pp_class
         if isinstance(val, bytes):
             val = cls.Parse(val)
         else:
@@ -184,7 +189,7 @@ class Parser(object):
         log.debug("Parse failure of message %r", string)
         for arg in args:
             log.debug(arg)
-        for key, val in six.iteritems(kwargs):
+        for key, val in iteritems(kwargs):
             log.debug("%r=%r", key, val)
         raise ParseError(
             "{cls.__name__!r} type failed to parse text {string!r}."
@@ -295,6 +300,8 @@ class Parser(object):
 
         # Finally do parsecust, if specified.
         if hasattr(self, "parsecust"):
+            log.debug(
+                "Parse to parsecust of %r instance", self.__class__.__name__)
             self.parsecust(string=string, mo=mo)
 
     def parsemappings(self, mo, mappings):
@@ -312,13 +319,16 @@ class Parser(object):
 
             def gen(x): return x
             attr = mapping[0]
-            cls = str
+            cls = bytes
+            log.debug("  attribute %r", attr)
 
             if len(mapping) > 1:
                 new_cls = mapping[1]
                 if new_cls is not None:
                     cls = new_cls
+            log.debug("  has class %r", cls.__name__)
             if len(mapping) > 2:
+                log.debug("  use a generator")
                 gen = mapping[2]
 
             log.debug("  text %r", data)

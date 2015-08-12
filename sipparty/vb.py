@@ -162,7 +162,7 @@ class ValueBinder(object):
 
     @vb_parent.setter
     def vb_parent(self, newParent):
-        log.debug("Set vb_parent to %s", newParent)
+        log.debug("Set vb_parent to %r", newParent)
         if newParent is None:
             self._vb_weakBindingParent = None
             return
@@ -234,8 +234,15 @@ class ValueBinder(object):
         das = sd["_vb_delegate_attributes"]
         if attr in das:
             attrattr = das[attr]
-            log.debug("Pass delegate attr %r to attr %r", attr, attrattr)
+            log.debug(
+                "%r instance pass delegate attr %r to attr %r",
+                self.__class__.__name__, attr, attrattr)
             deleattr = getattr(self, attrattr)
+            if deleattr is None:
+                raise AttributeError(
+                    "Cannot set attribute %r on %r instance as it is "
+                    "delegated to attribute %r which is None." % (
+                        attr, self.__class__.__name__, attrattr))
             return setattr(deleattr, attr, val)
 
         if (attr not in set(("_vb_weakBindingParent", )) and
@@ -254,6 +261,18 @@ class ValueBinder(object):
             settingAttributes.add(attr)
             try:
                 super(ValueBinder, self).__setattr__(attr, val)
+                # Straight away get the just set attribute. This is because
+                # some descriptor properties may do something funky to the
+                # value when we set it, such as parse it into an object graph
+                # and set the object graph on the underlying attribute instead.
+                # We trust the result of getattr() more than the argument to
+                # setattr().
+                initialval = val
+                val = getattr(self, attr)
+                if val is not initialval:
+                    log.debug(
+                        "%r instance %r attribute val changed after set.",
+                        self.__class__.__name__, attr)
             finally:
                 settingAttributes.remove(attr)
         except AttributeError as exc:
@@ -267,10 +286,16 @@ class ValueBinder(object):
                 attr, self.__class__.__name__, val, self.__class__.__mro__)
             raise
 
+        self.vb_updateAttributeBindings(attr, existing_val, val)
+
+    def vb_updateAttributeBindings(self, attr, existing_val, val):
+
+        log.debug("Update attribute %r bindings after change.", attr)
         if hasattr(existing_val, "_vb_unbindAllParent"):
             existing_val._vb_unbindAllParent()
 
         if hasattr(val, "_vb_binddirection"):
+            log.detail("New value is bindable.")
             for direction in self.VB_Directions:
                 _, _, _, bs, _ = self._vb_bindingdicts(attr, direction,
                                                        all=True)
@@ -288,7 +313,9 @@ class ValueBinder(object):
         # If this attribute is forward bound, push the value out.
         _, _, _, fbds, _ = self._vb_bindingdicts(attr, self.VB_Forward,
                                                  all=True)
-
+        log.detail(
+            "forward bindings for attr %r of %r instance: %r", attr,
+            self.__class__.__name__, fbds)
         for fromattrattrs, bds in iteritems(fbds):
             if len(fromattrattrs) == 0:
                 for topath, bd in iteritems(bds):
@@ -328,6 +355,9 @@ class ValueBinder(object):
                             self._vb_unbinddirection(path, topath, direction)
 
     def _vb_unbindAllParent(self):
+        log.debug(
+            "Unbind all parent bindings of %r instance",
+            self.__class__.__name__)
         return self._vb_unbindAllCondition(
             lambda attr, toattr: len(toattr) == 0)
 
@@ -341,9 +371,12 @@ class ValueBinder(object):
         """
         attr, _ = self.VB_PartitionPath(path)
         if attr not in self._vb_delegate_attributes:
+            log.debug("Non-delegate binding %r", path)
             return path
 
-        return self.VB_JoinPath((self._vb_delegate_attributes[attr], path))
+        da = self._vb_delegate_attributes[attr]
+        log.debug("Delegate binding %r through %r", path, da)
+        return self.VB_JoinPath((da, path))
 
     def _vb_bindingsForDirection(self, direction):
         try:
@@ -476,7 +509,7 @@ class ValueBinder(object):
             if hasattr(self, fromattr_resolved):
                 log.debug("  has child at %r.", fromattr_resolved)
                 subobj = getattr(self, fromattr_resolved)
-                log.debug("  %s", subobj)
+                log.debug("  %r", subobj)
                 if hasattr(subobj, "_vb_binddirection"):
                     log.debug("  child is VB compatible.")
                     subobj._vb_binddirection(
@@ -506,7 +539,7 @@ class ValueBinder(object):
 
         log.debug("  %r bindings after bind %r",
                   direction,
-                  self._vb_bindingsForDirection(self.VB_Forward))
+                  self._vb_bindingsForDirection(direction))
 
     def _vb_unbinddirection(self, frompath, topath, direction):
         """Unbind a particular path.

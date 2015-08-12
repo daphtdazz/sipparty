@@ -254,7 +254,7 @@ class DNameURI(
     """
 
     vb_dependencies = [
-        ("uri", ["aor", "username", "host", "address"])]
+        ("uri", ("aor", "username", "host", "address", "port"))]
 
     display_name_mapping = ("display_name", None, lambda x: x.strip())
     uri_mapping = ("uri", URI)

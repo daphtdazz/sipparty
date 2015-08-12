@@ -18,11 +18,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
+import inspect
 from six import (iteritems, iterkeys)
 from sipparty.util import Enum, DerivedProperty
 
 log = logging.getLogger(__name__)
-DeepClassKeys = Enum(("check", "get", "set", "gen", "descriptor"))
+DeepClassKeys = Enum(("check", "get", "set", "gen", "descriptor",))
 dck = DeepClassKeys
 
 
@@ -31,6 +32,10 @@ def DCProperty(tlp, name, attrDesc):
 
     if dck.descriptor in attrDesc:
         dc = attrDesc[dck.descriptor]
+        if dc is None:
+            log.debug("%r doesn't want a descriptor", name)
+            return None
+
         log.debug("%r uses descriptor %r", internalName, dc)
         return dc(internalName)
 
@@ -49,10 +54,14 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
     """
     class DeepClass(object):
 
-        for name, attrDesc in iteritems(topLevelAttributeDescs):
-            locals()[name] = DCProperty(topLevelPrepend, name, attrDesc)
+        for name, attrDescGen in iteritems(topLevelAttributeDescs):
+            attrDesc = DCProperty(topLevelPrepend, name, attrDescGen)
+            if attrDesc is None:
+                continue
+            locals()[name] = attrDesc
 
         # Careful that these don't become class attributes!
+        del attrDescGen
         del attrDesc
         del name
 
@@ -169,12 +178,16 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
 
             log.detail("Final dict: %r", sd)
 
-        def reprGen(self):
+        def _dc_kvReprGen(self):
             for attr in iterkeys(topLevelAttributeDescs):
                 yield b"%s=%r" % (attr, getattr(self, attr))
+            sp = super(DeepClass, self)
+            if hasattr(sp, "_dc_kvReprGen"):
+                for kvp in sp._dc_kvReprGen():
+                    yield kvp
 
         def __repr__(self):
             return(b"%s(%s)" % (
-                self.__class__.__name__, b", ".join(self.reprGen())))
+                self.__class__.__name__, b", ".join(self._dc_kvReprGen())))
 
     return DeepClass
