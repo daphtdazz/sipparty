@@ -101,14 +101,13 @@ class TestProtocol(SIPPartyTestCase):
     def testParse(self):
 
         self.pushLogLevel("header", logging.DEBUG)
-        #self.pushLogLevel("vb", logging.DEBUG)
-        #self.pushLogLevel("message", logging.INFO)
+        self.pushLogLevel("vb", logging.DEBUG)
+        self.pushLogLevel("message", logging.DEBUG)
         #self.pushLogLevel("field", logging.INFO)
         self.pushLogLevel("parse", logging.DEBUG)
+        self.pushLogLevel("deepclass", logging.DEBUG)
 
         invite = sip.Message.invite()
-        self.assertIsNotNone(invite.viaheader.host)
-        self.assertTrue(invite.viaheader.host is invite.contactheader.host)
 
         self.assertRaises(Incomplete, lambda: bytes(invite))
 
@@ -117,7 +116,9 @@ class TestProtocol(SIPPartyTestCase):
         self.assertIsNotNone(invite.startline.uri)
         self.assertTrue(invite.startline.uri is invite.toheader.uri)
         turi = invite.toheader.uri
-        invite.startline.uri = URI()
+        nuri = URI()
+        log.info("Set startline URI to something new.")
+        invite.startline.uri = nuri
         self.assertTrue(
             invite.startline.uri is invite.toheader.uri, (
                 id(invite.startline.uri), id(invite.toheader.uri)))

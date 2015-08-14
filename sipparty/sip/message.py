@@ -79,40 +79,22 @@ class Message(vb.ValueBinder):
 
     MethodRE = re.compile("{Method}".format(**prot.__dict__))
     ResponseRE = re.compile("{SIP_Version}".format(**prot.__dict__))
+    HeaderSeparatorRE = re.compile(
+        "{CRLF}(?:({token}){COLON}|{CRLF})".format(**prot.__dict__))
 
     @classmethod
     def Parse(cls, string):
 
-        # This could be optimised using a generator taking slices of the
-        # string: stackoverflow.com/questions/3054604/iterate-over-the-lines-
-        # of-a-string
-        lines = string.split(prot.EOL)
+        lines = cls.HeaderSeparatorRE.split(string)
+        log.detail("Header split: %r", lines)
 
-        # Restitch lines if any start with SP (space) or HT (horizontal tab).
-        joined_lines = []
-        curr_lines = []
-        for line in lines:
-            if len(line) > 0 and line[0] in (' ', '\t'):
-                curr_lines.append(line.lstrip())
-                continue
-            if len(curr_lines) > 0:
-                joined_lines.append("".join(curr_lines))
-                del curr_lines[:]
-            curr_lines.append(line)
-        else:
-            if len(curr_lines) > 0:
-                joined_lines.append("".join(curr_lines))
-
-        lines = joined_lines
-        log.debug("Sectioned lines: {0!r}".format(lines))
-        startline = lines.pop(0)
-        log.debug("Does %r match %r?", startline, cls.MethodRE.pattern)
+        startline = lines[0]
 
         if cls.ResponseRE.match(startline):
             log.debug("Attempt Message Parse of %r as a response.", startline)
             reqline = Response.Parse(startline)
             log.debug(reqline)
-            message = Response(startline=reqline)
+            message = MessageResponse(startline=reqline)
             log.debug("Success. Type: %r.", message.type)
 
         elif cls.MethodRE.match(startline):
@@ -125,12 +107,36 @@ class Message(vb.ValueBinder):
             raise parse.ParseError(
                 "Startline is not a SIP startline: %r." % (startline,))
 
+        assert 0, lines
+
+        def HNameContentsGen(hclist):
+            hcit = iter(hclist)
+
+            try:
+                while True:
+                    hname = hcit.next()
+                    if hnae is None:
+                        return
+                    hcontents = hcit.next()
+                    yield (hname, hcontents)
+            except StopIteration:
+                assert 0, "Bug: Unexpected end of lines in message."
+
+        for hname, hcontents in HNameContentsGen(lines[1:]):
+            log.debug("Add header %r", hname)
+            newh = getattr(Header, hname).Parse(hcontents)
+            log.detail("Header parsed as: %r", newh)
+            message.addHeader(newh)
+            assert 0, repr(message)
+
         for line, ln in zip(lines, range(1, len(lines) + 1)):
             if len(line) == 0:
                 break
             message.addHeader(Header.Parse(line))
         body_lines = lines[ln:]
         log.debug("SDP lines %r", body_lines)
+
+        assert 0, repr(message)
 
         return message
 
@@ -157,7 +163,7 @@ class Message(vb.ValueBinder):
         return "%s%s" % (getattr(Header.types, htype), "Header")
 
     def __init__(self, startline=None, headers=None, bodies=None,
-                 autofillheaders=True):
+                 autofillheaders=True, configure_bindings=True):
         """Initialize a `Message`."""
 
         super(Message, self).__init__()
@@ -179,7 +185,10 @@ class Message(vb.ValueBinder):
 
         if autofillheaders:
             self.autofillheaders()
-            self.refreshBindings()
+
+        if configure_bindings and hasattr(self, "field_bindings"):
+            log.debug("Configure %r bindings: %r", self.type, self.field_bindings)
+            self.bindBindings(self.field_bindings)
 
     def addHeader(self, hdr):
         """Adds a header at the start of the first set of headers in the
@@ -322,17 +331,9 @@ class Message(vb.ValueBinder):
             "bodies={0.bodies!r})"
             "".format(self))
 
-    def _establishbindings(self):
-        for binding in self.bindings:
-            if len(binding) > 2:
-                transformer = binding[2]
-            else:
-                transformer = None
-            self.bind(binding[0], binding[1], transformer)
-
 
 @six.add_metaclass(type)
-class Response(Message):
+class MessageResponse(Message):
     """ A response message.
 
     NB this overrides the metaclass of Message as we don't want to attempt to
@@ -350,20 +351,20 @@ class Response(Message):
         if "autofillheaders" not in kwargs:
             kwargs["autofillheaders"] = False
 
-        super(Response, self).__init__(**kwargs)
+        super(MessageResponse, self).__init__(**kwargs)
 
 
 class InviteMessage(Message):
     """An INVITE."""
 
-    vb_bindings = [
+    field_bindings = [
         ("startline.uri", "ToHeader.field.uri"),
         ("startline.protocol", "ViaHeader.field.protocol"),
         ("startline", "ViaHeader.field.parameters.branch.startline"),
         ("FromHeader.field.value.uri.aor.username",
          "ContactHeader.field.value.uri.aor.username"),
         ("ContactHeader.host", "ViaHeader.host"),
-        ("startline.type", "CseqHeader.field.reqtype")
+        ("startline.type", "CseqHeader.field.reqtype"),
     ]
 
     mandatoryheaders = [
@@ -381,9 +382,9 @@ class InviteMessage(Message):
 class ByeMessage(Message):
     """An BYE."""
 
-    bindings = [
-        ("startline.uri", "ToHeader.field.uri"),
-        ("startline.protocol", "ViaHeader.field.protocol"),
+    field_bindings = [
+        ("startline.uri", "ToHeader.uri"),
+        ("startline.protocol", "ViaHeader.protocol"),
         ("startline", "ViaHeader.field.parameters.branch.startline"),
         ("FromHeader.field.value.uri.aor.username",
          "ContactHeader.field.value.uri.aor.username"),
@@ -401,9 +402,9 @@ class ByeMessage(Message):
 
 
 class AckMessage(Message):
-    """An INVITE."""
+    """An ACK."""
 
-    bindings = [
+    field_bindings = [
         ("startline.uri", "ToHeader.field.uri"),
         ("startline.protocol", "ViaHeader.field.protocol"),
         ("startline", "ViaHeader.field.parameters.branch.startline"),

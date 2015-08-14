@@ -21,12 +21,13 @@ import datetime
 import random
 import re
 import logging
+from numbers import Integral
 from sipparty import (util, vb, Parser)
 from sipparty.deepclass import (DeepClass, dck)
 import prot
 from prot import Incomplete
 import components
-from field import (DNameURIField, CSeqField, Max_ForwardsField, ViaField)
+from field import (DNameURIField, Max_ForwardsField, ViaField)
 
 log = logging.getLogger(__name__)
 bytes = six.binary_type
@@ -95,7 +96,7 @@ class Header(Parser, vb.ValueBinder):
 
         if not hasattr(self, "FieldClass"):
             try:
-                self.fields = self.FieldClass.Parse(string)
+                self.fields = fields
                 if not isinstance(self.fields, list):
                     raise ValueError(
                         "Result of FieldClass %r Parse was not a list; it may "
@@ -114,8 +115,6 @@ class Header(Parser, vb.ValueBinder):
             def create(x): return fdc(x)
 
         self.fields = [create(f) for f in fields]
-
-    #def addField()
 
     def __init__(self, fields=None, **kwargs):
         """Initialize a header line.
@@ -147,41 +146,6 @@ class Header(Parser, vb.ValueBinder):
 
     def _hdr_prepend(self):
         return b"{0.type}:".format(self)
-
-
-class FieldDelegateHeader(Header):
-    """The FieldDelegateHeader delegates the work to a field class. Useful
-    where the correct fields are complex."""
-
-    def __init__(self, *args, **kwargs):
-        super(FieldDelegateHeader, self).__init__(*args, **kwargs)
-        if not self.fields:
-            self.fields = [self.FieldDelegateClass()]
-
-    def __setattr__(self, attr, val):
-        if len(self.fields) > 0:
-            myval = self.fields[0]
-            if hasattr(myval, "delegateattributes"):
-                dattrs = myval.delegateattributes
-                if attr in dattrs:
-                    setattr(myval, attr, val)
-                    return
-
-        super(FieldDelegateHeader, self).__setattr__(attr, val)
-        return
-
-    def __getattr__(self, attr):
-        if len(self.fields) > 0:
-            myval = self.fields[0]
-            dattrs = myval.delegateattributes
-            if attr in dattrs:
-                return getattr(myval, attr)
-        try:
-            return super(FieldDelegateHeader, self).__getattr__(attr)
-        except AttributeError:
-            raise AttributeError(
-                "{self.__class__.__name__!r} object has no attribute "
-                "{attr!r}.".format(**locals()))
 
 
 class DNameURIHeader(
@@ -302,11 +266,35 @@ class Call_IdHeader(Header):
         return [field_text]
 
 
-class CseqHeader(FieldDelegateHeader):
-    FieldDelegateClass = CSeqField
+
+def GenerateNewNumber():
+    return random.randint(0, 2**31 - 1)
 
 
-class Max_ForwardsHeader(FieldDelegateHeader):
-    FieldDelegateClass = Max_ForwardsField
+class CseqHeader(
+        DeepClass("_csh_", {
+            "number": {
+                dck.gen: GenerateNewNumber,
+                dck.check: lambda num: isinstance(num, Integral)},
+            "reqtype": {}
+        }),
+        Header):
+
+    parseinfo = {
+        Parser.Pattern:
+            "(\d+)"
+            " "
+            "([\w_-]+)$",  # No parameters.
+        Parser.Mappings:
+            [("number", int),
+             ("reqtype", None, lambda x: getattr(Request.types, x))]
+    }
+
+    def __bytes__(self):
+        return b"CSeq  : BIG FAT DUMMY CSEQ HEADER"
+
+
+class Max_ForwardsHeader(Header):
+    FieldClass = Max_ForwardsField
 
 Header.addSubclassesFromDict(locals())

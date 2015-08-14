@@ -181,43 +181,6 @@ class ViaField(
         return rs
 
 
-def GenerateNewNumber():
-    return random.randint(0, 2**31 - 1)
-
-
-class CSeqField(
-        DeepClass("_csf_", {
-            "number": {
-                dck.gen: GenerateNewNumber,
-                dck.check: lambda num: isinstance(num, Integral)},
-            "reqtype": {},
-            "value": {dck.get: lambda csf, under: csf.getValue()}
-        }),
-        Field):
-
-    delegateattributes = ["number", "reqtype"]
-
-    parseinfo = {
-        parse.Parser.Pattern:
-            "(\d+)"
-            " "
-            "([\w_-]+)$",  # No parameters.
-        parse.Parser.Mappings:
-            [("number", int),
-             ("reqtype", None, lambda x: getattr(Request.types, x))]
-    }
-
-    def getValue(self):
-        return b"{0.number} {0.reqtype}".format(self)
-
-    def __setattr__(self, attr, val):
-        """The CSeq depends on the number and the request line type, so if
-        either changes then we need to invalidate the value."""
-        if attr in ("number", "reqtype"):
-            self.value = None
-        super(CSeqField, self).__setattr__(attr, val)
-
-
 class Max_ForwardsField(Field):
     delegateattributes = ["number"]
 
