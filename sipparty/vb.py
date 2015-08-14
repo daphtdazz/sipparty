@@ -19,7 +19,6 @@ import six
 from six import binary_type as bytes, iteritems
 import re
 import weakref
-from contextlib import contextmanager
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.WARNING)  # vb is verbose at lower levels.
@@ -271,14 +270,6 @@ class ValueBinder(object):
         else:
             existing_val = None
 
-        # If the existing value is the new value, we won't update our state, so
-        # just recurse to super in case it needs to do anything and get out.
-        if existing_val is val:
-            log.debug(
-                "%r instance attribute %r is being set to current value." % (
-                    self.__class__.__name__, attr))
-            return super(ValueBinder, self).__setattr__(attr, val)
-
         try:
             settingAttributes = sd["_vb_settingAttributes"]
             if attr in settingAttributes:
@@ -314,17 +305,20 @@ class ValueBinder(object):
                 attr, self.__class__.__name__, val, self.__class__.__mro__)
             raise
 
-        self.vb_updateAttributeBindings(attr, existing_val, val)
+        if existing_val is not val:
+            self.vb_updateAttributeBindings(attr, existing_val, val)
+        else:
+            log.debug("New val is old val so don't update bindings.")
 
     def vb_updateAttributeBindings(self, attr, existing_val, val):
 
         log.debug(
             "Update attribute %r bindings after change, 0x%x -> 0x%x.", attr,
             id(existing_val), id(val))
-        if hasattr(existing_val, "_vb_unbindAllParent"):
+        if isinstance(existing_val, ValueBinder):
             existing_val._vb_unbindAllParent()
 
-        if hasattr(val, "_vb_binddirection"):
+        if isinstance(val, ValueBinder):
             log.detail("New value is bindable.")
             for direction in self.VB_Directions:
                 _, _, _, bs, _ = self._vb_bindingdicts(attr, direction,
@@ -540,7 +534,7 @@ class ValueBinder(object):
                 log.debug("  has child at %r.", fromattr_resolved)
                 subobj = getattr(self, fromattr_resolved)
                 log.debug("  %r", subobj)
-                if hasattr(subobj, "_vb_binddirection"):
+                if isinstance(subobj, ValueBinder):
                     log.debug("  child is VB compatible.")
                     subobj._vb_binddirection(
                         fromattrattrs, ValueBinder.PS + resolvedtopath, self,
@@ -603,6 +597,7 @@ class ValueBinder(object):
             # If the child doesn't support ValueBinding, then it is a bit late
             # to do anything about this now! This will have been logged when
             # we attempted to set the binding on it, so just ignore it now.
+            # TODO: should just assert and not quietly ignore this?
             if hasattr(child, "_vb_unbinddirection"):
                 child._vb_unbinddirection(
                     fromattrattrs, attrtopath, direction)
