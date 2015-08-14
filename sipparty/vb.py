@@ -316,7 +316,11 @@ class ValueBinder(object):
             "Update attribute %r bindings after change, 0x%x -> 0x%x.", attr,
             id(existing_val), id(val))
         if isinstance(existing_val, ValueBinder):
-            existing_val._vb_unbindAllParent()
+            expar = existing_val.vb_parent
+            if expar is self:
+                log.debug(
+                    "Unbind all parent since we are removing it from ourself.")
+                existing_val._vb_unbindAllParent()
 
         if isinstance(val, ValueBinder):
             log.detail("New value is bindable.")
@@ -326,6 +330,15 @@ class ValueBinder(object):
                 for subpath, bds in iteritems(bs):
                     if len(subpath) == 0:
                         continue
+                    if val.vb_parent is not None and val.vb_parent is not self:
+                        raise(ValueError(
+                            "Could not update bindings for %r instance being "
+                            "stored at attribute %r of %r instance as that "
+                            "would change its parent unexpectedly. Bindings "
+                            "may only be created in such a way as to ensure "
+                            "no object may have two potential parents." % (
+                                val.__class__.__name__, attr,
+                                self.__class__.__name__)))
                     for topath, bd in iteritems(bds):
                         subtopath = self.VB_PrependParent(topath)
                         tf = bd[self.KeyTransformer]
@@ -483,8 +496,8 @@ class ValueBinder(object):
             return val
         return None
 
-    def _vb_binddirection(self, frompath, topath, parent, transformer,
-                          direction):
+    def _vb_binddirection(
+            self, frompath, topath, parent, transformer, direction):
         """
         """
         log.debug("  %r bindings before bind %r",

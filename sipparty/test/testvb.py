@@ -234,24 +234,18 @@ class TestVB(SIPPartyTestCase):
 
     def testValuesWithDifferentParentsAreNotUnlinked(self):
 
-        a, ac, ab, aaa, aba = [vb.ValueBinder() for _ in range(5)]
+        a, aa, ab, aaa, aba = [vb.ValueBinder() for _ in range(5)]
 
-        a.bind("b", "c")
+        a.bind("a", "b.a")
+        a.a = aa
         a.b = ab
-        self.assertTrue(a.c is ab)
-        a.bind("b.a", "d")
-        self.assertTrue(ab.vb_parent is a)
-        self.assertEqual(len(ab._vb_forwardbindings), 1)
-        a.c = 6
-        self.assertTrue(ab.vb_parent is a)
-        self.assertEqual(len(ab._vb_forwardbindings), 1)
-
-        a.c = ac
-        a.b.a = 5
-        self.assertEqual(a.c.a, 5)
-        ab.a = 6
-        self.assertEqual(a.c.a, 6)
-        self.assertEqual(ac.b, ab)
+        self.assertTrue(a.b.a is aa)
+        a.bind("a.d", "d")
+        self.assertTrue(aa.vb_parent is a)
+        self.assertEqual(len(aa._vb_forwardbindings), 1)
+        a.b.a = 6
+        self.assertTrue(aa.vb_parent is a)
+        self.assertEqual(len(aa._vb_forwardbindings), 1)
 
 if __name__ == "__main__":
     sys.exit(unittest.main())
