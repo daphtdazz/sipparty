@@ -16,13 +16,13 @@ limitations under the License.
 """
 import logging
 import six
+from six import binary_type as bytes, iteritems
 import re
 import weakref
+from contextlib import contextmanager
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.WARNING)  # vb is verbose at lower levels.
-bytes = six.binary_type
-iteritems = six.iteritems
 
 
 class BindingException(Exception):
@@ -110,10 +110,26 @@ class ValueBinder(object):
         """
         log.info("Bind %r instance attribute %r to %r",
                  self.__class__.__name__, frompath, topath)
+        if log.level <= logging.DETAIL and hasattr(self, frompath):
+            at = getattr(self, frompath)
+            if hasattr(at, "_vb_forwardbindings"):
+                log.debug("Target bindings now: %r", at._vb_forwardbindings)
         self._vb_binddirection(
             frompath, topath, None, transformer, self.VB_Forward)
+        if log.level <= logging.DETAIL and hasattr(self, frompath):
+            at = getattr(self, frompath)
+            if hasattr(at, "_vb_forwardbindings"):
+                log.debug(
+                    "Target bindings after forward bind: %r",
+                    at._vb_forwardbindings)
         self._vb_binddirection(
             topath, frompath, None, transformer, self.VB_Backward)
+        if log.level <= logging.DETAIL and hasattr(self, frompath):
+            at = getattr(self, frompath)
+            if hasattr(at, "_vb_forwardbindings"):
+                log.debug(
+                    "Target bindings after backward bind: %r",
+                    at._vb_forwardbindings)
 
     def bindBindings(self, bindings):
         """Establish a set of bindings.
@@ -131,7 +147,6 @@ class ValueBinder(object):
     def unbind(self, frompath, topath):
         """Unbind a binding. Raises NoSuchBinding() if the binding does not
         exist."""
-
         log.info("Unbind %r instance attribute %r to %r",
                  self.__class__.__name__, frompath, topath)
 
@@ -152,7 +167,6 @@ class ValueBinder(object):
                 for topath, cdict in iteritems(bdict):
                     log.debug("Push %r to %r", frompath, topath)
                     self._vb_push_value_to_target(val, topath)
-
 
     @property
     def vb_parent(self):
@@ -224,6 +238,11 @@ class ValueBinder(object):
         """
         log.detail("Set %r.", attr)
 
+        if attr.startswith("_vb_"):
+            log.detail("Directly setting vb private attribute")
+            self.__dict__[attr] = val
+            return
+
         # Avoid recursion if a subclass has not called init (perhaps failed
         # a part of its own initialization.
         sd = self.__dict__
@@ -251,6 +270,14 @@ class ValueBinder(object):
             existing_val = getattr(self, attr)
         else:
             existing_val = None
+
+        # If the existing value is the new value, we won't update our state, so
+        # just recurse to super in case it needs to do anything and get out.
+        if existing_val is val:
+            log.debug(
+                "%r instance attribute %r is being set to current value." % (
+                    self.__class__.__name__, attr))
+            return super(ValueBinder, self).__setattr__(attr, val)
 
         try:
             settingAttributes = sd["_vb_settingAttributes"]
@@ -291,7 +318,9 @@ class ValueBinder(object):
 
     def vb_updateAttributeBindings(self, attr, existing_val, val):
 
-        log.debug("Update attribute %r bindings after change.", attr)
+        log.debug(
+            "Update attribute %r bindings after change, 0x%x -> 0x%x.", attr,
+            id(existing_val), id(val))
         if hasattr(existing_val, "_vb_unbindAllParent"):
             existing_val._vb_unbindAllParent()
 
@@ -330,7 +359,7 @@ class ValueBinder(object):
 
     def __del__(self):
         """We need to remove all our bindings."""
-        #self._vb_unbindAllCondition()
+        self._vb_unbindAllCondition()
         sp = super(ValueBinder, self)
         if hasattr(sp, "__del__"):
             sp.__del__()

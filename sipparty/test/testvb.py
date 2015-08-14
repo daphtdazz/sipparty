@@ -37,7 +37,7 @@ class TestVB(SIPPartyTestCase):
 
     def setUp(self):
         super(TestVB, self).setUp()
-        self.pushLogLevel("vb", logging.DEBUG)
+        self.pushLogLevel("vb", logging.DETAIL)
 
     def testBindings(self):
         VB = vb.ValueBinder
@@ -162,10 +162,10 @@ class TestVB(SIPPartyTestCase):
         b.val = 2
         self.assertEqual(a.val, 2)
 
-        # Orphan b by deleting a.
+        log.info("Orphan 'b' by deleting parent.")
         del a
 
-        # Now reassign b to c.
+        log.info("Check b has been unbound and can be rebound.")
         c.b = b
         self.assertEqual(c.val, 2)
 
@@ -231,6 +231,27 @@ class TestVB(SIPPartyTestCase):
         ab.a.a = 5
         a.a = ab
         self.assertEqual(a.c, 5)
+
+    def testValuesWithDifferentParentsAreNotUnlinked(self):
+
+        a, ac, ab, aaa, aba = [vb.ValueBinder() for _ in range(5)]
+
+        a.bind("b", "c")
+        a.b = ab
+        self.assertTrue(a.c is ab)
+        a.bind("b.a", "d")
+        self.assertTrue(ab.vb_parent is a)
+        self.assertEqual(len(ab._vb_forwardbindings), 1)
+        a.c = 6
+        self.assertTrue(ab.vb_parent is a)
+        self.assertEqual(len(ab._vb_forwardbindings), 1)
+
+        a.c = ac
+        a.b.a = 5
+        self.assertEqual(a.c.a, 5)
+        ab.a = 6
+        self.assertEqual(a.c.a, 6)
+        self.assertEqual(ac.b, ab)
 
 if __name__ == "__main__":
     sys.exit(unittest.main())
