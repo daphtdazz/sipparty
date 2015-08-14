@@ -228,6 +228,10 @@ class Parser(object):
         if mo is None:
             cls.ParseFail(string, "Pattern was %r" % pi[Parser.Pattern])
 
+        if len(mo.group(0)) != len(string):
+            cls.ParseFail(string, "Did not match the whole pattern: %r" % (
+                pi[Parser.Pattern],))
+
         return mo
 
     @classmethod

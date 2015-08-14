@@ -112,7 +112,8 @@ class DNameURIField(
             "".format(**prot.__dict__),
         parse.Parser.Mappings:
             [("value", DNameURI),
-             ("parameters", Parameters)]
+             ("parameters", Parameters)],
+        parse.Parser.Repeats: True
     }
 
 
@@ -160,11 +161,11 @@ class ViaField(
             [("protocol", None, lambda x: x.replace(" ", "")),
              ("transport",),
              ("host", components.Host),
-             ("parameters", Parameters)]
+             ("parameters", Parameters)],
+        parse.Parser.Repeats: True
     }
 
     def __bytes__(self):
-
         pt = self.protocol
         if pt is None:
             raise Incomplete("Via header has not protocol.")

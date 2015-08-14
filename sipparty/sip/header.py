@@ -16,11 +16,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import six
 import datetime
 import random
 import re
 import logging
+from six import (binary_type as bytes, add_metaclass)
 from numbers import Integral
 from sipparty import (util, vb, Parser)
 from sipparty.deepclass import (DeepClass, dck)
@@ -28,20 +28,19 @@ import prot
 from prot import Incomplete
 import components
 from field import (DNameURIField, Max_ForwardsField, ViaField)
+from request import Request
 
 log = logging.getLogger(__name__)
-bytes = six.binary_type
 
 
-@six.add_metaclass(
-    # The FSM type needs both the attributesubclassgen and the cumulative
-    # properties metaclasses.
-    type('HeaderType',
-         (util.CCPropsFor(("fields",)),
-          util.attributesubclassgen),
-         dict()))
+@add_metaclass(util.attributesubclassgen)
 @util.TwoCompatibleThree
-class Header(Parser, vb.ValueBinder):
+class Header(
+        DeepClass("_hdr_", {
+            "header_value": {dck.gen: lambda: None},
+            "type": {dck.descriptor: lambda x: util.ClassType("Header")}
+            }),
+        Parser, vb.ValueBinder):
     """A SIP header.
 
     Each type of SIP header has its own subclass, and so generally the Header
@@ -71,61 +70,55 @@ class Header(Parser, vb.ValueBinder):
          "User-Agent", "Via", "Warning", "WWW-Authenticate"),
         normalize=util.sipheader)
 
-    type = util.ClassType("Header")
-    field = util.FirstListItemProxy("fields")
-    fields = util.DerivedProperty(
-        "_hdr_fields", check=lambda x: isinstance(x, list))
+    #type = util.ClassType("Header")
 
     parseinfo = {
         Parser.Pattern:
             # The type. Checked in the constructor whether it's a valid header
             # or not.
-            "({token})"
-            "{HCOLON}"
             "({header_value})"  # Everything else to be parsed in parsecust().
             "".format(**prot.__dict__),
-        Parser.Constructor:
-            (1, lambda type: getattr(Header, type)())
+        Parser.Mappings:
+            [("header_value",)]
     }
 
+    def _hdr_prepend(self):
+        return b"{0.type}:".format(self)
+
+
+class FieldsBasedHeader(
+        DeepClass("_dnurh_", {
+            "fields": {dck.gen: list, dck.descriptor: None},
+            "field": {
+                dck.descriptor: lambda x: util.FirstListItemProxy("fields"),
+                dck.gen: "GenerateField"}
+        }),
+        Header):
+
+    @classmethod
+    def GenerateField(cls):
+        return cls.FieldClass()
+
     def parsecust(self, string, mo):
+        data = mo.group(1)
+        log.debug("Header fields data: %r", data)
 
-        data = mo.group(2)
-        fields = data.split(",")
-        log.debug("Header fields: %r", fields)
-
-        if not hasattr(self, "FieldClass"):
-            try:
-                self.fields = fields
-                if not isinstance(self.fields, list):
-                    raise ValueError(
-                        "Result of FieldClass %r Parse was not a list; it may "
-                        "use Parser.repeats to ensure it returns a list." % (
-                            self.FieldClass.__name__))
-            except AttributeError as exc:
-                log.debug(
-                    "Can't set 'fields' on instance of %r: %s",
-                    self.__class__.__name__, exc)
-            return
+        if not hasattr(self, "FieldClass") or self.FieldClass is None:
+            raise AttributeError(
+                "%r instance has no FieldClass defined, so cannot be a field "
+                "based header." % (self.__class__.__name__,))
 
         fdc = self.FieldClass
-        if hasattr(fdc, "Parse"):
-            def create(x): return fdc.Parse(x)
-        else:
-            def create(x): return fdc(x)
+        flds = fdc.Parse(data)
 
-        self.fields = [create(f) for f in fields]
+        if not isinstance(flds, list):
+            raise ValueError(
+                "%r field class did not return a list of fields from its "
+                "Parse method. You can use the Parser.Repeats key in the "
+                "parser dictionary to create lists automatically." % (
+                    self.FieldClass.__name__))
 
-    def __init__(self, fields=None, **kwargs):
-        """Initialize a header line.
-        """
-        self.__dict__["_hdr_fields"] = []
-        super(Header, self).__init__(**kwargs)
-
-        if fields is None:
-            fields = list()
-
-        self.fields = fields
+        self.fields = flds
 
     def __bytes__(self):
         flds = self.fields
@@ -139,20 +132,8 @@ class Header(Parser, vb.ValueBinder):
             exc.args += ('Header type %r' % self.__class__.__name__,)
             raise
 
-    def __repr__(self):
-        return (
-            "{0.__class__.__name__}(fields={0.fields!r})"
-            "".format(self))
 
-    def _hdr_prepend(self):
-        return b"{0.type}:".format(self)
-
-
-class DNameURIHeader(
-        DeepClass("_dnurh_", {
-            "field": {dck.descriptor: None, dck.gen: DNameURIField}
-        }),
-        Header):
+class DNameURIHeader(FieldsBasedHeader):
     FieldClass = DNameURIField
     vb_dependencies = (
         ("field", (
@@ -169,11 +150,7 @@ class FromHeader(DNameURIHeader):
     """A From: header"""
 
 
-class ViaHeader(
-        DeepClass("_vh_", {
-            "field": {dck.descriptor: None, dck.gen: ViaField}
-        }),
-        Header):
+class ViaHeader(FieldsBasedHeader):
     """The Via: Header."""
     FieldClass = ViaField
     vb_dependencies = (
@@ -266,17 +243,12 @@ class Call_IdHeader(Header):
         return [field_text]
 
 
-
-def GenerateNewNumber():
-    return random.randint(0, 2**31 - 1)
-
-
 class CseqHeader(
         DeepClass("_csh_", {
             "number": {
-                dck.gen: GenerateNewNumber,
+                dck.gen: lambda: random.randint(0, 2**31 - 1),
                 dck.check: lambda num: isinstance(num, Integral)},
-            "reqtype": {}
+            "reqtype": {dck.gen: lambda: None}
         }),
         Header):
 
@@ -291,7 +263,12 @@ class CseqHeader(
     }
 
     def __bytes__(self):
-        return b"CSeq  : BIG FAT DUMMY CSEQ HEADER"
+
+        if self.reqtype is None:
+            raise Incomplete
+
+        return b"%s %d %s" % (
+            self._hdr_prepend(), self.number, self.reqtype)
 
 
 class Max_ForwardsHeader(Header):

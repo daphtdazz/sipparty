@@ -101,11 +101,12 @@ class TestProtocol(SIPPartyTestCase):
     def testParse(self):
 
         self.pushLogLevel("header", logging.DEBUG)
-        self.pushLogLevel("vb", logging.DEBUG)
-        self.pushLogLevel("message", logging.DEBUG)
+        #self.pushLogLevel("vb", logging.DEBUG)
+        self.pushLogLevel("message", logging.DETAIL)
         #self.pushLogLevel("field", logging.INFO)
         self.pushLogLevel("parse", logging.DEBUG)
-        self.pushLogLevel("deepclass", logging.DEBUG)
+        #self.pushLogLevel("deepclass", logging.DEBUG)
+        #self.pushLogLevel("util", logging.DEBUG)
 
         invite = sip.Message.invite()
 
@@ -140,16 +141,15 @@ class TestProtocol(SIPPartyTestCase):
         self.assertEqualMessages(invite, new_inv)
 
         new_inv.addHeader(sip.Header.via())
-        assert 0, new_inv.contactheader.field.uri
         self.assertEqual(new_inv.contactheader.port, 5061)
         self.assertEqual(new_inv.viaheader.port, 5061)
-        self.assertEqual(bytes(new_inv.viaheader.field.host), b"127.0.0.1:5061")
-        self.assertEqual(bytes(new_inv.viaheader.host.address), b"127.0.0.1")
+        self.assertEqual(
+            bytes(new_inv.viaheader.field.host), b"127.0.0.1:5061")
+        self.assertEqual(
+            bytes(new_inv.viaheader.host.address), b"127.0.0.1")
 
-        new_inv.viaheader.address = "arkansas.com"
-
+        new_inv.viaheader.host = "arkansas.com"
         new_inv.startline.uri.aor.username = "bill"
-
         self.assertTrue(re.match(
             "INVITE sip:bill@biloxi.com SIP/2.0\r\n"
             "From: <sip:alice@atlanta.com>;{3}\r\n"

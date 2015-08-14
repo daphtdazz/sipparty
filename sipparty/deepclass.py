@@ -164,7 +164,10 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
                         "Generating attribute %r of %r instance", tlattr,
                         clname)
                     gen = tlad[dck.gen]
-                    tlval = gen(**tlsvals)
+                    if isinstance(gen, bytes):
+                        tlval = getattr(self.__class__, gen)()
+                    else:
+                        tlval = gen(**tlsvals)
 
                 log.detail(
                     "Set %r attribute %r to %r", clname,

@@ -24,6 +24,7 @@
 13. Move sipheader out of util and probably into prot.
 14. Offers SDP.
 15. Document and fixing attribute naming convention in vb.py.
+16. deepclass representation is overly verbose.
  
 ## Done list. ##
 

@@ -107,36 +107,32 @@ class Message(vb.ValueBinder):
             raise parse.ParseError(
                 "Startline is not a SIP startline: %r." % (startline,))
 
-        assert 0, lines
+        #assert 0, lines
 
+        body_lines = lines[1:]
         def HNameContentsGen(hclist):
+            #global body_lines
             hcit = iter(hclist)
-
             try:
                 while True:
                     hname = hcit.next()
-                    if hnae is None:
+                    body_lines.pop(0)
+                    if hname is None:
                         return
                     hcontents = hcit.next()
+                    body_lines.pop(0)
                     yield (hname, hcontents)
             except StopIteration:
                 assert 0, "Bug: Unexpected end of lines in message."
 
         for hname, hcontents in HNameContentsGen(lines[1:]):
             log.debug("Add header %r", hname)
+            log.detail("Contents: %r", hcontents)
             newh = getattr(Header, hname).Parse(hcontents)
             log.detail("Header parsed as: %r", newh)
             message.addHeader(newh)
-            assert 0, repr(message)
 
-        for line, ln in zip(lines, range(1, len(lines) + 1)):
-            if len(line) == 0:
-                break
-            message.addHeader(Header.Parse(line))
-        body_lines = lines[ln:]
         log.debug("SDP lines %r", body_lines)
-
-        assert 0, repr(message)
 
         return message
 
@@ -187,7 +183,8 @@ class Message(vb.ValueBinder):
             self.autofillheaders()
 
         if configure_bindings and hasattr(self, "field_bindings"):
-            log.debug("Configure %r bindings: %r", self.type, self.field_bindings)
+            log.debug(
+                "Configure %r bindings: %r", self.type, self.field_bindings)
             self.bindBindings(self.field_bindings)
 
     def addHeader(self, hdr):
@@ -364,7 +361,7 @@ class InviteMessage(Message):
         ("FromHeader.field.value.uri.aor.username",
          "ContactHeader.field.value.uri.aor.username"),
         ("ContactHeader.host", "ViaHeader.host"),
-        ("startline.type", "CseqHeader.field.reqtype"),
+        ("startline.type", "CseqHeader.reqtype"),
     ]
 
     mandatoryheaders = [
@@ -390,7 +387,7 @@ class ByeMessage(Message):
          "ContactHeader.field.value.uri.aor.username"),
         ("ContactHeader.field.value.uri.aor.host",
          "ViaHeader.field.host.host"),
-        ("startline.type", "CseqHeader.field.reqtype")]
+        ("startline.type", "CseqHeader.reqtype")]
 
     mandatoryheaders = [
         Header.types.Contact]

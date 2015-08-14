@@ -208,12 +208,19 @@ class ClassType(object):
         self.class_append = class_append
 
     def __get__(self, instance, owner):
+
         if instance is None:
             return ""
 
         class_name = instance.__class__.__name__
-        return getattr(instance.types, class_name.replace(
-            self.class_append, ""))
+        capp = self.class_append
+        log.debug("Class is %r, append is %r", class_name, capp)
+        class_short_name = class_name.replace(capp, "")
+        try:
+            return getattr(instance.types, class_short_name)
+        except AttributeError as exc:
+            raise AttributeError(
+                "No such known header class type %r" % (class_short_name,))
 
 
 class FirstListItemProxy(object):
