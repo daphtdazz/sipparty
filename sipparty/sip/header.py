@@ -71,8 +71,6 @@ class Header(
          "User-Agent", "Via", "Warning", "WWW-Authenticate"),
         normalize=util.sipheader)
 
-    #type = util.ClassType("Header")
-
     parseinfo = {
         Parser.Pattern:
             # The type. Checked in the constructor whether it's a valid header
@@ -156,7 +154,7 @@ class ViaHeader(FieldsBasedHeader):
     FieldClass = ViaField
     vb_dependencies = (
         ("field", (
-            "host", "address", "port")),
+            "host", "address", "port", "parameters")),
     )
 
 

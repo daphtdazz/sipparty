@@ -199,6 +199,60 @@ class ValueBinder(object):
                     self.__class__.__name__, path))
         setattr(target, attr, value)
 
+    def vb_updateAttributeBindings(self, attr, existing_val, val):
+
+        log.debug(
+            "Update attribute %r bindings after change, 0x%x -> 0x%x.", attr,
+            id(existing_val), id(val))
+        if isinstance(existing_val, ValueBinder):
+            expar = existing_val.vb_parent
+            if expar is self:
+                log.debug(
+                    "Unbind all parent since we are removing it from ourself.")
+                existing_val._vb_unbindAllParent()
+
+        if isinstance(val, ValueBinder):
+            log.detail("New value is bindable.")
+            for direction in self.VB_Directions:
+                _, _, _, bs, _ = self._vb_bindingdicts(attr, direction,
+                                                       all=True)
+                for subpath, bds in iteritems(bs):
+                    if len(subpath) == 0:
+                        continue
+                    if val.vb_parent is not None and val.vb_parent is not self:
+                        raise(ValueError(
+                            "Could not update bindings for %r instance being "
+                            "stored at attribute %r of %r instance as that "
+                            "would change its parent unexpectedly. Bindings "
+                            "may only be created in such a way as to ensure "
+                            "no object may have two potential parents." % (
+                                val.__class__.__name__, attr,
+                                self.__class__.__name__)))
+                    for topath, bd in iteritems(bds):
+                        subtopath = self.VB_PrependParent(topath)
+                        tf = bd[self.KeyTransformer]
+                        log.debug("%r bind new value %r to %r", direction,
+                                  subpath, subtopath)
+                        val._vb_binddirection(subpath, subtopath, self, tf,
+                                              direction)
+
+        # If this attribute is forward bound, push the value out.
+        _, _, _, fbds, _ = self._vb_bindingdicts(attr, self.VB_Forward,
+                                                 all=True)
+        log.detail(
+            "forward bindings for attr %r of %r instance: %r", attr,
+            self.__class__.__name__, fbds)
+        for fromattrattrs, bds in iteritems(fbds):
+            if len(fromattrattrs) == 0:
+                for topath, bd in iteritems(bds):
+                    log.debug("Push %s.%s to %s", attr, fromattrattrs,
+                              topath)
+                    if ValueBinder.KeyTransformer in bd:
+                        tf = bd[ValueBinder.KeyTransformer]
+                        if tf is not None:
+                            val = tf(val)
+                    self._vb_push_value_to_target(val, topath)
+
     #
     # =================== MAGIC METHODS ======================================
     #
@@ -309,60 +363,6 @@ class ValueBinder(object):
             self.vb_updateAttributeBindings(attr, existing_val, val)
         else:
             log.debug("New val is old val so don't update bindings.")
-
-    def vb_updateAttributeBindings(self, attr, existing_val, val):
-
-        log.debug(
-            "Update attribute %r bindings after change, 0x%x -> 0x%x.", attr,
-            id(existing_val), id(val))
-        if isinstance(existing_val, ValueBinder):
-            expar = existing_val.vb_parent
-            if expar is self:
-                log.debug(
-                    "Unbind all parent since we are removing it from ourself.")
-                existing_val._vb_unbindAllParent()
-
-        if isinstance(val, ValueBinder):
-            log.detail("New value is bindable.")
-            for direction in self.VB_Directions:
-                _, _, _, bs, _ = self._vb_bindingdicts(attr, direction,
-                                                       all=True)
-                for subpath, bds in iteritems(bs):
-                    if len(subpath) == 0:
-                        continue
-                    if val.vb_parent is not None and val.vb_parent is not self:
-                        raise(ValueError(
-                            "Could not update bindings for %r instance being "
-                            "stored at attribute %r of %r instance as that "
-                            "would change its parent unexpectedly. Bindings "
-                            "may only be created in such a way as to ensure "
-                            "no object may have two potential parents." % (
-                                val.__class__.__name__, attr,
-                                self.__class__.__name__)))
-                    for topath, bd in iteritems(bds):
-                        subtopath = self.VB_PrependParent(topath)
-                        tf = bd[self.KeyTransformer]
-                        log.debug("%r bind new value %r to %r", direction,
-                                  subpath, subtopath)
-                        val._vb_binddirection(subpath, subtopath, self, tf,
-                                              direction)
-
-        # If this attribute is forward bound, push the value out.
-        _, _, _, fbds, _ = self._vb_bindingdicts(attr, self.VB_Forward,
-                                                 all=True)
-        log.detail(
-            "forward bindings for attr %r of %r instance: %r", attr,
-            self.__class__.__name__, fbds)
-        for fromattrattrs, bds in iteritems(fbds):
-            if len(fromattrattrs) == 0:
-                for topath, bd in iteritems(bds):
-                    log.debug("Push %s.%s to %s", attr, fromattrattrs,
-                              topath)
-                    if ValueBinder.KeyTransformer in bd:
-                        tf = bd[ValueBinder.KeyTransformer]
-                        if tf is not None:
-                            val = tf(val)
-                    self._vb_push_value_to_target(val, topath)
 
     def __del__(self):
         """We need to remove all our bindings."""
@@ -607,11 +607,11 @@ class ValueBinder(object):
             attrtopath = self.VB_PrependParent(resolvedtopath)
             child = getattr(self, fromattr_resolved)
 
-            # If the child doesn't support ValueBinding, then it is a bit late
+            # If the child doesn't support ValueBinder, then it is a bit late
             # to do anything about this now! This will have been logged when
             # we attempted to set the binding on it, so just ignore it now.
             # TODO: should just assert and not quietly ignore this?
-            if hasattr(child, "_vb_unbinddirection"):
+            if isinstance(child, ValueBinder):
                 child._vb_unbinddirection(
                     fromattrattrs, attrtopath, direction)
 

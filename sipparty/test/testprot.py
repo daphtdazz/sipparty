@@ -54,9 +54,9 @@ class TestProtocol(SIPPartyTestCase):
 
         self.assertRaises(AttributeError, lambda: sip.Request.notareq)
 
-        inviteRequest = sip.Request.invite(bobAOR)
+        inviteRequest = sip.Request.invite(uri_aor=bobAOR)
         self.assertEqual(
-            bytes(inviteRequest), "INVITE bob@baltimore.com SIP/2.0")
+            bytes(inviteRequest), "INVITE sip:bob@baltimore.com SIP/2.0")
 
         self.assertRaises(AttributeError, lambda: sip.Message.notareg)
 
@@ -101,12 +101,8 @@ class TestProtocol(SIPPartyTestCase):
     def testParse(self):
 
         self.pushLogLevel("header", logging.DEBUG)
-        #self.pushLogLevel("vb", logging.DEBUG)
-        self.pushLogLevel("message", logging.DETAIL)
-        #self.pushLogLevel("field", logging.INFO)
+        self.pushLogLevel("message", logging.DEBUG)
         self.pushLogLevel("parse", logging.DEBUG)
-        #self.pushLogLevel("deepclass", logging.DEBUG)
-        #self.pushLogLevel("util", logging.DEBUG)
 
         invite = sip.Message.invite()
 
@@ -169,6 +165,8 @@ class TestProtocol(SIPPartyTestCase):
                 TestProtocol.call_id_pattern, TestProtocol.branch_pattern,
                 TestProtocol.cseq_num_pattern, TestProtocol.tag_pattern),
             bytes(new_inv)), repr(bytes(new_inv)))
+
+        new_inv._vb_unbindAllCondition()
 
     def testEnum(self):
         en = util.Enum(("cat", "dog", "aardvark", "mouse"))
@@ -268,18 +266,21 @@ class TestProtocol(SIPPartyTestCase):
     def testComponents(self):
         for cpnt, examples in (
                 (components.DNameURI, (
-                    "<sip:bob@biloxi.com>",)),
-                (Request, ('INVITE sip:bob@biloxi.com SIP/2.0',)),
-                (sip.header.Header, (
-                    'Contact: <sip:[::1]:5060;transport=UDP>',))):
+                    ("<sip:bob@biloxi.com>",),)),
+                (Request, (('INVITE sip:bob@biloxi.com SIP/2.0',),)),
+                (sip.header.ContactHeader, (
+                    ('<sip:[::1]:5060;transport=UDP>',
+                     'Contact: <sip:[::1]:5060;transport=UDP>'),))):
             for example in examples:
+                log.info("Test example %r", example)
                 try:
-                    cp = cpnt.Parse(example)
+                    cp = cpnt.Parse(example[0])
                 except ParseError:
                     self.fail("%r failed to parse %r." % (
-                        cpnt.__name__, example))
+                        cpnt.__name__, example[0]))
 
-                self.assertEqual(example, bytes(cp))
+                exp = example[1] if len(example) > 1 else example[0]
+                self.assertEqual(exp, bytes(cp))
 
 if __name__ == "__main__":
     sys.exit(unittest.main())

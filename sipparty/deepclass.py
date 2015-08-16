@@ -184,6 +184,7 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
         def _dc_kvReprGen(self):
             for attr in iterkeys(topLevelAttributeDescs):
                 yield b"%s=%r" % (attr, getattr(self, attr))
+            return
             sp = super(DeepClass, self)
             if hasattr(sp, "_dc_kvReprGen"):
                 for kvp in sp._dc_kvReprGen():
