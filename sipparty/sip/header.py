@@ -27,8 +27,9 @@ from sipparty.deepclass import (DeepClass, dck)
 import prot
 from prot import Incomplete
 import components
-from field import (DNameURIField, Max_ForwardsField, ViaField)
+from field import (DNameURIField, ViaField)
 from request import Request
+import defaults
 
 log = logging.getLogger(__name__)
 
@@ -190,7 +191,12 @@ class ContactHeader(
         return super(ContactHeader, self).__bytes__()
 
 
-class Call_IdHeader(Header):
+class Call_IdHeader(
+        DeepClass("_cidh_", {
+            "host": {},
+            "key": {dck.gen: "GenerateKey"}
+            }),
+        Header):
     """Call ID header.
 
     To paraphrase:
@@ -202,6 +208,13 @@ class Call_IdHeader(Header):
     a dialogue. It SHOULD also be the same for each REGISTER sent to maintain a
     registration by the UA. I.e. being registered => being in a dialogue.
     """
+
+    parseinfo = {
+        Parser.Pattern:
+            "(.*)$",  # No parameters.
+        Parser.Mappings:
+            [("key",)]
+    }
 
     @classmethod
     def GenerateKey(cls):
@@ -219,28 +232,17 @@ class Call_IdHeader(Header):
 
         return "{keyval:06x}-{keydate}".format(**locals())
 
-    fields = util.DerivedProperty(get="_hdrcid_fields")
-    host = util.DerivedProperty("_hdrcid_host")
-    key = util.DerivedProperty("_hdrcid_key")
+    def __bytes__(self):
 
-    def __init__(self, *args, **kwargs):
-        self.__dict__["_hdrcid_host"] = None
-        self.__dict__["_hdrcid_key"] = None
-        Header.__init__(self, *args, **kwargs)
+        key = self.key
+        if not key:
+            raise Incomplete("Call ID header has no key.")
 
-    def _hdrcid_fields(self, underlying):
-        if underlying:
-            return underlying
+        host = self.host
+        if host:
+            return b"{1} {0.key}@{0.host}".format(self, self._hdr_prepend())
 
-        if not self.key:
-            self.key = Call_IdHeader.GenerateKey()
-
-        if self.host:
-            field_text = "{self.key}@{self.host}".format(**locals())
-        else:
-            field_text = "{self.key}".format(**locals())
-
-        return [field_text]
+        return b"{1} {0.key}".format(self, self._hdr_prepend())
 
 
 class CseqHeader(
@@ -271,7 +273,22 @@ class CseqHeader(
             self._hdr_prepend(), self.number, self.reqtype)
 
 
-class Max_ForwardsHeader(Header):
-    FieldClass = Max_ForwardsField
+class Max_ForwardsHeader(
+        DeepClass("_mfh_", {
+            "number": {
+                dck.gen: lambda: defaults.max_forwards,
+                dck.check: lambda x: isinstance(x, Integral)}
+            }),
+        Header):
+
+    parseinfo = {
+        Parser.Pattern:
+            "(\d+)$",  # No parameters.
+        Parser.Mappings:
+            [("number", int)]
+    }
+
+    def __bytes__(self):
+        return "{0} {1.number}".format(self._hdr_prepend(), self)
 
 Header.addSubclassesFromDict(locals())

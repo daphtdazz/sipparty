@@ -129,7 +129,7 @@ class TestProtocol(SIPPartyTestCase):
         invite.fromheader.field.value.uri.aor.username = "alice"
         invite.fromheader.field.value.uri.aor.host = "atlanta.com"
         invite.contactheader.uri = "sip:localuser@127.0.0.1:5061"
-
+        invite.max_forwardsheader.number = 55
         self.assertEqual(invite.contactheader.port, 5061)
         log.debug("Set via header host.")
         self.assertEqual(invite.viaheader.port, 5061)
@@ -150,19 +150,22 @@ class TestProtocol(SIPPartyTestCase):
 
         new_inv.viaheader.host = "arkansas.com"
         new_inv.startline.uri.aor.username = "bill"
+
         self.assertTrue(re.match(
             "INVITE sip:bill@biloxi.com SIP/2.0\r\n"
             "From: <sip:alice@atlanta.com>;{3}\r\n"
             # Note that the To: URI hasn't changed because when the parse
             # happens a new uri gets created for each, and there's no link
             # between them.
-            "To: <sip:bob@biloxi.com>\r\n"
+            "To: <sip:bill@biloxi.com>\r\n"
             "Via: SIP/2.0/UDP arkansas.com\r\n"
             "Via: SIP/2.0/UDP 127.0.0.1:5061;{1}\r\n"
             # 6 random hex digits followed by a date/timestamp
             "Call-ID: {0}\r\n"
             "CSeq: {2} INVITE\r\n"
-            "Max-Forwards: 70\r\n".format(
+            "Max-Forwards: 55\r\n"
+            "Contact: <sip:alice@127.0.0.1:5061>\r\n"
+            "\r\n$".format(
                 TestProtocol.call_id_pattern, TestProtocol.branch_pattern,
                 TestProtocol.cseq_num_pattern, TestProtocol.tag_pattern),
             bytes(new_inv)), repr(bytes(new_inv)))

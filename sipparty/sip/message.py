@@ -72,9 +72,8 @@ class Message(vb.ValueBinder):
         "(%s)request" % (types.REPattern(),), flags=re.IGNORECASE)
 
     headerattrre = re.compile(
-        "(%s)Header" % "|".join(map(
-            util.attributesubclassgen.NormalizeGeneratingAttributeName,
-            Header.types)), flags=re.IGNORECASE)
+        "(%s)Header" % Header.types.REPattern().replace(
+            "-", "[-_]"), flags=re.IGNORECASE)
     type = util.ClassType("Message")
 
     MethodRE = re.compile("{Method}".format(**prot.__dict__))
@@ -274,8 +273,6 @@ class Message(vb.ValueBinder):
             if self.startline.type == mo.group(1):
                 return self.startline
 
-        if attr in Header.types:
-            canonicalheadername = util.sipheader(attr)
         hmo = self.headerattrre.match(attr)
         if hmo is not None:
             canonicalheadername = util.sipheader(hmo.group(1))

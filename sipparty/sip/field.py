@@ -180,12 +180,3 @@ class ViaField(
 
         rs = b";".join(self.bytesGen(vbytes))
         return rs
-
-
-class Max_ForwardsField(Field):
-    delegateattributes = ["number"]
-
-    def __init__(self, number=defaults.max_forwards):
-        super(Max_ForwardsField, self).__init__()
-        self.number = number
-        self.bind("number", "value")
