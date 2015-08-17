@@ -1,4 +1,4 @@
-"""tmediasession.py
+"""testmediasession.py
 
 Test the media session.
 
@@ -12,40 +12,28 @@ You may obtain a copy of the License at
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.      .
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-import six
+from six import (binary_type as bytes)
 import unittest
-
 from sipparty import (util, vb, sip)
 from sipparty.sip import Session
 from sipparty.sip import mediasession
+from sipparty.sdp import SDPIncomplete
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
-    log = logging.getLogger()
-else:
-    log = logging.getLogger(__name__)
-
-bytes = six.binary_type
+log = logging.getLogger(__name__)
 
 
 class TestSession(util.TestCaseREMixin, unittest.TestCase):
 
-    def setUp(self):
-        self._ms_level = sip.mediasession.log.level
-        sip.mediasession.log.setLevel(logging.DEBUG)
-
-    def tearDown(self):
-        sip.mediasession.log.setLevel(self._ms_level)
-
     def testBasicSession(self):
-        return
-        ms = Session("alice")
-        ms.addSession()
+
+        ms = Session(username="alice")
+        self.assertRaises(SDPIncomplete, lambda: ms.sdp())
+
 
 
 if __name__ == "__main__":

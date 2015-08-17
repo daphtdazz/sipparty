@@ -234,24 +234,10 @@ class Transport(Singleton):
         mbytes = bytes(msg)
         log.debug("Send to %r", toAddr)
 
-        if False:
-            # First see if there's a cached socket we can use. If not, try the
-            # existing sockets in turn. Else create a new one by connecting,
-            # learning, and listening.
-            dgcscks = self._sptr_dGramCachedToSocks
-            log.debug("Cached sockets: %r", dgcscks)
+        # TODO: cache sockets used for particular toAddresses so we can re-use
+        # them faster.
 
-            if toAddr in dgcscks:
-                cachedSock = dgcscks[toAddr]
-                try:
-                    return self.sendDgramToCachedSock(cachedSock)
-                except socket.error as exc:
-                    log.warning(
-                        "Existing socket to %r from %r had error: %s", toAddr,
-                        cachedSock.sockname(), exc)
-                    self.uncacheDgramSock(cachedSock)
-
-        # No cached socket, try existing sockets in turn.
+        # Try and find a socket we can route through.
         for sck in itervalues(self._tp_dGramSockets):
             sname = sck.getsockname()
             try:

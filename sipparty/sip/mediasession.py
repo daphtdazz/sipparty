@@ -20,14 +20,24 @@ import logging
 import six
 import re
 import datetime
-
 from sipparty import (util, parse, vb)
+from sipparty.deepclass import (DeepClass, dck)
+from sipparty.sdp import (SessionDescription,)
+from sipparty.sdp.sdpsyntax import (username_re,)
 
 log = logging.getLogger(__name__)
 bytes = six.binary_type
 
 
-class Session(vb.ValueBinder):
+class Session(
+        DeepClass("_sess_", {
+            "transport": {},
+            "description": {
+                dck.check: lambda x: isinstance(x, SessionDescription),
+                dck.gen: SessionDescription},
+            "medias": {dck.gen: list},
+            }),
+        vb.ValueBinder):
     """Implements a media session, with ways of playing media and creation of
     SDP. Strictly this is independent of SDP, but in practice its form is
     heavily informed by SDP's, so if someone wants to write a different
@@ -37,6 +47,24 @@ class Session(vb.ValueBinder):
     SDP is defined in http://www.ietf.org/rfc/rfc4566.txt, which this duly
     follows.
     """
+    vb_dependencies = (
+        ("description", ("username", "transport")),)
+
+    def listen(self):
+        assert 0
+
+    def addMedia(self):
+        assert 0
 
     def sdp(self):
-        self._ms_sdp = sdp.SDP()
+        return bytes(self.description)
+
+
+class MediaSession(object):
+    pass
+
+
+class RTPMediaSession(MediaSession):
+    """An session."""
+
+

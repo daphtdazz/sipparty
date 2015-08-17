@@ -60,8 +60,7 @@ class TestSDP(util.TestCaseREMixin, unittest.TestCase):
             "s= \r\n"
             "t=0 0\r\n"
             "m=audio 1815 RTP/AVP 0\r\n"
-            "c=IN IP4 media.atlanta.com\r\n"
-            "\r\n"
+            "c=IN IP4 media.atlanta.com\r\n$"
         )
 
         # Parse.

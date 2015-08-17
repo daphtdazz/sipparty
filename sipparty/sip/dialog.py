@@ -73,8 +73,6 @@ class Dialog(
     #
     # =================== CLASS INTERFACE =====================================
     #
-    vb_bindings = [
-    ]
     vb_dependencies = [
         ("transport", ["sendMessage"])
     ]

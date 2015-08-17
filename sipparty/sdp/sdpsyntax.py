@@ -19,6 +19,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+import re
 from sipparty import util
 
 NetTypes = util.Enum((b"IN",))
@@ -107,3 +108,8 @@ media_fields = (
     ")*".format(**locals()))
 
 MediaProtocols = util.Enum((b"RTP/AVP", ))
+
+#
+# =================== Pre-compiled REs ========================================
+#
+username_re = re.compile("{username}$".format(**locals()))

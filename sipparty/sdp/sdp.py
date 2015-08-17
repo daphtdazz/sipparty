@@ -20,9 +20,9 @@ import six
 import logging
 import re
 import datetime
-import numbers
-
+from numbers import Integral
 from sipparty import (util, vb, parse)
+from sipparty.deepclass import (DeepClass, dck)
 import sdpsyntax
 
 log = logging.getLogger(__name__)
@@ -117,9 +117,9 @@ class TimeDescription(SDPSection):
     # =================== INSTANCE INTERFACE ==================================
     #
     startTime = util.DerivedProperty(
-        "_td_startTime", lambda x: isinstance(x, numbers.Integral))
+        "_td_startTime", lambda x: isinstance(x, Integral))
     endTime = util.DerivedProperty(
-        "_td_endTime", lambda x: isinstance(x, numbers.Integral))
+        "_td_endTime", lambda x: isinstance(x, Integral))
 
     def __init__(self, startTime=None, endTime=None):
         super(TimeDescription, self).__init__()
@@ -169,7 +169,7 @@ class MediaDescription(SDPSection):
         "_md_mediaType", lambda x: x in sdpsyntax.MediaTypes)
     port = util.DerivedProperty(
         "_md_port",
-        lambda x: isinstance(x, numbers.Integral) and 0 < x <= 0xffff)
+        lambda x: isinstance(x, Integral) and 0 < x <= 0xffff)
     proto = util.DerivedProperty("_md_proto")
     fmt = util.DerivedProperty("_md_fmt")
     connectionDescription = util.DerivedProperty("_md_connectionDescription")
@@ -209,7 +209,33 @@ class MediaDescription(SDPSection):
                 yield ln
 
 
-class SessionDescription(SDPSection):
+class SessionDescription(
+        DeepClass("_sdsc_", {
+            "username": {
+                dck.check: lambda x: sdpsyntax.username_re.match(x)},
+            "sessionID": {
+                dck.check: lambda x: isinstance(x, Integral),
+                dck.gen: "ID"},
+            "sessionVersion": {
+                dck.check: lambda x: isinstance(x, Integral),
+                dck.gen: "ID"},
+            "netType": {
+                dck.check: lambda x: x in sdpsyntax.NetTypes,
+                dck.gen: lambda: sdpsyntax.NetTypes.IN},
+            "addrType": {dck.check: lambda x: x in sdpsyntax.AddrTypes},
+            "address": {dck.check: lambda x: isinstance(x, bytes)},
+            "sessionName": {
+                dck.check: lambda x: isinstance(x, bytes),
+                dck.gen: lambda: b" "},
+            "connectionDescription": {
+                dck.check: lambda x: isinstance(x, ConnectionDescription),
+                dck.gen: ConnectionDescription},
+            "timeDescription": {
+                dck.check: lambda x: isinstance(x, TimeDescription),
+                dck.gen: TimeDescription},
+            "mediaDescriptions": {dck.gen: list},
+        }),
+        SDPSection):
     """SDP is made of 3 sections:
 
     Session Description (one)
@@ -246,23 +272,22 @@ class SessionDescription(SDPSection):
             "(?:{LineTypes.encryptionkey}={text}{eol})?"
             "(?:{LineTypes.attribute}={text}{eol})*"
             "({media_fields})"
-            "{eol}"
             "".format(**sdpsyntax.__dict__),
         parse.Parser.Mappings:
-            [("_ms_username",),
-             ("_ms_sessionID", int),
-             ("_ms_sessionVersion", int),
-             ("_ms_netType",),
-             ("_ms_addrType",),
-             ("_ms_address",),
-             ("_ms_sessionName",),
-             ("_ms_info",),
-             ("_ms_uri",),
-             ("_ms_email",),
-             ("_ms_phone",),
-             ("_ms_connectionDescription", ConnectionDescription),
-             ("_ms_bandwidth",),
-             ("_ms_timeDescription", TimeDescription),
+            [("username",),
+             ("sessionID", int),
+             ("sessionVersion", int),
+             ("netType",),
+             ("addrType",),
+             ("address",),
+             ("sessionName",),
+             ("info",),
+             ("uri",),
+             ("email",),
+             ("phone",),
+             ("connectionDescription", ConnectionDescription),
+             ("bandwidth",),
+             ("timeDescription", TimeDescription),
              ("mediaDescriptions", MediaDescription)]
     }
 
@@ -279,61 +304,6 @@ class SessionDescription(SDPSection):
     #
     # =================== INSTANCE INTERFACE ==================================
     #
-    username = util.DerivedProperty(
-        "_ms_username",
-        lambda x: SessionDescription.username_pattern.match(x))
-    sessionID = util.DerivedProperty(
-        "_ms_sessionID", lambda x: isinstance(x, numbers.Integral))
-    sessionVersion = util.DerivedProperty(
-        "_ms_sessionVersion", lambda x: isinstance(x, numbers.Integral))
-    netType = util.DerivedProperty(
-        "_ms_netType", lambda x: x in sdpsyntax.NetTypes)
-    addrType = util.DerivedProperty(
-        "_ms_addrType", lambda x: x in sdpsyntax.AddrTypes)
-    address = util.DerivedProperty(
-        "_ms_address", lambda x: isinstance(x, bytes))
-    sessionName = util.DerivedProperty(
-        "_ms_sessionName",
-        lambda x: isinstance(x, bytes))
-    connectionDescription = util.DerivedProperty(
-        "_ms_connectionDescription",
-        lambda x: x is None or isinstance(x, ConnectionDescription))
-    timeDescription = util.DerivedProperty(
-        "_ms_timeDescription")
-
-    def __init__(self, username=None, sessionID=None, sessionVersion=None,
-                 netType=None, addrType=None, address=None, sessionName=None,
-                 timeDescription=None):
-        super(SessionDescription, self).__init__()
-
-        # These may be uninitialized to begin with.
-        for unguessable_attribute in ("address", "username", "addrType"):
-            val = locals()[unguessable_attribute]
-            if val is None:
-                setattr(self, "_ms_" + unguessable_attribute, val)
-            else:
-                # This gives us the type checking of DerivedProperty.
-                setattr(self, unguessable_attribute, val)
-
-        self.sessionName = sessionName if sessionName is not None else " "
-
-        self.sessionID = (sessionID
-                          if sessionID is not None else
-                          SessionDescription.ID())
-        self.sessionVersion = (sessionVersion
-                               if sessionVersion is not None else
-                               SessionDescription.ID())
-        self.netType = (netType
-                        if netType is not None else
-                        sdpsyntax.NetTypes.IN)
-        self.timeDescription = (timeDescription
-                                if timeDescription is not None else
-                                TimeDescription())
-
-        # Set by configuration only.
-        self.connectionDescription = None
-        self.mediaDescriptions = []
-
     @classmethod
     def EmptyLine(cls):
         return b""
@@ -391,5 +361,4 @@ class SessionDescription(SDPSection):
         for md in self.mediaDescriptions:
             for ln in md.lineGen():
                 yield ln
-        yield self.EmptyLine()
         yield self.EmptyLine()
