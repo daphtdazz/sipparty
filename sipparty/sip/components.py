@@ -135,11 +135,7 @@ class AOR(
     host = ParsedProperty("_aor_host", Host)
 
     def __init__(self, username=None, host=None, **kwargs):
-        super(AOR, self).__init__()
-        self.username = username
-        if host is None:
-            host = Host()
-        self.host = host
+        super(AOR, self).__init__(username=username, host=host, **kwargs)
 
     #
     # =================== MAGIC METHODS =======================================

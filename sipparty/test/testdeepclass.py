@@ -32,6 +32,7 @@ from sipparty.sip.components import URI
 log = logging.getLogger(__name__)
 log.setLevel(logging.DETAIL)
 
+
 class TestDeepClass(SIPPartyTestCase):
 
     def testVBInteraction(self):

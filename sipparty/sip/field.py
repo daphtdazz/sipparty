@@ -30,6 +30,7 @@ from components import (DNameURI, Host)
 from request import Request
 import defaults
 from param import (Parameters, Param)
+from prot import Incomplete
 
 # More imports at end of file.
 
@@ -126,7 +127,7 @@ class ViaField(
                 dck.check: lambda pcl: pcl in prot.protocols,
                 dck.gen: lambda: defaults.sipprotocol
             },
-            "transport":{
+            "transport": {
                 dck.check: lambda tp: tp in SOCK_TYPE_IP_NAMES,
                 dck.gen: lambda: defaults.transport
             }
@@ -144,7 +145,6 @@ class ViaField(
     via-extension     =  generic-param
     """
 
-    #delegateattributes = ("protocol", "transport", "host", "address", "port")
     vb_dependencies = (
         ("host", ("address", "port")),)
 
@@ -176,7 +176,10 @@ class ViaField(
         ht = self.host
         if ht is None:
             raise Incomplete("Via header has no host.")
-        vbytes = b"{pt}/{tp} {ht}".format(**locals())
+        hbytes = bytes(ht)
+        if not hbytes:
+            raise Incomplete("Via header has no or 0-length host.")
+        vbytes = b"{pt}/{tp} {hbytes}".format(**locals())
 
         rs = b";".join(self.bytesGen(vbytes))
         return rs

@@ -22,8 +22,7 @@ import timeit
 import time
 import logging
 import unittest
-from sipparty import (util, fsm)
-from sipparty.sip import transport
+from sipparty import (util, fsm, transport)
 
 
 if __name__ == "__main__":

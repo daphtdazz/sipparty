@@ -22,9 +22,25 @@ typeset -a tests
 PREPEND=sipparty.test
 while (( $# > 0 ))
 do
-    tests[${#tests}]=${PREPEND}.$1
+    if [[ $1 =~ (-l|--list) ]]
+    then
+        LIST=1
+    else
+        tests[${#tests}]=${PREPEND}.$1
+    fi
     shift
 done
+
+if (( LIST ))
+then
+    for tpath in sipparty/test/test*.py
+    do
+        tfile=${tpath##*/}
+        tname=${tfile%.py}
+        echo "${tname}"
+    done
+    exit 0
+fi
 
 killchildren () {
     local ppid=$1
@@ -33,7 +49,7 @@ killchildren () {
 
     if [[ -z ${signal} ]]
     then
-      signal=KILL
+        signal=KILL
     fi
     for cpid in $(pgrep -P ${ppid})
     do

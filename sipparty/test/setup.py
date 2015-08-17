@@ -57,8 +57,8 @@ class SIPPartyTestCase(unittest.TestCase):
             self._sptc_searchedModules.add(attr)
             attr = getattr(module, attr)
             if type(attr) != type(sipparty):
-                #log.detail("%r not a module, is %r", attr, attr.__class__)
                 continue
+
             log.detail("Look at module %r", attr)
             res = self.pushLogLevelToSubMod(attr, subModuleName, level)
             if res is not None:

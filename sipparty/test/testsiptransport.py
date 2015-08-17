@@ -24,9 +24,9 @@ import timeit
 import logging
 import unittest
 import six
-from sipparty import util, sip
-from sipparty.fsm import retrythread, fsm
-from sipparty.sip import transport, siptransport, field
+from sipparty import (util, sip, transport)
+from sipparty.fsm import (retrythread, fsm)
+from sipparty.sip import (siptransport, field)
 from sipparty.sip.components import AOR
 
 if __name__ == "__main__":
@@ -63,15 +63,13 @@ class TestSIPTransport(unittest.TestCase):
         tp = SIPTransport()
         laddr = tp.listen()
 
-        aliceAOR = AOR("alice", "atlanta.com")
-        bobAOR = AOR("bob", "biloxi.com")
         msg = sip.Message.invite()
-        msg.ToHeader.field.value.uri.aor = aliceAOR
-        msg.FromHeader.field.value.uri.aor = bobAOR
-        msg.ContactHeader.field.value.uri.aor.host.host = laddr[0]
+        msg.ToHeader.aor = b"alice@atlanta.com"
+        msg.FromHeader.aor = b"bob@biloxi.com"
+        msg.ContactHeader.field.value.uri.aor.host.address = laddr[0]
         msg.ContactHeader.field.value.uri.aor.host.port = laddr[1]
 
-        tp.addDialogHandlerForAOR(aliceAOR, newDialogHandler)
+        tp.addDialogHandlerForAOR(msg.ToHeader.aor, newDialogHandler)
         tp.sendMessage(msg, laddr)
 
         util.WaitFor(lambda: rcvd_message is not None, 1)

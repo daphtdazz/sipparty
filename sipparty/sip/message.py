@@ -106,11 +106,9 @@ class Message(vb.ValueBinder):
             raise parse.ParseError(
                 "Startline is not a SIP startline: %r." % (startline,))
 
-        #assert 0, lines
-
         body_lines = lines[1:]
+
         def HNameContentsGen(hclist):
-            #global body_lines
             hcit = iter(hclist)
             try:
                 while True:
@@ -221,7 +219,8 @@ class Message(vb.ValueBinder):
         hattr = self.HeaderAttrNameFromType(htype)
         log.debug("Set new header attr %r", hattr)
         setattr(self, hattr, hdr)
-        log.debug("Headers after add: %r", [_hdr.type for _hdr in self.headers])
+        log.debug(
+            "Headers after add: %r", [_hdr.type for _hdr in self.headers])
 
     def autofillheaders(self):
         log.debug("Autofill %r headers", self.__class__.__name__)

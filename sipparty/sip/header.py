@@ -248,6 +248,7 @@ class Call_IdHeader(
             raise Incomplete("Call ID header has no key.")
         return b"{0} {1}".format(self._hdr_prepend(), val)
 
+
 class CseqHeader(
         DeepClass("_csh_", {
             "number": {
