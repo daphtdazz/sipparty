@@ -25,6 +25,7 @@ import logging
 import weakref
 import unittest
 from socket import SOCK_STREAM, SOCK_DGRAM
+from setup import SIPPartyTestCase
 from sipparty import (fsm, sip, util, vb, deepclass, parse)
 from sipparty.util import WaitFor
 from sipparty.sip import components, dialog, party
@@ -33,7 +34,7 @@ from sipparty.sip.dialogs import SimpleCall
 log = logging.getLogger()
 
 
-class TestParty(unittest.TestCase):
+class TestParty(SIPPartyTestCase):
 
     def assertIsNotNone(self, exp, *args, **kwargs):
         if hasattr(super(TestParty, self), "assertIsNotNone"):
@@ -52,6 +53,8 @@ class TestParty(unittest.TestCase):
         self.subTestBasicParty(SOCK_STREAM, )
 
     def testBasicPartyUDP(self):
+        self.pushLogLevel("dialog", logging.DEBUG)
+        self.pushLogLevel("siptransport", logging.DETAIL)
         self.subTestBasicParty(SOCK_DGRAM, "127.0.0.1")
 
     def testBasicPartyUDPIPv6(self):

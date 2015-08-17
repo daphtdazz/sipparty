@@ -296,9 +296,7 @@ class Message(vb.ValueBinder):
         log.detail(
             "%r instance set attribute %r", self.__class__.__name__, attr)
         if hmo is not None:
-            htype = (
-                util.attributesubclassgen.NormalizeGeneratingAttributeName(
-                    attr.replace("Header", '')))
+            htype = util.sipheader(hmo.group(1))
             log.debug("Set the %r of type %r", attr, htype)
             index = -1
             existing_val = None

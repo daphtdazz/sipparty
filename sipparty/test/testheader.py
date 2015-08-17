@@ -68,8 +68,6 @@ class TestHeaders(SIPPartyTestCase):
         pvb.bind("ch.address", "hostaddr2")
 
         pvb.ch = Header.contact()
-        assert 0, (
-            pvb.ch._vb_forwardbindings, pvb.ch.field._vb_forwardbindings)
         pvb.hostaddr = "atlanta.com"
         self.assertEqual(pvb.ch.address,
                          "atlanta.com")

@@ -28,8 +28,7 @@ from sipparty.deepclass import DeepClass, dck
 from components import (AOR, URI)
 from header import Call_IdHeader
 from request import Request
-from response import Response
-from message import Message, Response
+from message import Message, MessageResponse
 from param import TagParam
 import prot
 
@@ -88,7 +87,7 @@ class Dialog(
     @property
     def provisionalDialogID(self):
         return prot.ProvisionalDialogID(
-            self._dlg_callIDHeader.field, self.localTag.value)
+            self._dlg_callIDHeader.value, self.localTag.value)
 
     @property
     def dialogID(self):
@@ -98,7 +97,7 @@ class Dialog(
                 "%r instance has no remote tag so is not yet in a dialog so "
                 "does not have a dialogID." % (self.__class__.__name__,))
         return prot.EstablishedDialogID(
-            self._dlg_callIDHeader.field, self.localTag.value, rt.value)
+            self._dlg_callIDHeader.value, self.localTag.value, rt.value)
 
     def __init__(self, **kwargs):
         super(Dialog, self).__init__(**kwargs)
@@ -194,7 +193,9 @@ class Dialog(
 
         req.FromHeader.parameters.tag = self.localTag
         req.ToHeader.parameters.tag = self.remoteTag
+        cid = req.Call_IdHeader
         req.Call_IdHeader = self._dlg_callIDHeader
+        cid2 = req.Call_IdHeader
 
         log.debug("send request of type %r", req.type)
 
@@ -211,12 +212,14 @@ class Dialog(
             raise
 
         tp.sendMessage(bytes(req), self.remoteAddress)
+        assert req.Call_IdHeader == self._dlg_callIDHeader, (
+            req.Call_IdHeader, self._dlg_callIDHeader)
         tp.updateDialogGrouping(self)
 
     def sendResponse(self, response, req):
         log.debug("Send response type %r.", response)
 
-        resp = Response(response)
+        resp = MessageResponse(response)
 
         reqtforms = self.Transforms[req.type]
 

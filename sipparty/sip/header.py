@@ -137,7 +137,7 @@ class DNameURIHeader(FieldsBasedHeader):
     vb_dependencies = (
         ("field", (
             "uri", "displayname", "aor", "username", "host", "address",
-            "port")),
+            "port", "parameters")),
     )
 
 
@@ -230,18 +230,23 @@ class Call_IdHeader(
 
         return "{keyval:06x}-{keydate}".format(**locals())
 
-    def __bytes__(self):
-
+    @property
+    def value(self):
         key = self.key
         if not key:
-            raise Incomplete("Call ID header has no key.")
+            return None
 
         host = self.host
         if host:
-            return b"{1} {0.key}@{0.host}".format(self, self._hdr_prepend())
+            return b"{0.key}@{0.host}".format(self)
 
-        return b"{1} {0.key}".format(self, self._hdr_prepend())
+        return b"{0.key}".format(self)
 
+    def __bytes__(self):
+        val = self.value
+        if val is None:
+            raise Incomplete("Call ID header has no key.")
+        return b"{0} {1}".format(self._hdr_prepend(), val)
 
 class CseqHeader(
         DeepClass("_csh_", {

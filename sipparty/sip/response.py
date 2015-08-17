@@ -63,7 +63,11 @@ class Response(Parser, vb.ValueBinder):
         if underlyingValue is not None:
             return underlyingValue
 
-        return self.MessageForCode(self.code)
+        code = self.code
+        if code is None:
+            return None
+
+        return self.MessageForCode(code)
 
     def __init__(self, code=None, codeMessage=None,
                  protocol=defaults.sipprotocol):

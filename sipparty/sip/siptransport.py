@@ -140,7 +140,7 @@ class SIPTransport(Transport):
             return
         if (
                 not hasattr(msg, "Call_IDHeader") or
-                len(msg.Call_IdHeader.field) == 0):
+                len(msg.Call_IdHeader.value) == 0):
             log.debug("Call-ID: %r", msg.Call_IDHeader)
             log.info("Message with no Call-ID is discarded.")
             return
@@ -170,12 +170,12 @@ class SIPTransport(Transport):
         if msg.isresponse():
             log.debug("Message is response")
             did = prot.EstablishedDialogID(
-                msg.Call_IDHeader.field, msg.FromHeader.parameters.tag.value,
+                msg.Call_IDHeader.value, msg.FromHeader.parameters.tag.value,
                 msg.ToHeader.parameters.tag.value)
         else:
             log.debug("Message is request")
             did = prot.EstablishedDialogID(
-                msg.Call_IDHeader.field, msg.ToHeader.parameters.tag.value,
+                msg.Call_IDHeader.value, msg.ToHeader.parameters.tag.value,
                 msg.FromHeader.parameters.tag.value)
 
         log.detail("Is established dialog %r in %r?", did, estDs)
@@ -192,21 +192,29 @@ class SIPTransport(Transport):
 
         log.warning(
             "Unable to find a dialog for message with dialog ID %r", did)
+        log.detail("  Current provisional dialogs: %r", provDs)
+        log.detail("  Current establishedDialogs dialogs: %r", estDs)
         return
 
     def updateDialogGrouping(self, dlg):
+        log.detail("Update grouping for dlg %r", dlg)
         pds = self.provisionalDialogs
         eds = self.establishedDialogs
         pdid = dlg.provisionalDialogID
         if hasattr(dlg, "dialogID"):
+            log.debug("Dialog is established.")
             did = dlg.dialogID
             if pdid in pds:
+                log.debug("  Dialog was provisional.")
                 del pds[pdid]
             if did not in eds:
+                log.debug("  Dialog was not yet established.")
                 eds[did] = dlg
 
         else:
+            log.debug("Dialog is not established.")
             if pdid not in pds:
+                log.debug("  Dialog is new.")
                 pds[pdid] = dlg
 
     def removeDialog(self, dlg):
