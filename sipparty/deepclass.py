@@ -21,6 +21,7 @@ import logging
 import inspect
 from six import (iteritems, iterkeys)
 from sipparty.util import Enum, DerivedProperty
+from sipparty.vb import ValueBinder
 
 log = logging.getLogger(__name__)
 DeepClassKeys = Enum(("check", "get", "set", "gen", "descriptor",))
@@ -120,6 +121,11 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
             # See if we have any delegates to pass to.
             dele_attrs = {}
             if hasattr(self, "vb_dependencies"):
+                if not isinstance(self, ValueBinder):
+                    raise TypeError(
+                        "%r instance has 'vb_dependencies' set but is not a "
+                        "subclass of 'ValueBinder'" % (
+                            self.__class__.__name__,))
                 vbds = self.vb_dependencies
                 allDeleAttrs = set([
                     attr for attrs in vbds for attr in attrs[1]])

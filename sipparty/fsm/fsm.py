@@ -18,6 +18,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import six
+from six import (binary_type as bytes, iteritems, add_metaclass)
 import collections
 import time
 import timeit
@@ -26,13 +27,11 @@ import Queue
 import weakref
 import copy
 import logging
-
 from sipparty import util
 import retrythread
 import fsmtimer
 
 log = logging.getLogger(__name__)
-bytes = six.binary_type
 
 __all__ = [
     "FSMError", "UnexpectedInput", "FSMTimeout", "FSM", "FSMType",
@@ -85,7 +84,7 @@ FSMType = type(
     dict())
 
 
-@six.add_metaclass(FSMType)
+@add_metaclass(FSMType)
 class FSM(object):
     """Interface:
 
@@ -132,8 +131,8 @@ class FSM(object):
     @classmethod
     def PopulateWithDefinition(cls, definition_dict):
         cls._fsm_definitionDictionary = definition_dict
-        for old_state, stdict in six.iteritems(definition_dict):
-            for input, transdef in six.iteritems(stdict):
+        for old_state, stdict in iteritems(definition_dict):
+            for input, transdef in iteritems(stdict):
                 try:
                     ns = transdef[TransitionKeys.NewState]
                 except KeyError:
@@ -328,7 +327,7 @@ class FSM(object):
                   self.__class__.__name__, self._fsm_state)
 
         # If the class had any pre-set transitions or timers, set them up now.
-        for timer_name, (action, retryer) in six.iteritems(class_timers):
+        for timer_name, (action, retryer) in iteritems(class_timers):
             self.addTimer(timer_name, action, retryer)
 
         # Ditto for transitions.
@@ -337,8 +336,8 @@ class FSM(object):
                  result[self.KeyAction],
                  result[self.KeyStartTimers], result[self.KeyStopTimers],
                  result[self.KeyStartThreads])
-                for os, state_trans in six.iteritems(class_transitions)
-                for inp, result in six.iteritems(state_trans)]:
+                for os, state_trans in iteritems(class_transitions)
+                for inp, result in iteritems(state_trans)]:
             self.addTransition(
                 os, inp, ns, self._fsm_makeAction(act), start_tmrs, stop_tmrs,
                 strt_thrs)
@@ -421,7 +420,7 @@ class FSM(object):
     @util.OnlyWhenLocked
     def checkTimers(self):
         "Check all the timers that are running."
-        for name, timer in six.iteritems(self._fsm_timers):
+        for name, timer in iteritems(self._fsm_timers):
             isRunning = timer.isRunning
             log.debug("Check timer %r (isRunning: %r).", name, isRunning)
             if isRunning:
@@ -451,7 +450,7 @@ class FSM(object):
             # the class not the instance.
             return action
 
-        if not isinstance(action, str):
+        if not isinstance(action, bytes):
             raise ValueError("Action %r not a callable nor a method name." %
                              (action,))
 
@@ -569,9 +568,9 @@ class FSM(object):
         yield "{0!r} {1!r}:".format(self.__class__.__name__, self._fsm_name)
         if len(self._fsm_transitions) == 0:
             yield "  (No states or transitions.)"
-        for old_state, transitions in six.iteritems(self._fsm_transitions):
+        for old_state, transitions in iteritems(self._fsm_transitions):
             yield "  {0!r}:".format(old_state)
-            for input, result in six.iteritems(transitions):
+            for input, result in iteritems(transitions):
                 yield "    {0!r} -> {1!r}".format(
                     input, result[self.KeyNewState])
             yield ""

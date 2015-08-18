@@ -24,6 +24,7 @@ from numbers import Integral
 from sipparty import (util, vb, parse)
 from sipparty.deepclass import (DeepClass, dck)
 import sdpsyntax
+from sdpsyntax import (NetTypes, AddrTypes, LineTypes, MediaTypes, username_re)
 
 log = logging.getLogger(__name__)
 
@@ -52,48 +53,35 @@ class SDPSection(parse.Parser, vb.ValueBinder):
         return b"\r\n".join(self.lineGen())
 
 
-class ConnectionDescription(SDPSection):
+class ConnectionDescription(
+        DeepClass("_cdsc_", {
+            "netType": {
+                dck.check: lambda x: x in NetTypes,
+                dck.gen: lambda: NetTypes.IN},
+            "addressType": {dck.check: lambda x: x in AddrTypes},
+            "address": {dck.check: lambda x: isinstance(x, bytes)},
+        }),
+        SDPSection):
 
     parseinfo = {
         parse.Parser.Pattern:
             b"({nettype}){SP}({addrtype}){SP}({address})"
             "".format(**sdpsyntax.__dict__),
         parse.Parser.Mappings:
-            [("_cd_netType",),
-             ("_cd_addrType",),
-             ("_cd_address",)],
+            [("netType",),
+             ("addressType",),
+             ("address",)],
     }
 
-    netType = util.DerivedProperty(
-        "_cd_netType", lambda x: x in sdpsyntax.NetTypes)
-    addrType = util.DerivedProperty(
-        "_cd_addrType", lambda x: x in sdpsyntax.AddrTypes)
-    address = util.DerivedProperty(
-        "_cd_address", lambda x: isinstance(x, bytes))
-
-    def __init__(self, netType=None, addrType=None, address=None):
-        super(ConnectionDescription, self).__init__()
-
-        self.netType = (netType if netType is not None else
-                        sdpsyntax.NetTypes.IN)
-        if addrType is not None:
-            self.addrType = addrType
-        else:
-            self._cd_addrType = None
-        if address is not None:
-            self.address = address
-        else:
-            self._cd_address = None
-
     def lineGen(self):
-        """c=<nettype> <addrtype> <connection-address>"""
-        if self.addrType is None:
+        """c=<nettype> <addressType> <connection-address>"""
+        if self.addressType is None:
             raise SDPIncomplete("Connection description has no address type.")
         if self.address is None:
             raise SDPIncomplete("Connection description has no address set.")
         yield self.Line(
-            sdpsyntax.LineTypes.connectioninfo,
-            "%s %s %s" % (self.netType, self.addrType, self.address))
+            LineTypes.connectioninfo,
+            "%s %s %s" % (self.netType, self.addressType, self.address))
 
 
 class TimeDescription(SDPSection):
@@ -134,13 +122,26 @@ class TimeDescription(SDPSection):
         # TODO: Should have repeats as well for completeness.
 
     def lineGen(self):
-        yield self.Line(sdpsyntax.LineTypes.time, "%d %d" % (
+        yield self.Line(LineTypes.time, "%d %d" % (
             self.startTime, self.endTime))
 
 
-class MediaDescription(SDPSection):
+class MediaDescription(
+        DeepClass("_mdsc_", {
+            "mediaType": {
+                dck.check: lambda x: x in MediaTypes},
+            "port": {
+                dck.check: lambda x: (
+                    isinstance(x, Integral) and 0 < x <= 0xffff)},
+            "proto": {},
+            "fmt": {},
+            "connectionDescription": {
+                dck.check: lambda x: isinstance(x, ConnectionDescription),
+                dck.gen: ConnectionDescription}
+        }),
+        SDPSection):
 
-    #
+
     # =================== CLASS INTERFACE =====================================
     #
     parseinfo = {
@@ -154,43 +155,22 @@ class MediaDescription(SDPSection):
             "(?:{LineTypes.attribute}={text}{eol})*"
             "".format(**sdpsyntax.__dict__),
         parse.Parser.Mappings:
-            [("_md_mediaType",),
-             ("_md_port", int),
-             ("_md_proto",),
-             ("_md_fmt",),
-             ("_md_connectionDescription", ConnectionDescription)],
+            [("mediaType",),
+             ("port", int),
+             ("proto",),
+             ("fmt",),
+             ("connectionDescription", ConnectionDescription)],
         parse.Parser.Repeats: True
     }
+    vb_dependencies = (
+        ("connectionDescription", ("addressType", "netType", "address")),)
 
     #
     # =================== INSTANCE INTERFACE ==================================
     #
-    mediaType = util.DerivedProperty(
-        "_md_mediaType", lambda x: x in sdpsyntax.MediaTypes)
-    port = util.DerivedProperty(
-        "_md_port",
-        lambda x: isinstance(x, Integral) and 0 < x <= 0xffff)
-    proto = util.DerivedProperty("_md_proto")
-    fmt = util.DerivedProperty("_md_fmt")
-    connectionDescription = util.DerivedProperty("_md_connectionDescription")
 
-    def __init__(
-            self, mediaType=None, port=None, proto=None, fmt=None,
-            connectionDescription=None):
-        super(MediaDescription, self).__init__()
-
-        for unguessable_attribute in ("mediaType", "port", "proto", "fmt"):
-            val = locals()[unguessable_attribute]
-            if val is None:
-                setattr(self, "_md_" + unguessable_attribute, val)
-            else:
-                # This gives us the type checking of DerivedProperty.
-                setattr(self, unguessable_attribute, val)
-
-        self.connectionDescription = connectionDescription
-
-    def setConnectionDescription(self, **kwargs):
-        self.connectionDescription = ConnectionDescription(**kwargs)
+    def __init__(self, **kwargs):
+        super(MediaDescription, self).__init__(**kwargs)
 
     def mediaLine(self):
         for attr in ("mediaType", "port", "proto", "fmt"):
@@ -198,7 +178,7 @@ class MediaDescription(SDPSection):
                 raise SDPIncomplete(
                     "Required media attribute %r not specified." % (attr,))
         return self.Line(
-            sdpsyntax.LineTypes.media, "%s %s %s %s" % (
+            LineTypes.media, "%s %s %s %s" % (
                 self.mediaType, self.port, self.proto, self.fmt))
 
     def lineGen(self):
@@ -212,7 +192,7 @@ class MediaDescription(SDPSection):
 class SessionDescription(
         DeepClass("_sdsc_", {
             "username": {
-                dck.check: lambda x: sdpsyntax.username_re.match(x)},
+                dck.check: lambda x: username_re.match(x)},
             "sessionID": {
                 dck.check: lambda x: isinstance(x, Integral),
                 dck.gen: "ID"},
@@ -220,9 +200,9 @@ class SessionDescription(
                 dck.check: lambda x: isinstance(x, Integral),
                 dck.gen: "ID"},
             "netType": {
-                dck.check: lambda x: x in sdpsyntax.NetTypes,
-                dck.gen: lambda: sdpsyntax.NetTypes.IN},
-            "addrType": {dck.check: lambda x: x in sdpsyntax.AddrTypes},
+                dck.check: lambda x: x in NetTypes,
+                dck.gen: lambda: NetTypes.IN},
+            "addressType": {dck.check: lambda x: x in AddrTypes},
             "address": {dck.check: lambda x: isinstance(x, bytes)},
             "sessionName": {
                 dck.check: lambda x: isinstance(x, bytes),
@@ -278,7 +258,7 @@ class SessionDescription(
              ("sessionID", int),
              ("sessionVersion", int),
              ("netType",),
-             ("addrType",),
+             ("addressType",),
              ("address",),
              ("sessionName",),
              ("info",),
@@ -315,32 +295,32 @@ class SessionDescription(
 
     def versionLine(self):
         "v=0"
-        return self.Line(sdpsyntax.LineTypes.version, 0)
+        return self.Line(LineTypes.version, 0)
 
     def originLine(self):
-        """o=<username> <sess-id> <sess-version> <nettype> <addrtype>
+        """o=<username> <sess-id> <sess-version> <nettype> <addressType>
         <unicast-address>
         """
         un = self.username
         if un is None:
             raise SDPIncomplete("No username specified.")
-        at = self.addrType
+        at = self.addressType
         if at is None:
             raise SDPIncomplete("No address type specified.")
         ad = self.address
         if ad is None:
             raise SDPIncomplete("No address specified.")
         return self.Line(
-            sdpsyntax.LineTypes.origin,
+            LineTypes.origin,
             b"%s %d %d %s %s %s" % (
                 un, self.sessionID, self.sessionVersion, self.netType, at, ad))
 
     def sessionNameLine(self):
-        return self.Line(sdpsyntax.LineTypes.sessionname, self.sessionName)
+        return self.Line(LineTypes.sessionname, self.sessionName)
 
     def lineGen(self):
         """v=0
-        o=<username> <sess-id> <sess-version> <nettype> <addrtype>
+        o=<username> <sess-id> <sess-version> <nettype> <addressType>
         <unicast-address>
         """
         yield self.versionLine()

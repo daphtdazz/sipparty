@@ -19,7 +19,9 @@ limitations under the License.
 import logging
 import unittest
 from six import binary_type as bytes
-from sipparty import (sip, util, sdp)
+from sipparty import (sip, util)
+from sipparty.sdp import (
+    AddrTypes, MediaTypes, SessionDescription, SDPIncomplete)
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
@@ -30,27 +32,18 @@ else:
 
 class TestSDP(util.TestCaseREMixin, unittest.TestCase):
 
-    def setUp(self):
-        "Set up the TestSDP test case suite"
-        self._sdpLogLevel = sdp.log.level
-        sdp.log.setLevel(logging.DEBUG)
-
-    def tearDown(self):
-        util.log.setLevel(self._sdpLogLevel)
-
     def testSDP(self):
 
-        sd = sdp.SessionDescription()
-        self.assertRaises(sdp.SDPIncomplete, lambda: bytes(sd))
-        sd.username = "alice"
-        sd.addrType = sdp.AddrTypes.IP4
-        sd.address = "atlanta.com"
+        sd = SessionDescription()
+        self.assertRaises(SDPIncomplete, lambda: bytes(sd))
+        sd.username = b"alice"
+        sd.addressType = AddrTypes.IP4
+        sd.address = b"atlanta.com"
         sd.addMediaDescription(
-            mediaType=sdp.MediaTypes.audio, port=1815,
-            proto="RTP/AVP", fmt=0)
-        sd.mediaDescriptions[0].setConnectionDescription(
-            addrType=sdp.AddrTypes.IP4,
-            address="media.atlanta.com")
+            mediaType=MediaTypes.audio, port=1815,
+            proto=b"RTP/AVP", fmt=0)
+        sd.mediaDescriptions[0].addressType = AddrTypes.IP4
+        sd.mediaDescriptions[0].address = b"media.atlanta.com"
 
         data = bytes(sd)
         self.assertMatchesPattern(
@@ -64,7 +57,7 @@ class TestSDP(util.TestCaseREMixin, unittest.TestCase):
         )
 
         # Parse.
-        newDesc = sdp.SessionDescription.Parse(data)
+        newDesc = SessionDescription.Parse(data)
         newData = bytes(newDesc)
         self.assertEqual(data, newData)
         # self.assertEqual(sd, newDesc)

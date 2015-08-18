@@ -18,23 +18,35 @@ limitations under the License.
 """
 import logging
 from six import (binary_type as bytes)
-import unittest
+from setup import SIPPartyTestCase
 from sipparty import (util, vb, sip)
 from sipparty.sip import Session
 from sipparty.sip import mediasession
 from sipparty.sdp import SDPIncomplete
+from sipparty.sdp.sdpsyntax import (MediaTypes, AddrTypes, NetTypes)
 
 log = logging.getLogger(__name__)
 
 
-class TestSession(util.TestCaseREMixin, unittest.TestCase):
+class TestSession(util.TestCaseREMixin, SIPPartyTestCase):
 
     def testBasicSession(self):
 
-        ms = Session(username="alice")
+        log.info("Create new Session and check it produces SDP when ready.")
+        ms = Session(username=b"alice")
         self.assertRaises(SDPIncomplete, lambda: ms.sdp())
-
-
+        ms.address = b"127.0.0.1"
+        ms.addMediaSession(mediaType=MediaTypes.audio)
+        self.assertRaises(SDPIncomplete, lambda: ms.sdp())
+        ms.mediaSession.port = 11000
+        self.assertRaises(SDPIncomplete, lambda: ms.sdp())
+        ms.addressType = AddrTypes.IP4
+        self.assertMatchesPattern(
+            ms.sdp(),
+            b'v=0\r\n'
+            'o=alice \d+ \d+ IN IP4 127.0.0.1\r\n'
+            's= \r\n'
+            't=0 0\r\n')
 
 if __name__ == "__main__":
     unittest.main()

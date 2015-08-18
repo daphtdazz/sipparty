@@ -20,9 +20,11 @@ import logging
 import six
 import re
 import datetime
-from sipparty import (util, parse, vb)
+from sipparty import (parse,)
+from sipparty.util import (FirstListItemProxy,)
+from sipparty.vb import ValueBinder
 from sipparty.deepclass import (DeepClass, dck)
-from sipparty.sdp import (SessionDescription,)
+from sipparty.sdp import (SessionDescription, MediaDescription)
 from sipparty.sdp.sdpsyntax import (username_re,)
 
 log = logging.getLogger(__name__)
@@ -35,9 +37,9 @@ class Session(
             "description": {
                 dck.check: lambda x: isinstance(x, SessionDescription),
                 dck.gen: SessionDescription},
-            "medias": {dck.gen: list},
+            "mediaSessions": {dck.gen: list},
             }),
-        vb.ValueBinder):
+        ValueBinder):
     """Implements a media session, with ways of playing media and creation of
     SDP. Strictly this is independent of SDP, but in practice its form is
     heavily informed by SDP's, so if someone wants to write a different
@@ -48,20 +50,29 @@ class Session(
     follows.
     """
     vb_dependencies = (
-        ("description", ("username", "transport")),)
+        ("description", ("username", "address", "addressType")),)
+    mediaSession = FirstListItemProxy("mediaSessions")
 
     def listen(self):
         assert 0
 
-    def addMedia(self):
-        assert 0
+    def addMediaSession(self, **kwargs):
+        nms = MediaSession(**kwargs)
+        self.mediaSessions.insert(0, nms)
 
     def sdp(self):
         return bytes(self.description)
 
 
-class MediaSession(object):
-    pass
+class MediaSession(
+        DeepClass("_msess_", {
+            "transport": {},
+            "description": {
+                dck.check: lambda x: isinstance(x, MediaDescription),
+                dck.gen: MediaDescription},}),
+        ValueBinder):
+    vb_dependencies = (
+        ("description", ("mediaType", "port", "addressType")),)
 
 
 class RTPMediaSession(MediaSession):
