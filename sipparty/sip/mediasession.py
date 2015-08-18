@@ -69,7 +69,8 @@ class MediaSession(
             "transport": {},
             "description": {
                 dck.check: lambda x: isinstance(x, MediaDescription),
-                dck.gen: MediaDescription},}),
+                dck.gen: MediaDescription},
+        }),
         ValueBinder):
     vb_dependencies = (
         ("description", ("mediaType", "port", "addressType")),)
@@ -77,5 +78,3 @@ class MediaSession(
 
 class RTPMediaSession(MediaSession):
     """An session."""
-
-

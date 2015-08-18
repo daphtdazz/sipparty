@@ -141,7 +141,7 @@ class MediaDescription(
         }),
         SDPSection):
 
-
+    #
     # =================== CLASS INTERFACE =====================================
     #
     parseinfo = {
