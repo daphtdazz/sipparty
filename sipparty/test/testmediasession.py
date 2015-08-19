@@ -36,9 +36,6 @@ class TestSession(util.TestCaseREMixin, SIPPartyTestCase):
         ms = Session(username=b"alice")
         self.assertRaises(SDPIncomplete, lambda: ms.sdp())
         ms.address = b"127.0.0.1"
-        ms.addMediaSession(mediaType=MediaTypes.audio)
-        self.assertRaises(SDPIncomplete, lambda: ms.sdp())
-        ms.mediaSession.port = 11000
         self.assertRaises(SDPIncomplete, lambda: ms.sdp())
         ms.addressType = AddrTypes.IP4
         self.assertMatchesPattern(
@@ -46,7 +43,22 @@ class TestSession(util.TestCaseREMixin, SIPPartyTestCase):
             b'v=0\r\n'
             'o=alice \d+ \d+ IN IP4 127.0.0.1\r\n'
             's= \r\n'
-            't=0 0\r\n')
+            't=0 0\r\n$')
+
+        ms.addMediaSession(mediaType=MediaTypes.audio)
+        self.assertRaises(SDPIncomplete, lambda: ms.sdp())
+        ms.mediaSession.port = 11000
+        self.assertRaises(SDPIncomplete, lambda: ms.sdp())
+        ms.mediaSession.proto = b"RTP/AVP"
+        self.assertRaises(SDPIncomplete, lambda: ms.sdp())
+        ms.mediaSession.fmt = b"123"
+        self.assertMatchesPattern(
+            ms.sdp(),
+            b'v=0\r\n'
+            'o=alice \d+ \d+ IN IP4 127.0.0.1\r\n'
+            's= \r\n'
+            't=0 0\r\n'
+            'm=audio 11000 RTP/AVP 123\r\n$')
 
 if __name__ == "__main__":
     unittest.main()

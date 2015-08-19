@@ -1,4 +1,4 @@
-"""standard.py
+"""call.py
 
 Standard dialog definitions (call, register etc.).
 

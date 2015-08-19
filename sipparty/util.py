@@ -44,7 +44,7 @@ class attributesubclassgen(type):
 
     So for example:
 
-    six.add_metaclass(attributesubclassgen)
+    @six.add_metaclass(attributesubclassgen)
     class AttributeGen(object):
 
         types = Enum(("Subclass",))

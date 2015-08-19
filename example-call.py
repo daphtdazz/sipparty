@@ -13,9 +13,17 @@ log.setLevel(logging.DEBUG)
 
 class MyClass(object):
 
-    attr1 = 2
-    attr2 = 3
-    del attr1
+    @property
+    def prop(self):
+        return False
 
-print MyClass.attr2
-print MyClass.attr1
+
+class MySubClass(MyClass):
+    @property
+    def prop(self):
+        return True
+
+mc = MyClass()
+ms = MySubClass()
+print mc.prop
+print ms.prop

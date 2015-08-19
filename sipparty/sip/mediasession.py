@@ -59,6 +59,7 @@ class Session(
     def addMediaSession(self, **kwargs):
         nms = MediaSession(**kwargs)
         self.mediaSessions.insert(0, nms)
+        self.description.addMediaDescription(nms.description)
 
     def sdp(self):
         return bytes(self.description)
@@ -69,13 +70,12 @@ class MediaSession(
             "transport": {},
             "description": {
                 dck.check: lambda x: isinstance(x, MediaDescription),
-                dck.gen: MediaDescription},}),
+                dck.gen: MediaDescription},
+        }),
         ValueBinder):
     vb_dependencies = (
-        ("description", ("mediaType", "port", "addressType")),)
+        ("description", ("mediaType", "port", "addressType", "proto", "fmt")),)
 
 
 class RTPMediaSession(MediaSession):
     """An session."""
-
-

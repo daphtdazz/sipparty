@@ -271,7 +271,7 @@ class CseqHeader(
     def __bytes__(self):
 
         if self.reqtype is None:
-            raise Incomplete
+            raise Incomplete("CSeqHeader has no request type.")
 
         return b"%s %d %s" % (
             self._hdr_prepend(), self.number, self.reqtype)

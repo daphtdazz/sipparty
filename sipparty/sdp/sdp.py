@@ -49,6 +49,10 @@ class SDPSection(parse.Parser, vb.ValueBinder):
             "Instance of subclass %r of SDPSection has not implemented "
             "required method 'lineGen'.")
 
+    @property
+    def isComplete(self):
+        return True
+
     def __bytes__(self):
         return b"\r\n".join(self.lineGen())
 
@@ -73,22 +77,31 @@ class ConnectionDescription(
              ("address",)],
     }
 
+    @property
+    def isComplete(self):
+        return self.address is not None and self.address is not None
+
     def lineGen(self):
         """c=<nettype> <addressType> <connection-address>"""
-        if self.addressType is None:
-            raise SDPIncomplete("Connection description has no address type.")
-        if self.address is None:
-            raise SDPIncomplete("Connection description has no address set.")
+        if not self.isComplete:
+            raise SDPIncomplete(
+                "Connection description is not complete: %r." % self)
         yield self.Line(
             LineTypes.connectioninfo,
             "%s %s %s" % (self.netType, self.addressType, self.address))
 
 
-class TimeDescription(SDPSection):
+class TimeDescription(
+        DeepClass("_td_", {
+            "startTime": {
+                dck.check: lambda x: isinstance(x, Integral),
+                dck.gen: lambda: 0},
+            "endTime": {
+                dck.check: lambda x: isinstance(x, Integral),
+                dck.gen: lambda: 0}
+        }),
+        SDPSection):
 
-    #
-    # =================== CLASS INTERFACE =====================================
-    #
     parseinfo = {
         parse.Parser.Pattern:
             b"{LineTypes.time}=({start_time}){SP}({stop_time})"
@@ -97,30 +110,11 @@ class TimeDescription(SDPSection):
             "(?:{zone_adjustments}{eol})?"
             "".format(**sdpsyntax.__dict__),
         parse.Parser.Mappings:
-            [("_td_startTime", int),
-             ("_td_stopTime", int)]
+            [("startTime", int),
+             ("stopTime", int)]
     }
 
-    #
-    # =================== INSTANCE INTERFACE ==================================
-    #
-    startTime = util.DerivedProperty(
-        "_td_startTime", lambda x: isinstance(x, Integral))
-    endTime = util.DerivedProperty(
-        "_td_endTime", lambda x: isinstance(x, Integral))
-
-    def __init__(self, startTime=None, endTime=None):
-        super(TimeDescription, self).__init__()
-
-        self.startTime = (startTime
-                          if startTime is not None
-                          else 0)
-        self.endTime = (endTime
-                        if endTime is not None
-                        else 0)
-
-        # TODO: Should have repeats as well for completeness.
-
+    # TODO: Should have repeats as well for completeness.
     def lineGen(self):
         yield self.Line(LineTypes.time, "%d %d" % (
             self.startTime, self.endTime))
@@ -141,7 +135,7 @@ class MediaDescription(
         }),
         SDPSection):
 
-
+    #
     # =================== CLASS INTERFACE =====================================
     #
     parseinfo = {
@@ -168,23 +162,26 @@ class MediaDescription(
     #
     # =================== INSTANCE INTERFACE ==================================
     #
-
-    def __init__(self, **kwargs):
-        super(MediaDescription, self).__init__(**kwargs)
-
-    def mediaLine(self):
+    @property
+    def isComplete(self):
         for attr in ("mediaType", "port", "proto", "fmt"):
             if getattr(self, attr) is None:
-                raise SDPIncomplete(
-                    "Required media attribute %r not specified." % (attr,))
+                return False
+        return True
+
+    def mediaLine(self):
         return self.Line(
             LineTypes.media, "%s %s %s %s" % (
                 self.mediaType, self.port, self.proto, self.fmt))
 
     def lineGen(self):
         """m=<media> <port> <proto> <fmt> ..."""
+        if not self.isComplete:
+            raise SDPIncomplete(
+                "Media description incomplete: %r" % (self,))
         yield self.mediaLine()
-        if self.connectionDescription is not None:
+        if (self.connectionDescription is not None and
+                self.connectionDescription.isComplete):
             for ln in self.connectionDescription.lineGen():
                 yield ln
 
@@ -288,9 +285,10 @@ class SessionDescription(
     def EmptyLine(cls):
         return b""
 
-    def addMediaDescription(self, **kwargs):
+    def addMediaDescription(self, md=None, **kwargs):
 
-        md = MediaDescription(**kwargs)
+        if md is None:
+            md = MediaDescription(**kwargs)
         self.mediaDescriptions.append(md)
 
     def versionLine(self):
