@@ -17,13 +17,27 @@ class MyClass(object):
     def prop(self):
         return False
 
+    def __getattr__(self, attr):
+        print("super getattr")
+        if attr == "superAttr":
+            return 1234
+        raise AttributeError()
+
 
 class MySubClass(MyClass):
     @property
     def prop(self):
         return True
 
-mc = MyClass()
+    def __getattr__(self, attr):
+        print("sub getattr")
+        if attr == "superAttr":
+            sp = super(MySubClass, self)
+            if hasattr(sp, "__getattr__"):
+                return sp.__getattr__(attr)
+
+        raise AttributeError("%r instance has no attr %r." % (
+            self.__class__.__name__, attr))
+
 ms = MySubClass()
-print mc.prop
-print ms.prop
+print(ms.superAttr)

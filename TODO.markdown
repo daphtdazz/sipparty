@@ -3,6 +3,7 @@
 ## List. ##
 
 1. INVITEs with media sessions.
+2. 200s with media sessions.
 2. SIPP test integration.
 3. Pumba integration.
 4. REGISTER dialogues.
@@ -10,6 +11,8 @@
 6. Example scripts.
 7. TCP support. 
 8. Proper python3 support.
+    a. 'bytes' does not support % and .format(), so need to use BytesGenner and str instead where appropriate.
+9. UDP transport retrying. 
 9. Get rid of "delegateattributes", use "vb_dependencies". -- ?? semi done?
 13. Move sipheader out of util and probably into prot.
 14. Offers SDP.
@@ -17,7 +20,11 @@
 16. deepclass representation is overly verbose / not detailed enough depending on whether we recurse to superclass's deepclasses.
 17. Cache Datagram sockets for faster allocation of a socket when sending data.
 18. Better handling of attempt to pass an unrecognised kwarg into DeepClass.__init__().
- 
+19. Cumulative field_bindings for Message classes.
+20. Short form header names.
+21. ParseError should have SIPParseError subtype which should have a response code field so siptransport can know what response code to send.
+22. Fix slow UT termination time (weak reference needed somewhere?) 
+
 ## Done list. ##
 
 1. Move transport to sipparty not sipparty/sip -- done 10/08/2015

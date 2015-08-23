@@ -100,6 +100,13 @@ def SockTypeName(socktype):
 
 
 def GetBoundSocket(family, socktype, address):
+    """
+    :param int family: The socket family, one of AF_INET or AF_INET6.
+    :param int socktype: The socket type, SOCK_STREAM or SOCK_DGRAM.
+    :param tuple address: The address / port pair, like ("localhost", 5060).
+    Pass None for the address or 0 for the port to choose a locally exposed IP
+    address if there is one, and an arbitrary free port.
+    """
 
     if family is None:
         family = 0
@@ -314,21 +321,21 @@ class Transport(Singleton):
         buf.extend(data)
 
         while len(buf) > 0:
-            len_used = self.processReceivedData(buf)
+            len_used = self.processReceivedData(lAddr, rAddr, buf)
             if len_used == 0:
                 log.debug("Consumer stopped consuming")
                 break
             log.debug("Consumer consumed another %d bytes", len_used)
             del buf[:len_used]
 
-    def processReceivedData(self, data):
+    def processReceivedData(self, lAddr, rAddr, data):
 
         bc = self.byteConsumer
         if bc is None:
             log.debug("No consumer; dumping data: %r.", data)
             return len(data)
 
-        data_consumed = bc(bytes(data))
+        data_consumed = bc(lAddr, rAddr, bytes(data))
         if not isinstance(data_consumed, Integral):
             raise ValueError(
                 "byteConsumer returned %r: must return an integer." % (

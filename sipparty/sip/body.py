@@ -19,7 +19,30 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-
 from sipparty import (util, vb)
+from sipparty.util import (BytesGenner, TwoCompatibleThree)
+from sipparty.deepclass import (DeepClass, dck)
+from sipparty.parse import Parser
 
 log = logging.getLogger(__name__)
+
+
+class Body(
+        DeepClass("_bdy_", {
+            "type": {dck.check: lambda x: isinstance(x, bytes)},
+            "content": {
+                dck.gen: lambda: b"",
+                dck.check: lambda x: isinstance(x, bytes)}
+        }),
+        Parser, BytesGenner):
+
+    parseinfo = {
+        Parser.Pattern:
+            b"(.*)",
+        Parser.Mappings: [
+            ("content",),
+        ]
+    }
+
+    def bytesGen(self):
+        return bytes(self.content)

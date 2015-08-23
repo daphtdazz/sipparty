@@ -81,9 +81,17 @@ class attributesubclassgen(type):
 
     def __getattr__(cls, name):
 
-        if "types" in cls.__dict__:
+        if name == b"types":
+            sp = super(attributesubclassgen, cls)
+            if hasattr(sp, "__getattr__"):
+                return sp.__getattr__(name)
+            raise AttributeError(
+                b"%r class has no attribute 'types'.", cls.__name__)
+
+        if hasattr(cls, "types"):
+            tps = cls.types
             try:
-                name = getattr(cls.__dict__["types"], name)
+                name = getattr(tps, name)
             except AttributeError:
                 log.error(
                     "%r not a type of %r (supername %r).", name,
@@ -208,16 +216,12 @@ class ClassType(object):
         self.class_append = class_append
 
     def __get__(self, instance, owner):
-
-        if instance is None:
-            return ""
-
-        class_name = instance.__class__.__name__
+        class_name = owner.__name__
         capp = self.class_append
         log.debug("Class is %r, append is %r", class_name, capp)
         class_short_name = class_name.replace(capp, "")
         try:
-            return getattr(instance.types, class_short_name)
+            return getattr(owner.types, class_short_name)
         except AttributeError as exc:
             raise AttributeError(
                 "No such known header class type %r" % (class_short_name,))
@@ -528,13 +532,14 @@ class DerivedProperty(object):
         target = obj if obj is not None else cls
 
         log.debug("Get the underlying value (if any).")
-        val = getattr(target, self._rp_propName)
+        pname = self._rp_propName
+        val = getattr(target, pname)
         log.debug("Underlying value %r.", val)
 
         gt = self._rp_get
         if gt is None:
             # No getter, so return now.
-            return val
+            return getattr(target, pname)
 
         # Get might be a method name...
         if isinstance(gt, bytes) and hasattr(target, gt):
@@ -551,7 +556,7 @@ class DerivedProperty(object):
             raise ValueError(
                 "Getter %r object for DerivedValue on %r on %r object is not "
                 "a callable or a method name." % (
-                    gt, self._rp_propName, target.__class__.__name__))
+                    gt, pname, target.__class__.__name__))
         val = gt(obj, val)
         return val
 
@@ -576,7 +581,11 @@ class DerivedProperty(object):
                         st, obj.__class__.__name__))
             val = meth(value)
         else:
-            self._rp_set(obj, value)
+            st(obj, value)
+
+    def __delete__(self, obj):
+        pname = self._rp_propName
+        del obj.pname
 
     def __repr__(self):
         return (
@@ -706,6 +715,18 @@ class TupleRepresentable(object):
 
     def __hash__(self):
         return hash(self.tupleRepr())
+
+
+@TwoCompatibleThree
+class BytesGenner(object):
+
+    def bytesGen(self):
+        raise AttributeError(
+            "%r class has not overridden 'bytesGen' which is required to "
+            "inherit from BytesGenner" % (self.__class__.__name__,))
+
+    def __bytes__(self):
+        return b''.join(self.bytesGen())
 
 
 class TestCaseREMixin(object):

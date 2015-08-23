@@ -30,16 +30,19 @@ from sipparty import (splogging, util, vb, parse, fsm, ParsedPropertyOfClass)
 from sipparty.util import DerivedProperty
 from sipparty.deepclass import DeepClass, dck
 from sipparty.sip import SIPTransport
+from sipparty.sip.body import Body
 from sipparty.transport import SockTypeName
+from sipparty.sdp import sdpsyntax
 import prot
+from prot import Incomplete
 from components import (DNameURI, AOR, URI, Host)
-import scenario
 import defaults
-import request
-from message import (Message, Response)
+from request import Request
+from message import (Message)
 import message
 import param
 from dialogs import SimpleCall
+from mediasession import (Session, MediaSession)
 
 __all__ = ('Party', 'PartySubclass')
 
@@ -70,16 +73,6 @@ def NewAOR():
     return newaor
 
 
-class PartyMetaclass(type):
-    def __init__(cls, name, bases, dict):
-            super(PartyMetaclass, cls).__init__(name, bases, dict)
-
-            # Add any predefined transitions.
-            if hasattr(cls, "ScenarioDefinitions"):
-                cls.SetScenario(cls.ScenarioDefinitions)
-
-
-@six.add_metaclass(PartyMetaclass)
 class Party(
         DeepClass("_pt_", {
             "dnameURI": {
@@ -88,7 +81,20 @@ class Party(
             "contactURI": {
                 dck.descriptor: ParsedPropertyOfClass(URI),
                 dck.gen: URI},
-            "transport": {dck.gen: lambda: None}}),
+            "transport": {dck.gen: lambda: None},
+            "mediaSession": {
+                dck.gen: lambda: Session(
+                    username="-",
+                    # TODO: don't just use static IP addresses!
+                    addressType=sdpsyntax.AddrTypes.IP4,
+                    address="127.0.0.1",
+                    mediaSessions=[MediaSession(
+                        mediaType="audio",
+                        proto="RTP/AVP",
+                        addressType=sdpsyntax.AddrTypes.IP4, port=50000,
+                        fmt=1234)]),
+                dck.check: lambda x: isinstance(x, Session)}
+        }),
         vb.ValueBinder):
     """A party in a sip call, aka an endpoint, caller or callee etc.
     """
@@ -218,32 +224,13 @@ class Party(
         else:
             ids[toURI].append(invD)
 
+        invD.delegate = self
+
         return invD
-
-    def waitUntilState(self, state, error_state=None, timeout=None):
-        for check_state in (state, error_state):
-            if check_state is not None and check_state not in self.States:
-                raise AttributeError(
-                    "%r instance has no state %r." % (
-                        self.__class__.__name__, check_state))
-
-        self.scenario.waitForStateCondition(
-            lambda x: x in (state, error_state), timeout=timeout)
-
-        if self.state == error_state:
-            raise UnexpectedState(
-                "%r instance has entered the error state %r while "
-                "waiting for state %r." % (
-                    self.__class__.__name__, error_state, state))
 
     #
     # =================== DELEGATE IMPLEMENTATIONS ===========================
     #
-    def scenarioDelegateReset(self):
-        log.debug("Resetting after scenario reset.")
-        self.myTag = None
-        self.theirTag = None
-
     def newDialogHandler(self, message):
         if message.type == Message.types.invite:
             invD = self.newInviteDialog(
@@ -251,6 +238,11 @@ class Party(
             invD.receiveMessage(message)
             return
         assert 0
+
+    def configureOutboundMessage(self, message):
+
+        if message.type == Request.types.invite:
+            self._pt_configureInvite(message)
 
     #
     # =================== MAGIC METHODS ======================================
@@ -306,3 +298,15 @@ class Party(
                 "%r instance cannot be derived from %r instance." % (
                     Host.__class__.__name__,
                     target.__class__.__name__))
+
+    def _pt_configureInvite(self, inv):
+        log.debug("Adding media session to invite.")
+        try:
+            sdpBody = self.mediaSession.sdp()
+        except Incomplete:
+            log.debug(
+                "Party has an incomplete media session, so sending INVITE "
+                "with no SDP.")
+            sdpBody = None
+        if sdpBody is not None:
+            inv.addBody(Body(type=sdpsyntax.SIPBodyType, content=sdpBody))

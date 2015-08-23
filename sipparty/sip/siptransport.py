@@ -20,7 +20,6 @@ import six
 import logging
 import socket
 from weakref import WeakValueDictionary
-
 from sipparty import Transport
 from sipparty.util import DerivedProperty
 from sipparty.parse import ParseError
@@ -42,11 +41,6 @@ class SIPTransport(Transport):
     # =================== CLASS INTERFACE =====================================
     #
     DefaultPort = 5060
-
-    def __new__(cls, *args, **kwargs):
-        if "singleton" not in kwargs:
-            kwargs["singleton"] = "SIP"
-        return super(SIPTransport, cls).__new__(cls, *args, **kwargs)
 
     #
     # =================== INSTANCE INTERFACE ==================================
@@ -100,13 +94,13 @@ class SIPTransport(Transport):
         super(SIPTransport, self).sendMessage(
             bytes(msg), toAddr, sockType=sockType)
 
-    def sipByteConsumer(self, data):
+    def sipByteConsumer(self, lAddr, rAddr, data):
         log.debug(
             "SIPTransport attempting to consume %d bytes.", len(data))
 
         # SIP messages always have \r\n\r\n after the headers and before any
         # bodies.
-        eoleol = prot.EOL * 2
+        eoleol = b'\r\n\r\n'
 
         eoleol_index = data.find(eoleol)
         if eoleol_index == -1:
@@ -114,22 +108,17 @@ class SIPTransport(Transport):
             log.debug("Data not a full SIP message.")
             return 0
 
-        # We're going to consume the whole message, one way or another.
-        mlen = eoleol_index + len(eoleol)
-        self.consumeMessageData(data[:mlen])
-        return mlen
-
-    def consumeMessageData(self, data):
-        # We've got a full message, so parse it.
+        # We've probably got a full message, so parse it.
         log.debug("Full message")
         try:
             msg = Message.Parse(data)
             log.info("Message parsed.")
         except ParseError as pe:
             log.error("Parse errror %s parsing message.", pe)
-            return
+            return 0
 
         self.consumeMessage(msg)
+        return msg.parsedBytes
 
     def consumeMessage(self, msg):
         self._sptr_messages.append(msg)
@@ -138,8 +127,7 @@ class SIPTransport(Transport):
             log.debug("FromHeader: %r", msg.FromHeader)
             log.info("Message with no from tag is discarded.")
             return
-        if (
-                not hasattr(msg, "Call_IDHeader") or
+        if (not hasattr(msg, "Call_IDHeader") or
                 len(msg.Call_IdHeader.value) == 0):
             log.debug("Call-ID: %r", msg.Call_IDHeader)
             log.info("Message with no Call-ID is discarded.")

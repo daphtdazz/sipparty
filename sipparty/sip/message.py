@@ -16,12 +16,16 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import six
+from six import (binary_type as bytes, add_metaclass, iteritems)
 import re
 import logging
-import collections
-
+from numbers import (Integral)
 from sipparty import (util, vb, parse)
+from sipparty.util import BytesGenner
+from sipparty.deepclass import (DeepClass, dck)
+from sipparty.transport import SOCK_TYPE_IP_NAMES
+from sipparty.sdp import sdpsyntax
+from body import Body
 import prot
 from prot import Incomplete
 import components
@@ -32,10 +36,9 @@ from response import Response
 from header import Header
 
 log = logging.getLogger(__name__)
-bytes = six.binary_type
 
 
-@six.add_metaclass(
+@add_metaclass(
     # The FSM type needs both the attributesubclassgen and the cumulative
     # properties metaclasses.
     type('Message',
@@ -43,7 +46,15 @@ bytes = six.binary_type
           util.attributesubclassgen,),
          dict()))
 @util.TwoCompatibleThree
-class Message(vb.ValueBinder):
+class Message(
+        DeepClass("_msg_", {
+            "startline": {dck.gen: "MakeStartline"},
+            "headers": {dck.gen: lambda: []},
+            "bodies": {
+                dck.gen: lambda: [], dck.set: "setBodies"},
+            "parsedBytes": {dck.check: lambda x: isinstance(x, Integral)}
+        }),
+        BytesGenner, vb.ValueBinder):
     """Generic message class. Use `Request` or `Response` rather than using
     this directly.
     """
@@ -52,7 +63,8 @@ class Message(vb.ValueBinder):
 
     mandatoryheaders = [
         Header.types.From,  Header.types.To, Header.types.Via,
-        Header.types.call_id, Header.types.cseq, Header.types.max_forwards]
+        Header.types.call_id, Header.types.cseq, Header.types.max_forwards,
+        Header.types.content_length]
     shouldheaders = []  # Should be sent but parties must cope without.
     conditionalheaders = []
     optionalheaders = [
@@ -66,8 +78,6 @@ class Message(vb.ValueBinder):
 
     mandatoryparameters = {}
 
-    bindings = []
-
     reqattrre = re.compile(
         "(%s)request" % (types.REPattern(),), flags=re.IGNORECASE)
 
@@ -79,57 +89,90 @@ class Message(vb.ValueBinder):
     MethodRE = re.compile("{Method}".format(**prot.__dict__))
     ResponseRE = re.compile("{SIP_Version}".format(**prot.__dict__))
     HeaderSeparatorRE = re.compile(
-        "{CRLF}(?:({token}){COLON}|{CRLF})".format(**prot.__dict__))
+        "({CRLF}(?:({token}){COLON}|{CRLF}))".format(**prot.__dict__))
+
+    body = util.FirstListItemProxy("bodies")
 
     @classmethod
     def Parse(cls, string):
 
         lines = cls.HeaderSeparatorRE.split(string)
         log.detail("Header split: %r", lines)
-
-        startline = lines[0]
+        line_iter = iter(lines)
+        startline = line_iter.next()
+        used_bytes = len(startline)
 
         if cls.ResponseRE.match(startline):
             log.debug("Attempt Message Parse of %r as a response.", startline)
             reqline = Response.Parse(startline)
             log.debug(reqline)
-            message = MessageResponse(startline=reqline)
+            message = MessageResponse(
+                startline=reqline, configure_bindings=False)
             log.debug("Success. Type: %r.", message.type)
 
         elif cls.MethodRE.match(startline):
             log.debug("Attempt Message Parse of request %r.", startline)
             requestline = Request.Parse(startline)
             message = getattr(Message, requestline.type)(
-                startline=requestline, autofillheaders=False)
+                startline=requestline, autofillheaders=False,
+                configure_bindings=False)
             log.debug("Message is of type %r", message.type)
         else:
             raise parse.ParseError(
                 "Startline is not a SIP startline: %r." % (startline,))
 
-        body_lines = lines[1:]
-
-        def HNameContentsGen(hclist):
-            hcit = iter(hclist)
+        def HNameContentsGen(hcit):
             try:
                 while True:
+                    hnamebytes = len(hcit.next())
                     hname = hcit.next()
-                    body_lines.pop(0)
                     if hname is None:
                         return
                     hcontents = hcit.next()
-                    body_lines.pop(0)
-                    yield (hname, hcontents)
+                    nbytes = hnamebytes + len(hcontents)
+                    yield (hname, hcontents, nbytes)
             except StopIteration:
                 assert 0, "Bug: Unexpected end of lines in message."
 
-        for hname, hcontents in HNameContentsGen(lines[1:]):
+        for hname, hcontents, bytes_used in HNameContentsGen(line_iter):
             log.debug("Add header %r", hname)
             log.detail("Contents: %r", hcontents)
             newh = getattr(Header, hname).Parse(hcontents)
             log.detail("Header parsed as: %r", newh)
             message.addHeader(newh)
+            used_bytes += bytes_used
 
-        log.debug("SDP lines %r", body_lines)
+        # We haven't yet counted the eol eol at the end of the headers.
+        used_bytes += 4
+        clen = 0
+        if hasattr(message, "content_lengthheader"):
+            clen = message.content_lengthheader.number
+        else:
+            assert (message.viaheader.transport == SOCK_TYPE_IP_NAMES.UDP)
+
+        log.debug("Expecting %d bytes of body", clen)
+        if clen:
+            if not hasattr(message, "content_typeheader"):
+                raise ParseError(
+                    "Message with non-empty body has no content type.")
+
+        rest = string[used_bytes:]
+
+        if len(rest) < clen:
+            raise ParseError(
+                "Body is shorter than specified: got %d expected %d" % (
+                    len(rest), clen))
+
+        if hasattr(message, "content_typeheader"):
+            ctype = message.content_typeheader.content_type
+            if ctype != sdpsyntax.SIPBodyType:
+                raise ParseError("Unsupported Content-type: %r", ctype)
+            message.addBody(Body(type=ctype, content=rest[:clen]))
+            used_bytes += clen
+
+        message.parsedBytes = used_bytes
+
+        log.debug("Used %d of %d bytes", used_bytes, len(string))
 
         return message
 
@@ -155,31 +198,25 @@ class Message(vb.ValueBinder):
     def HeaderAttrNameFromType(cls, htype):
         return "%s%s" % (getattr(Header.types, htype), "Header")
 
-    def __init__(self, startline=None, headers=None, bodies=None,
-                 autofillheaders=True, configure_bindings=True):
+    @classmethod
+    def MakeStartline(cls):
+        log.debug("Class %r has type %r", cls.__name__, cls.type)
+        return getattr(Request, cls.type)()
+
+    def __init__(self, autofillheaders=True, configure_bindings=True,
+                 **kwargs):
         """Initialize a `Message`."""
 
-        super(Message, self).__init__()
-
-        for field in ("headers", "bodies"):
-            if locals()[field] is None:
-                setattr(self, field, [])
-            else:
-                setattr(self, field, locals()[field])
-
-        if startline is None:
-            try:
-                ty = self.type
-                log.debug("Make new startline of type %r.", self.type)
-                startline = getattr(Request, self.type)()
-            except Exception:
-                raise
-        self.startline = startline
+        super(Message, self).__init__(**kwargs)
 
         if autofillheaders:
             self.autofillheaders()
 
-        if configure_bindings and hasattr(self, "field_bindings"):
+        if configure_bindings:
+            self.enableBindings()
+
+    def enableBindings(self):
+        if hasattr(self, "field_bindings"):
             log.debug(
                 "Configure %r bindings: %r", self.type, self.field_bindings)
             self.bindBindings(self.field_bindings)
@@ -229,38 +266,74 @@ class Message(vb.ValueBinder):
             if hdr not in currentHeaderSet:
                 self.addHeader(getattr(Header, hdr)())
 
-        for mheader_name, mparams in six.iteritems(self.mandatoryparameters):
+        for mheader_name, mparams in iteritems(self.mandatoryparameters):
             mheader = getattr(self, self.HeaderAttrNameFromType(mheader_name))
             for param_name in mparams:
                 setattr(
                     mheader.field.parameters, param_name,
                     getattr(Param, param_name)())
 
+    def addBody(self, body):
+        self.bodies = self.bodies + [body]
+
+    #
+    # =================== ATTRIBUTES ==========================================
+    #
+    def setBodies(self, bodies):
+        log.debug("%r message set Bodies", self.__class__.__name__)
+        log.detail("  bodies are: %r", bodies)
+        existing_bodies = self._msg_bodies
+        log.detail("  existing bodies are %r", existing_bodies)
+        self._msg_bodies = bodies
+        if len(bodies) == 0:
+            if hasattr(self, "content_typeheader"):
+                del self.content_typeheader
+            return
+
+        if len(bodies) > 1:
+            raise ValueError("Currently multiple bodies are not supported.")
+
+        if not hasattr(self, "content_lengthheader"):
+            log.debug("Add content length header since we have bodies.")
+            self.content_lengthheader = Header.content_length()
+
+        if not hasattr(self, "content_typeheader"):
+            log.debug("Add content type header")
+            self.content_typeheader = Header.content_type()
+
+        log.detail(
+            "existing bodies before binding update: %r", existing_bodies)
+        log.detail(
+            "new bodies before binding update: %r", bodies)
+        self.vb_updateAttributeBindings("bodies", existing_bodies, bodies)
+        self.vb_updateAttributeBindings(
+            "body",
+            None if not existing_bodies else existing_bodies[0],
+            None if not bodies else bodies[0])
+
     #
     # =================== INTERNAL METHODS ===================================
     #
-    def __bytes__(self):
+    def bytesGen(self):
 
         log.debug(
             "%d headers, %d bodies.", len(self.headers), len(self.bodies))
 
-        components = [self.startline]
-        components.extend(self.headers)
-        # Note we need an extra newline between headers and bodies
-        components.append(b"")
-        if self.bodies:
-            components.extend(self.bodies)
-            components.append(b"")
+        yield bytes(self.startline)
+        eol = b'\r\n'
+        yield eol
+        for hdr in self.headers:
+            for bs in hdr.bytesGen():
+                yield bs
+            yield eol
+        yield eol
 
-        components.append(b"")  # need a newline at the end.
+        bds = self.bodies
+        assert len(bds) <= 1, "Only support one body currently."
 
-        log.debug("Last line: %r", components[-1])
-        try:
-            rp = prot.EOL.join([bytes(_cp) for _cp in components])
-            return rp
-        except Incomplete as exc:
-            exc.args += ('Message type %r' % self.type,)
-            raise
+        for body in bds:
+            for bs in body.bytesGen():
+                yield bs
 
     def __getattr__(self, attr):
         """Get some part of the message. E.g. get a particular header like:
@@ -291,29 +364,33 @@ class Message(vb.ValueBinder):
         appropriately.
         """
         assert attr != "value"
-        hmo = self.headerattrre.match(attr)
         log.detail(
             "%r instance set attribute %r", self.__class__.__name__, attr)
-        if hmo is not None:
-            htype = util.sipheader(hmo.group(1))
-            log.debug("Set the %r of type %r", attr, htype)
-            index = -1
-            existing_val = None
-            for hdr, index in zip(self.headers, range(len(self.headers))):
-                if hdr.type == htype:
-                    log.debug("  Found existing one.")
-                    existing_val = hdr
-                    self.headers[index] = val
-                    break
-            else:
-                log.debug("Didn't find existing one")
+
+        htype, hindex, hexist = self._msg_headerAttributeTypeIndexObject(attr)
+        if htype is not None:
+            if hindex is None:
                 self.headers.append(val)
-                index += 1
-            # Update bindings following change.
-            self.vb_updateAttributeBindings(attr, existing_val, val)
+            else:
+                self.headers[hindex] = val
+            self.vb_updateAttributeBindings(attr, hexist, val)
             return
 
         super(Message, self).__setattr__(attr, val)
+
+    def __delattr__(self, attr):
+        log.debug("%r delete attribute %r", self.__class__.__name__, attr)
+        htype, hindex, hexist = self._msg_headerAttributeTypeIndexObject(attr)
+        if htype is not None:
+            if hexist is None:
+                raise AttributeError(
+                    "%r instance has no attribute %r to delete" % (
+                        self.__class__.__name__, attr))
+            del self.headers[hindex]
+            self.vb_updateAttributeBindings(attr, hexist, None)
+            return
+
+        return super(Message, self).__delattr__(attr)
 
     def __repr__(self):
         return (
@@ -322,8 +399,32 @@ class Message(vb.ValueBinder):
             "bodies={0.bodies!r})"
             "".format(self))
 
+    #
+    # =================== INTERNAL METHODS ====================================
+    #
+    def _msg_headerAttributeTypeIndexObject(self, attr):
+        hmo = self.headerattrre.match(attr)
+        if hmo is None:
+            log.detail("Attr %r is not a header attr.", attr)
+            return None, None, None
 
-@six.add_metaclass(type)
+        htype = util.sipheader(hmo.group(1))
+        log.debug("Set the %r of type %r", attr, htype)
+        index = -1
+        existing_val = None
+        for hdr, index in zip(self.headers, range(len(self.headers))):
+            if hdr.type == htype:
+                log.debug("  Found existing one.")
+                existing_val = hdr
+                break
+        else:
+            log.debug("Didn't find existing one")
+            index = None
+
+        return htype, index, existing_val
+
+
+@add_metaclass(type)
 class MessageResponse(Message):
     """ A response message.
 
@@ -356,6 +457,16 @@ class InviteMessage(Message):
          "ContactHeader.field.value.uri.aor.username"),
         ("ContactHeader.host", "ViaHeader.host"),
         ("startline.type", "CSeqHeader.reqtype"),
+        ("bodies", "Content_LengthHeader.number", lambda bodies: reduce(
+            lambda x, y: x + y, [
+                summand
+                for lst in [0], [
+                    len(bd.content) for bd in bodies]
+                for summand in lst]
+        )),
+        ("bodies", "Content_TypeHeader.content_type", lambda bodies: (
+            None if not bodies else bodies[0].type
+        ))
     ]
 
     mandatoryheaders = [
@@ -403,6 +514,7 @@ class AckMessage(Message):
          "ContactHeader.field.value.uri.aor.username"),
         ("ContactHeader.field.value.uri.aor.host",
          "ViaHeader.field.host.host"),
-        ("startline.type", "CseqHeader.field.reqtype")]
+        ("startline.type", "CseqHeader.field.reqtype"),
+    ]
 
 Message.addSubclassesFromDict(locals())

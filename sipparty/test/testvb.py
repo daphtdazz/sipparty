@@ -117,6 +117,7 @@ class TestVB(SIPPartyTestCase):
         a.b = b
         b.c = 2
         self.assertEqual(a.c, 2)
+        self.assertEqual(a.b.c, 2)
         a.bind("c", "d")
         self.assertEqual(a.d, 2)
 
@@ -140,11 +141,19 @@ class TestVB(SIPPartyTestCase):
         self.assertEqual(a.d, 9)
         self.assertEqual(b.c, 9)
 
+        # Test that we can delete delegated attributes.
+        self.assertTrue(hasattr(a, "c"))
+        self.assertTrue(hasattr(b, "c"))
+        self.assertTrue(hasattr(a, "d"))
+        del a.c
+        self.assertFalse(hasattr(a, "c"))
+        self.assertFalse(hasattr(b, "c"))
+        self.assertIsNone(a.d)
+
         a.unbind("c", "d")
         a.e = 10
         self.assertEqual(a.c, 10)
         self.assertEqual(b.c, 10)
-        self.assertEqual(a.d, 9)
 
         a.unbind("e", "c")
         for ivb in (a, b, bb):

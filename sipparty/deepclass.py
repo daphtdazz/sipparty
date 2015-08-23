@@ -19,6 +19,7 @@ limitations under the License.
 """
 import logging
 import inspect
+from collections import Callable
 from six import (iteritems, iterkeys)
 from sipparty.util import Enum, DerivedProperty
 from sipparty.vb import ValueBinder
@@ -171,7 +172,14 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
                         clname)
                     gen = tlad[dck.gen]
                     if isinstance(gen, bytes):
-                        tlval = getattr(self.__class__, gen)()
+                        genAttr = getattr(self.__class__, gen)
+                        if isinstance(genAttr, Callable):
+                            log.debug(
+                                "Calling callable generator attribute %r",
+                                genAttr)
+                            tlval = genAttr()
+                        else:
+                            tlval = genAttr
                     else:
                         tlval = gen(**tlsvals)
 

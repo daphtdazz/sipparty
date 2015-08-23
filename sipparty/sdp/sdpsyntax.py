@@ -109,6 +109,8 @@ media_fields = (
 
 MediaProtocols = util.Enum((b"RTP/AVP", ))
 
+SIPBodyType = b"application/sdp"
+
 #
 # =================== Pre-compiled REs ========================================
 #

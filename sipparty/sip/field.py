@@ -22,7 +22,9 @@ import random
 import logging
 import prot
 from numbers import Integral
-from sipparty import (util, vb, parse, ParsedPropertyOfClass)
+from sipparty import (vb, parse, ParsedPropertyOfClass)
+from sipparty.util import (
+    BytesGenner, CCPropsFor, TwoCompatibleThree)
 from sipparty.transport import SOCK_TYPE_IP_NAMES
 from sipparty.deepclass import (DeepClass, dck)
 import components
@@ -37,8 +39,8 @@ from prot import Incomplete
 log = logging.getLogger(__name__)
 
 
-@add_metaclass(util.CCPropsFor(("delegateattributes", "parseinfo")))
-@util.TwoCompatibleThree
+@add_metaclass(CCPropsFor(("delegateattributes", "parseinfo")))
+@TwoCompatibleThree
 class Field(
         DeepClass("_fld_", {
             "value": {},
@@ -46,7 +48,9 @@ class Field(
                 dck.descriptor: ParsedPropertyOfClass(Parameters),
                 dck.gen: Parameters}
         }),
-        parse.Parser, vb.ValueBinder):
+        parse.Parser,
+        BytesGenner,
+        vb.ValueBinder):
 
     # For headers that delegate properties, these are the properties to
     # delegate. Note that these are cumulative, so subclasses declaring their
@@ -68,14 +72,9 @@ class Field(
              ("parameters", Parameters)]
     }
 
-    def bytesGen(self, value):
-        yield bytes(value)
-        for pval in itervalues(self.parameters):
-            yield bytes(pval)
-
-    def __bytes__(self):
-        rs = b";".join(self.bytesGen(self.value))
-        return rs
+    def bytesGen(self):
+        yield bytes(self.value)
+        yield bytes(self.parameters)
 
     def __setattr__(self, attr, val):
         if attr in Param.types:
@@ -165,13 +164,17 @@ class ViaField(
         parse.Parser.Repeats: True
     }
 
-    def __bytes__(self):
+    def bytesGen(self):
         pt = self.protocol
         if pt is None:
             raise Incomplete("Via header has not protocol.")
+        yield bytes(pt)
+        yield b'/'
         tp = self.transport
         if tp is None:
             raise Incomplete("Via header has no transport.")
+        yield bytes(tp)
+        yield b' '
 
         ht = self.host
         if ht is None:
@@ -179,7 +182,6 @@ class ViaField(
         hbytes = bytes(ht)
         if not hbytes:
             raise Incomplete("Via header has no or 0-length host.")
-        vbytes = b"{pt}/{tp} {hbytes}".format(**locals())
-
-        rs = b";".join(self.bytesGen(vbytes))
-        return rs
+        yield hbytes
+        for bs in self.parameters.bytesGen():
+            yield bs

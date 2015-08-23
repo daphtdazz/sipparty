@@ -23,7 +23,11 @@ import logging
 from six import (binary_type as bytes, add_metaclass)
 from numbers import Integral
 from sipparty import (util, vb, Parser)
+from sipparty.util import (
+    BytesGenner, attributesubclassgen, TwoCompatibleThree, ClassType, Enum,
+    sipheader, FirstListItemProxy)
 from sipparty.deepclass import (DeepClass, dck)
+from param import Parameters
 import prot
 from prot import Incomplete
 import components
@@ -34,14 +38,14 @@ import defaults
 log = logging.getLogger(__name__)
 
 
-@add_metaclass(util.attributesubclassgen)
-@util.TwoCompatibleThree
+@add_metaclass(attributesubclassgen)
+@TwoCompatibleThree
 class Header(
         DeepClass("_hdr_", {
             "header_value": {dck.gen: lambda: None},
-            "type": {dck.descriptor: lambda x: util.ClassType("Header")}
+            "type": {dck.descriptor: lambda x: ClassType("Header")}
             }),
-        Parser, vb.ValueBinder):
+        Parser, BytesGenner, vb.ValueBinder):
     """A SIP header.
 
     Each type of SIP header has its own subclass, and so generally the Header
@@ -58,7 +62,7 @@ class Header(
 
     # The `types` class attribute is used by the attributesubclassgen
     # metaclass to know what types of subclass may be created.
-    types = util.Enum(
+    types = Enum(
         ("Accept", "Accept-Encoding", "Accept-Language", "Alert-Info", "Allow",
          "Authentication-Info", "Authorization", "Call-ID", "Call-Info",
          "Contact", "Content-Disposition", "Content-Encoding",
@@ -69,7 +73,7 @@ class Header(
          "Record-Route", "Reply-To", "Require", "Retry-To", "Route", "Server",
          "Subject", "Supported", "Timestamp", "To", "Unsupported",
          "User-Agent", "Via", "Warning", "WWW-Authenticate"),
-        normalize=util.sipheader)
+        normalize=sipheader)
 
     parseinfo = {
         Parser.Pattern:
@@ -82,14 +86,14 @@ class Header(
     }
 
     def _hdr_prepend(self):
-        return b"{0.type}:".format(self)
+        return bytes(self.type) + ": "
 
 
 class FieldsBasedHeader(
         DeepClass("_dnurh_", {
             "fields": {dck.gen: list, dck.descriptor: None},
             "field": {
-                dck.descriptor: lambda x: util.FirstListItemProxy("fields"),
+                dck.descriptor: lambda x: FirstListItemProxy("fields"),
                 dck.gen: "GenerateField"}
         }),
         Header):
@@ -99,7 +103,7 @@ class FieldsBasedHeader(
         return cls.FieldClass()
 
     def parsecust(self, string, mo):
-        data = mo.group(1)
+        data = self.header_value
         log.debug("Header fields data: %r", data)
 
         if not hasattr(self, "FieldClass") or self.FieldClass is None:
@@ -119,14 +123,22 @@ class FieldsBasedHeader(
 
         self.fields = flds
 
-    def __bytes__(self):
+    def bytesGen(self):
         flds = self.fields
         if len(flds) == 0:
             raise Incomplete('Header type %r has no fields.' % (
                 self.__class__.__name__,))
         try:
-            return b"{0} {1}".format(
-                self._hdr_prepend(), ",".join([bytes(v) for v in self.fields]))
+            yield self._hdr_prepend()
+            first_field = True
+            for fld in self.fields:
+                if not first_field:
+                    yield b','
+                    first_field = False
+
+                for bs in fld.bytesGen():
+                    yield bs
+
         except Incomplete as exc:
             exc.args += ('Header type %r' % self.__class__.__name__,)
             raise
@@ -154,7 +166,7 @@ class ViaHeader(FieldsBasedHeader):
     FieldClass = ViaField
     vb_dependencies = (
         ("field", (
-            "host", "address", "port", "parameters")),
+            "transport", "protocol", "host", "address", "port", "parameters")),
     )
 
 
@@ -182,11 +194,32 @@ class ContactHeader(
     delta-seconds      =  1*DIGIT
     """
 
-    def __bytes__(self):
+    parseinfo = {
+        Parser.Pattern:
+            # The type. Checked in the constructor whether it's a valid header
+            # or not.
+            "(?:({STAR})|({header_value}))"
+            "".format(**prot.__dict__),
+        Parser.Mappings:
+            [("isStar", bool),
+             ("header_value",)]
+    }
+
+    def parsecust(self, string, mo):
+        if self.isStar:
+            return
+
+        return super(ContactHeader, self).parsecust(string, mo)
+
+    def bytesGen(self):
         log.debug("bytes(ContactHeader)")
         if self.isStar:
-            return b"{0} {1}".format(self._hdr_prepend(), prot.STAR)
-        return super(ContactHeader, self).__bytes__()
+            yield self._hdr_prepend()
+            yield b'*'
+            return
+
+        for bs in super(ContactHeader, self).bytesGen():
+            yield bs
 
 
 class Call_IdHeader(
@@ -228,7 +261,7 @@ class Call_IdHeader(
             "{dt.year:04}{dt.month:02}{dt.day:02}{dt.hour:02}{dt.minute:02}"
             "{dt.second:02}".format(dt=dt))
 
-        return "{keyval:06x}-{keydate}".format(**locals())
+        return b"{keyval:06x}-{keydate}".format(**locals())
 
     @property
     def value(self):
@@ -242,11 +275,14 @@ class Call_IdHeader(
 
         return b"{0.key}".format(self)
 
-    def __bytes__(self):
-        val = self.value
-        if val is None:
+    def bytesGen(self):
+        yield self._hdr_prepend()
+        if self.key is None:
             raise Incomplete("Call ID header has no key.")
-        return b"{0} {1}".format(self._hdr_prepend(), val)
+        yield self.key
+        if self.host:
+            yield b'@'
+            yield bytes(self.host)
 
 
 class CseqHeader(
@@ -268,23 +304,24 @@ class CseqHeader(
              ("reqtype", None, lambda x: getattr(Request.types, x))]
     }
 
-    def __bytes__(self):
+    def bytesGen(self):
 
         if self.reqtype is None:
             raise Incomplete("CSeqHeader has no request type.")
 
-        return b"%s %d %s" % (
-            self._hdr_prepend(), self.number, self.reqtype)
+        yield self._hdr_prepend()
+        yield bytes("%d" % self.number)
+        yield b' '
+        yield bytes(self.reqtype)
 
 
-class Max_ForwardsHeader(
-        DeepClass("_mfh_", {
+class NumberHeader(
+        DeepClass("_numh_", {
             "number": {
-                dck.gen: lambda: defaults.max_forwards,
+                dck.gen: "Default_Number",
                 dck.check: lambda x: isinstance(x, Integral)}
             }),
         Header):
-
     parseinfo = {
         Parser.Pattern:
             "(\d+)$",  # No parameters.
@@ -292,7 +329,46 @@ class Max_ForwardsHeader(
             [("number", int)]
     }
 
-    def __bytes__(self):
-        return "{0} {1.number}".format(self._hdr_prepend(), self)
+    def bytesGen(self):
+        yield self._hdr_prepend()
+        yield bytes("%d" % (self.number,))
+
+
+class Max_ForwardsHeader(NumberHeader):
+    Default_Number = defaults.max_forwards
+
+
+class Content_LengthHeader(NumberHeader):
+    Default_Number = 0
+
+
+class Content_TypeHeader(
+        DeepClass("_cth_", {
+            "content_type": {},
+            "parameters": {dck.gen: Parameters}
+        }),
+        Header):
+    """ABNF:
+
+    m-type SLASH m-subtype *(SEMI m-parameter)
+    """
+
+    parseinfo = {
+        Parser.Pattern:
+            "({m_type}{SLASH}{m_subtype})((?:{SEMI}{m_parameter})*)"
+            "".format(**prot.__dict__),  # No parameters.
+        Parser.Mappings:
+            [("content_type",),
+             ("parameters", Parameters)]
+    }
+
+    def bytesGen(self):
+        yield self._hdr_prepend()
+        if not self.content_type:
+            assert 0, self.content_type
+            raise Incomplete("Content Header has no type.")
+        yield bytes(self.content_type)
+        for bs in self.parameters.bytesGen():
+            yield bs
 
 Header.addSubclassesFromDict(locals())

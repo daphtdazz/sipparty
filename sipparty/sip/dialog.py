@@ -197,6 +197,11 @@ class Dialog(
 
         log.debug("send request of type %r", req.type)
 
+        if hasattr(self, "delegate"):
+            dele = self.delegate
+            if hasattr(dele, "configureOutboundMessage"):
+                dele.configureOutboundMessage(req)
+
         tp = self.transport
         if tp is None:
             raise AttributeError(
@@ -251,6 +256,7 @@ class Dialog(
 
             if action not in Tfk:
                 raiseActTupleError(actTp, "Unrecognised action %r." % action)
+
             if action == Tfk.Copy:
                 if len(actTp) < 2:
                     raiseActTupleError(actTp, "No path to copy.")
@@ -269,11 +275,16 @@ class Dialog(
 
             if action == Tfk.CopyFromRequest:
                 assert 0
-
             assert 0
 
         resp.FromHeader.parameters.tag = self.remoteTag
         resp.ToHeader.parameters.tag = self.localTag
+
+        if hasattr(self, "delegate"):
+            dele = self.delegate
+            if hasattr(dele, "configureOutboundMessage"):
+                dele.configureOutboundMessage(resp)
+
         log.debug("Response now %r", resp)
 
     def hasTerminated(self):

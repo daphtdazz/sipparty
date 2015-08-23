@@ -26,6 +26,7 @@ from sipparty.vb import ValueBinder
 from sipparty.deepclass import (DeepClass, dck)
 from sipparty.sdp import (SessionDescription, MediaDescription)
 from sipparty.sdp.sdpsyntax import (username_re,)
+from sipparty.sdp.mediatransport import MediaTransport
 
 log = logging.getLogger(__name__)
 bytes = six.binary_type
@@ -33,7 +34,9 @@ bytes = six.binary_type
 
 class Session(
         DeepClass("_sess_", {
-            "transport": {},
+            "transport": {
+                dck.gen: MediaTransport
+            },
             "description": {
                 dck.check: lambda x: isinstance(x, SessionDescription),
                 dck.gen: SessionDescription},
@@ -67,7 +70,9 @@ class Session(
 
 class MediaSession(
         DeepClass("_msess_", {
-            "transport": {},
+            "transport": {
+                dck.gen: MediaTransport
+            },
             "description": {
                 dck.check: lambda x: isinstance(x, MediaDescription),
                 dck.gen: MediaDescription},

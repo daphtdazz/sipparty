@@ -619,6 +619,7 @@ class FSM(object):
 
         self._fsm_setState(new_state)
 
+        # The action is complex; see _fsm_makeAction.
         action = res[self.KeyAction]
         if action is not None:
             log.debug("Run transition's action %r", action)

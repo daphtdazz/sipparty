@@ -16,17 +16,19 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import six
+from six import (itervalues, binary_type as bytes, add_metaclass)
 import random
 import logging
-from sipparty import (util, vb, Parser)
+from sipparty import (vb, Parser)
+from sipparty.util import (
+    BytesGenner, attributesubclassgen, TwoCompatibleThree, Enum, ClassType,
+    DerivedProperty)
 import prot
 
 log = logging.getLogger(__name__)
-bytes = six.binary_type
 
 
-class Parameters(Parser, vb.ValueBinder, dict):
+class Parameters(Parser, BytesGenner, vb.ValueBinder, dict):
     """Class representing a list of parameters on a header or other object.
     """
     parseinfo = {
@@ -69,12 +71,18 @@ class Parameters(Parser, vb.ValueBinder, dict):
             newp = Param.Parse(parm)
             self[newp.name] = newp
 
+    def bytesGen(self):
+        for pm in itervalues(self):
+            yield b';'
+            for by in pm.bytesGen():
+                yield by
 
-@six.add_metaclass(util.attributesubclassgen)
-@util.TwoCompatibleThree
-class Param(Parser, vb.ValueBinder):
 
-    types = util.Enum(("branch", "tag",), normalize=lambda x: x.lower())
+@add_metaclass(attributesubclassgen)
+@TwoCompatibleThree
+class Param(Parser, BytesGenner, vb.ValueBinder):
+
+    types = Enum(("branch", "tag",), normalize=lambda x: x.lower())
 
     parseinfo = {
         Parser.Pattern:
@@ -88,8 +96,8 @@ class Param(Parser, vb.ValueBinder):
              ("value",)]
     }
 
-    name = util.ClassType("Param")
-    value = util.DerivedProperty("_prm_value", get="getValue")
+    name = ClassType("Param")
+    value = DerivedProperty("_prm_value", get="getValue")
 
     def __init__(self, value=None):
         super(Param, self).__init__()
@@ -99,9 +107,11 @@ class Param(Parser, vb.ValueBinder):
         "Get the value. Subclasses should override."
         return underlyingValue
 
-    def __bytes__(self):
+    def bytesGen(self):
         log.debug("Param Bytes")
-        return b"{self.name}={self.value}".format(self=self)
+        yield bytes(self.name)
+        yield b'='
+        yield bytes(self.value)
 
     def __eq__(self, other):
         log.debug("Param %r ?= %r", self, other)

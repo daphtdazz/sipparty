@@ -25,9 +25,12 @@ import setup
 from setup import SIPPartyTestCase
 from six import binary_type as bytes, iteritems, add_metaclass
 from sipparty import (util, sip, vb, ParseError, Request)
-from sipparty.sip import (prot, components)
+from sipparty.sip import (prot, components, Message, Header)
+from sipparty.sip.header import ContactHeader
 from sipparty.sip.components import URI
 from sipparty.sip.prot import (Incomplete)
+from sipparty.sdp import sdpsyntax
+from sipparty.sip.body import Body
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DETAIL)
@@ -48,22 +51,22 @@ class TestProtocol(SIPPartyTestCase):
             "".format(stra, strb))
 
     def testGeneral(self):
-        aliceAOR = sip.components.AOR("alice", "atlanta.com")
+        aliceAOR = components.AOR("alice", "atlanta.com")
         self.assertEqual(bytes(aliceAOR), "alice@atlanta.com")
-        bobAOR = sip.components.AOR("bob", "baltimore.com")
+        bobAOR = components.AOR("bob", "baltimore.com")
 
-        self.assertRaises(AttributeError, lambda: sip.Request.notareq)
+        self.assertRaises(AttributeError, lambda: Request.notareq)
 
-        inviteRequest = sip.Request.invite(uri_aor=bobAOR)
+        inviteRequest = Request.invite(uri_aor=bobAOR)
         self.assertEqual(
             bytes(inviteRequest), "INVITE sip:bob@baltimore.com SIP/2.0")
 
-        self.assertRaises(AttributeError, lambda: sip.Message.notareg)
+        self.assertRaises(AttributeError, lambda: Message.notareg)
 
-        invite = sip.Message.invite()
+        invite = Message.invite()
         self.assertRaises(Incomplete, lambda: bytes(invite))
         old_branch = bytes(invite.viaheader.parameters.branch)
-        invite.startline.uri = sip.components.URI(aor=bobAOR)
+        invite.startline.uri = components.URI(aor=bobAOR)
 
         # Ideally just changing the URI should be enough to regenerate the
         # branch parameter, as it should be live.  However the branch
@@ -104,7 +107,7 @@ class TestProtocol(SIPPartyTestCase):
         self.pushLogLevel("message", logging.DEBUG)
         self.pushLogLevel("parse", logging.DEBUG)
 
-        invite = sip.Message.invite()
+        invite = Message.invite()
 
         self.assertRaises(Incomplete, lambda: bytes(invite))
 
@@ -127,16 +130,19 @@ class TestProtocol(SIPPartyTestCase):
         invite.contactheader.uri = "sip:localuser@127.0.0.1:5061"
         invite.max_forwardsheader.number = 55
         self.assertEqual(invite.contactheader.port, 5061)
-        log.debug("Set via header host.")
+        log.info("Set via header host.")
         self.assertEqual(invite.viaheader.port, 5061)
 
         invite_str = bytes(invite)
-        log.debug("Invite to stringify and parse: %r", invite_str)
+        log.info("Invite to stringify and parse: %r", invite_str)
 
-        new_inv = sip.message.Message.Parse(invite_str)
+        new_inv = Message.Parse(invite_str)
         self.assertEqualMessages(invite, new_inv)
 
-        new_inv.addHeader(sip.Header.via())
+        log.info("Establish bindings")
+        new_inv.enableBindings()
+        log.info("Add new VIA header")
+        new_inv.addHeader(Header.via())
         self.assertEqual(new_inv.contactheader.port, 5061)
         self.assertEqual(new_inv.viaheader.port, 5061)
         self.assertEqual(
@@ -146,6 +152,9 @@ class TestProtocol(SIPPartyTestCase):
 
         new_inv.viaheader.host = "arkansas.com"
         new_inv.startline.uri.aor.username = "bill"
+
+        new_inv.addBody(
+            Body(type=sdpsyntax.SIPBodyType, content=b"This is a message"))
 
         self.assertTrue(re.match(
             "INVITE sip:bill@biloxi.com SIP/2.0\r\n"
@@ -160,13 +169,16 @@ class TestProtocol(SIPPartyTestCase):
             "Call-ID: {0}\r\n"
             "CSeq: {2} INVITE\r\n"
             "Max-Forwards: 55\r\n"
+            "Content-Length: 17\r\n"
             "Contact: <sip:alice@127.0.0.1:5061>\r\n"
-            "\r\n$".format(
+            "Content-Type: {4}\r\n"
+            "\r\n"
+            "This is a message$"
+            "".format(
                 TestProtocol.call_id_pattern, TestProtocol.branch_pattern,
-                TestProtocol.cseq_num_pattern, TestProtocol.tag_pattern),
+                TestProtocol.cseq_num_pattern, TestProtocol.tag_pattern,
+                sdpsyntax.SIPBodyType),
             bytes(new_inv)), repr(bytes(new_inv)))
-
-        new_inv._vb_unbindAllCondition()
 
     def testEnum(self):
         en = util.Enum(("cat", "dog", "aardvark", "mouse"))
@@ -268,7 +280,7 @@ class TestProtocol(SIPPartyTestCase):
                 (components.DNameURI, (
                     ("<sip:bob@biloxi.com>",),)),
                 (Request, (('INVITE sip:bob@biloxi.com SIP/2.0',),)),
-                (sip.header.ContactHeader, (
+                (ContactHeader, (
                     ('<sip:[::1]:5060;transport=UDP>',
                      'Contact: <sip:[::1]:5060;transport=UDP>'),))):
             for example in examples:
@@ -281,6 +293,9 @@ class TestProtocol(SIPPartyTestCase):
 
                 exp = example[1] if len(example) > 1 else example[0]
                 self.assertEqual(exp, bytes(cp))
+
+    def testMessageProperties(self):
+        inv = Message.invite()
 
 if __name__ == "__main__":
     sys.exit(unittest.main())

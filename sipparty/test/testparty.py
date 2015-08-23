@@ -53,8 +53,7 @@ class TestParty(SIPPartyTestCase):
         self.subTestBasicParty(SOCK_STREAM, )
 
     def testBasicPartyUDP(self):
-        self.pushLogLevel("dialog", logging.DEBUG)
-        self.pushLogLevel("siptransport", logging.DETAIL)
+        self.pushLogLevel("party", logging.DEBUG)
         self.subTestBasicParty(SOCK_DGRAM, "127.0.0.1")
 
     def testBasicPartyUDPIPv6(self):

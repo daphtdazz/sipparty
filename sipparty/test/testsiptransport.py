@@ -61,7 +61,7 @@ class TestSIPTransport(unittest.TestCase):
             log.debug("NewDialogHandler consumed the message.")
 
         tp = SIPTransport()
-        laddr = tp.listen()
+        laddr = tp.listen(lHostName="127.0.0.1")
 
         msg = sip.Message.invite()
         msg.ToHeader.aor = b"alice@atlanta.com"
