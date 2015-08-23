@@ -37,13 +37,32 @@ from response import Response
 from header import Header
 
 log = logging.getLogger(__name__)
+ContentLengthBinding = (
+    "bodies", "Content_LengthHeader.number", {
+        KeyTransformer: lambda bodies: reduce(
+            lambda x, y: x + y, [
+                summand
+                for lst in [0], [
+                    len(bd.content) for bd in bodies]
+                for summand in lst
+            ]
+        )
+    })
+ContentTypeBinding = (
+    "bodies", "Content_TypeHeader.content_type", {
+        KeyTransformer: lambda bodies: (
+            None if not bodies else bodies[0].type
+        )
+    }
+)
 
 
 @add_metaclass(
     # The FSM type needs both the attributesubclassgen and the cumulative
     # properties metaclasses.
     type('Message',
-         (util.CCPropsFor(("mandatoryheaders", "mandatoryparameters")),
+         (util.CCPropsFor((
+            "mandatoryheaders", "mandatoryparameters", "field_bindings")),
           util.attributesubclassgen,),
          dict()))
 @util.TwoCompatibleThree
@@ -93,6 +112,11 @@ class Message(
         "({CRLF}(?:({token}){COLON}|{CRLF}))".format(**prot.__dict__))
 
     body = util.FirstListItemProxy("bodies")
+
+    field_bindings = [
+        ContentLengthBinding,
+        ContentTypeBinding
+    ]
 
     @classmethod
     def Parse(cls, string):
@@ -432,6 +456,10 @@ class MessageResponse(Message):
     NB this overrides the metaclass of Message as we don't want to attempt to
     generate subclasses from our type, which we don't have."""
 
+    field_bindings = [
+
+    ]
+
     @property
     def type(self):
         return self.startline.code
@@ -458,21 +486,8 @@ class InviteMessage(Message):
          "ContactHeader.field.value.uri.aor.username"),
         ("ContactHeader.host", "ViaHeader.host"),
         ("startline.type", "CSeqHeader.reqtype"),
-        ("bodies", "Content_LengthHeader.number", {
-            KeyTransformer: lambda bodies: reduce(
-                lambda x, y: x + y, [
-                    summand
-                    for lst in [0], [
-                        len(bd.content) for bd in bodies]
-                    for summand in lst
-                ]
-            )
-        }),
-        ("bodies", "Content_TypeHeader.content_type", {
-            KeyTransformer: lambda bodies: (
-                None if not bodies else bodies[0].type
-            )
-        })
+        ContentLengthBinding,
+        ContentTypeBinding
     ]
 
     mandatoryheaders = [

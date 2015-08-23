@@ -2,19 +2,17 @@
 
 ## List. ##
 
-1. INVITEs with media sessions.
-2. 200s with media sessions.
 2. SIPP test integration.
 3. Pumba integration.
 4. REGISTER dialogues.
-5. Continuous Integration.
-6. Example scripts.
-7. TCP support. 
-8. Proper python3 support.
+5. Example scripts.
+6. TCP support. 
+7. Proper python3 support.
     a. 'bytes' does not support % and .format(), so need to use BytesGenner and str instead where appropriate.
-9. UDP transport retrying. 
-9. Get rid of "delegateattributes", use "vb_dependencies". -- ?? semi done?
-13. Move sipheader out of util and probably into prot.
+8. UDP transport retrying. 
+9. Continuous Integration.
+10. Get rid of "delegateattributes", use "vb_dependencies". -- ?? semi done?
+12. Move sipheader out of util and probably into prot.
 14. Offers SDP.
 15. Document and fixing attribute naming convention in vb.py.
 16. deepclass representation is overly verbose / not detailed enough depending on whether we recurse to superclass's deepclasses.
@@ -40,6 +38,8 @@
     ToHeader receives:
      alice@atlanta.com
    -- done 14/08/2015
+6. INVITEs with media sessions. -- done 23/08/2015
+7. 200s with media sessions. -- done 23/08/2015
 
 ## Changelog ##
 

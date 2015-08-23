@@ -201,18 +201,8 @@ class Dialog(
 
         log.debug("send request of type %r", req.type)
 
-        ls = self.localSession
-        if req.type == req.types.invite and ls:
-            log.debug("Add SDP")
-            try:
-                sdpBody = ls.sdp()
-            except SDPIncomplete as exc:
-                log.warning(
-                    "Party has an incomplete media session, so sending INVITE "
-                    "with no SDP: %s", exc)
-                sdpBody = None
-            if sdpBody is not None:
-                req.addBody(Body(type=sdpsyntax.SIPBodyType, content=sdpBody))
+        if req.type == req.types.invite:
+            self.addLocalSessionSDP(req)
 
         if hasattr(self, "delegate"):
             dele = self.delegate
@@ -267,6 +257,9 @@ class Dialog(
             raise ValueError(
                 "%r instance transform action %r is unrecognisable: %s" % (
                     self.__class__.__name__, tp, msg))
+
+        if req.type == req.types.invite and resp.type == 200:
+            self.addLocalSessionSDP(resp)
 
         for actTp in tform:
             action = actTp[0]
@@ -350,6 +343,21 @@ class Dialog(
     #
     # =================== INTERNAL METHODS ====================================
     #
+    def addLocalSessionSDP(self, msg):
+        ls = self.localSession
+        if not ls:
+            return
+        log.debug("Add SDP")
+        try:
+            sdpBody = ls.sdp()
+        except SDPIncomplete as exc:
+            log.warning(
+                "Party has an incomplete media session, so sending INVITE "
+                "with no SDP: %s", exc)
+            sdpBody = None
+        if sdpBody is not None:
+            msg.addBody(Body(type=sdpsyntax.SIPBodyType, content=sdpBody))
+
     def _dlg_resolveTarget(self, target):
         if self._dlg_remoteAddress is None:
             if target is None:

@@ -198,8 +198,6 @@ class Party(
             remoteAddress = self._pt_resolveProxyAddress(target)
 
         invD = self.newInviteDialog(toURI)
-        invD.localSession = self.newSession()
-        invD.localSession.listen()
 
         log.debug("Initialize dialog to %r", proxy)
         invD.initiate(remoteAddress=remoteAddress)
@@ -215,6 +213,8 @@ class Party(
         invD = InviteDialog(
             fromURI=self.uri, toURI=toURI, contactURI=self.contactURI,
             transport=self.transport)
+        invD.localSession = self.newSession()
+        invD.localSession.listen()
 
         ids = self._pt_inviteDialogs
         if toURI not in ids:
