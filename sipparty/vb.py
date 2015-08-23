@@ -48,6 +48,7 @@ class ValueBinder(object):
     PS = PathSeparator
 
     KeyTransformer = "transformer"
+    KeyIgnoredExceptions = "ignore_exceptions"
 
     VB_Forward = 'forward'
     VB_Backward = 'backward'
@@ -92,7 +93,7 @@ class ValueBinder(object):
         self._vb_initBindings()
         super(ValueBinder, self).__init__(**kwargs)
 
-    def bind(self, frompath, topath, transformer=None):
+    def bind(self, frompath, topath, transformer=None, ignore_exceptions=None):
         """When any item on frompath or topath changes, set topath to frompath.
         E.g.
         self.a = a
@@ -114,7 +115,8 @@ class ValueBinder(object):
             if hasattr(at, "_vb_forwardbindings"):
                 log.debug("Target bindings now: %r", at._vb_forwardbindings)
         self._vb_binddirection(
-            frompath, topath, None, transformer, self.VB_Forward)
+            frompath, topath, None, transformer, self.VB_Forward,
+            ignore_exceptions)
         if log.level <= logging.DETAIL and hasattr(self, frompath):
             at = getattr(self, frompath)
             if hasattr(at, "_vb_forwardbindings"):
@@ -122,7 +124,8 @@ class ValueBinder(object):
                     "Target bindings after forward bind: %r",
                     at._vb_forwardbindings)
         self._vb_binddirection(
-            topath, frompath, None, transformer, self.VB_Backward)
+            topath, frompath, None, transformer, self.VB_Backward,
+            ignore_exceptions)
         if log.level <= logging.DETAIL and hasattr(self, frompath):
             at = getattr(self, frompath)
             if hasattr(at, "_vb_forwardbindings"):
@@ -165,7 +168,7 @@ class ValueBinder(object):
                 val = self._vb_pullValue(frompath)
                 for topath, cdict in iteritems(bdict):
                     log.debug("Push %r to %r", frompath, topath)
-                    self._vb_push_value_to_target(val, topath)
+                    self._vb_push_value_to_target(val, topath, cdict)
 
     @property
     def vb_parent(self):
@@ -231,10 +234,11 @@ class ValueBinder(object):
                     for topath, bd in iteritems(bds):
                         subtopath = self.VB_PrependParent(topath)
                         tf = bd[self.KeyTransformer]
+                        ie = bd[self.KeyIgnoredExceptions]
                         log.debug("%r bind new value %r to %r", direction,
                                   subpath, subtopath)
                         val._vb_binddirection(subpath, subtopath, self, tf,
-                                              direction)
+                                              direction, ie)
 
         # If this attribute is forward bound, push the value out.
         _, _, _, fbds, _ = self._vb_bindingdicts(attr, self.VB_Forward,
@@ -247,15 +251,7 @@ class ValueBinder(object):
                 for topath, bd in iteritems(bds):
                     log.debug("Push %s.%s to %s", attr, fromattrattrs,
                               topath)
-                    log.debug("  value is %r", val)
-                    new_val = val
-                    if ValueBinder.KeyTransformer in bd:
-                        tf = bd[ValueBinder.KeyTransformer]
-                        if tf is not None:
-                            log.debug("Transform attr first")
-                            new_val = tf(val)
-                            log.debug("")
-                    self._vb_push_value_to_target(new_val, topath)
+                    self._vb_push_value_to_target(val, topath, bd)
 
     #
     # =================== MAGIC METHODS ======================================
@@ -499,18 +495,37 @@ class ValueBinder(object):
 
         return bindings, attr, attrattrs, attrdict, attrdict[attrattrs]
 
-    def _vb_push_value_to_target(self, value, topath):
+    def _vb_push_value_to_target(self, val, topath, bdict):
         log.debug("Push value to %r", topath)
-        log.detail("  value is %r", value)
+        log.detail("  value is %r", val)
+
         target, toattr = self._vb_resolveboundobjectandattr(topath)
         if target is not None:
             if hasattr(target, toattr):
                 old_value = getattr(target, toattr)
             else:
                 old_value = None
-            if value is not old_value:
-                log.debug("Pushing %r to %s", value, topath)
-                setattr(target, toattr, value)
+            if val is not old_value:
+                log.debug("Pushing %r to %s", val, topath)
+
+                ie = bdict[ValueBinder.KeyIgnoredExceptions]
+                tf = bdict[ValueBinder.KeyTransformer]
+                try:
+                    new_val = val
+                    if tf is not None:
+                        log.debug("Transform attr first")
+                        new_val = tf(val)
+                        log.detail("%r transformed to %r", val, new_val)
+                    setattr(target, toattr, new_val)
+                except Exception as thrownExc:
+                    for exc in ie:
+                        if isinstance(thrownExc, exc):
+                            log.debug(
+                                "Ignoring %r exc as is instance of %r",
+                                thrownExc.__class__.__name__, exc)
+                            break
+                    else:
+                        raise
             else:
                 log.debug("Target's value already is value!")
         else:
@@ -525,7 +540,8 @@ class ValueBinder(object):
         return None
 
     def _vb_binddirection(
-            self, frompath, topath, parent, transformer, direction):
+            self, frompath, topath, parent, transformer, direction,
+            ignore_exceptions):
         """
         """
         log.debug("  %r bindings before bind %r",
@@ -542,8 +558,11 @@ class ValueBinder(object):
                 "Attribute path %r of %r instance already bound to %r." % (
                     resolvedfrompath, self.__class__.__name__,
                     resolvedtopath))
+        ignore_exceptions = (
+            tuple() if not ignore_exceptions else ignore_exceptions)
         bds[resolvedtopath] = {
-            ValueBinder.KeyTransformer: transformer
+            ValueBinder.KeyTransformer: transformer,
+            ValueBinder.KeyIgnoredExceptions: ignore_exceptions
         }
 
         currparent = self.vb_parent
@@ -579,7 +598,7 @@ class ValueBinder(object):
                     log.debug("  child is VB compatible.")
                     subobj._vb_binddirection(
                         fromattrattrs, ValueBinder.PS + resolvedtopath, self,
-                        transformer, direction)
+                        transformer, direction, ignore_exceptions)
         else:
             # This is a direct binding. If we already have a value for it, set
             # the target. E.g.
@@ -591,16 +610,13 @@ class ValueBinder(object):
                 if hasattr(self, fromattr):
                     log.debug("  Has child attr %r", fromattr)
                     val = getattr(self, fromattr)
-                    if transformer is not None:
-                        val = transformer(val)
-                    self._vb_push_value_to_target(val, resolvedtopath)
+                    self._vb_push_value_to_target(
+                        val, resolvedtopath, bds[resolvedtopath])
             else:
                 log.debug("Pull value.")
                 val = self._vb_pullValue(resolvedtopath)
-                if transformer is not None:
-                    val = transformer(val)
-
-                setattr(self, fromattr, val)
+                self._vb_push_value_to_target(
+                    val, fromattr, bds[resolvedtopath])
 
         log.debug("  %r bindings after bind %r",
                   direction,

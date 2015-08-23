@@ -24,6 +24,7 @@ import logging
 import unittest
 from setup import SIPPartyTestCase
 from sipparty import vb
+from sipparty.util import DerivedProperty
 
 # If main get the root logger.
 if __name__ == "__main__":
@@ -222,7 +223,7 @@ class TestVB(SIPPartyTestCase):
         self.assertEqual(a.b.d, 5)
         self.assertEqual(a.d, 6)
         a.refreshBindings()
-        self.assertEqual(a.c, 2)
+        self.assertEqual(a.c, 4)
         self.assertEqual(a.a, 2)
         self.assertEqual(a.d, 5)
 
@@ -255,6 +256,18 @@ class TestVB(SIPPartyTestCase):
         a.b.a = 6
         self.assertTrue(aa.vb_parent is a)
         self.assertEqual(len(aa._vb_forwardbindings), 1)
+
+    def testExceptionsInBindings(self):
+        a, aa, ab, aaa, aba = [vb.ValueBinder() for _ in range(5)]
+
+        a.bind(
+            "b", "c", transformer=lambda x: int(x),
+            ignore_exceptions=(ValueError,))
+        a.b = 2
+        self.assertEqual(a.c, 2)
+        a.b = "not"
+        self.assertEqual(a.b, "not")
+        self.assertEqual(a.c, 2)
 
 if __name__ == "__main__":
     sys.exit(unittest.main())
