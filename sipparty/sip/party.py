@@ -31,7 +31,7 @@ from sipparty.util import DerivedProperty
 from sipparty.deepclass import DeepClass, dck
 from sipparty.sip import SIPTransport
 from sipparty.sip.body import Body
-from sipparty.transport import SockTypeName
+from sipparty.transport import (SockTypeName, IPaddress_re)
 from sipparty.sdp import sdpsyntax
 import prot
 from prot import Incomplete
@@ -81,19 +81,13 @@ class Party(
             "contactURI": {
                 dck.descriptor: ParsedPropertyOfClass(URI),
                 dck.gen: URI},
-            "transport": {dck.gen: lambda: None},
-            "mediaSession": {
-                dck.gen: lambda: Session(
-                    username="-",
-                    # TODO: don't just use static IP addresses!
-                    addressType=sdpsyntax.AddrTypes.IP4,
-                    address="127.0.0.1",
-                    mediaSessions=[MediaSession(
-                        mediaType="audio",
-                        proto="RTP/AVP",
-                        addressType=sdpsyntax.AddrTypes.IP4, port=50000,
-                        fmt=1234)]),
-                dck.check: lambda x: isinstance(x, Session)}
+            "mediaAddress": {
+                dck.check: lambda x: IPaddress_re.match(x),
+                dck.get: lambda self, underlying: (
+                    underlying if underlying is not None else
+                    self.contactURI.address)
+            },
+            "transport": {dck.gen: lambda: None}
         }),
         vb.ValueBinder):
     """A party in a sip call, aka an endpoint, caller or callee etc.
@@ -103,9 +97,10 @@ class Party(
     # =================== CLASS INTERFACE ====================================
     #
     InviteDialog = None
+    MediaSession = None
 
-    vb_dependencies = [
-        ["dnameURI", ["uri", "aor"]]]
+    vb_dependencies = (
+        ("dnameURI", ("uri", "aor")),)
 
     #
     # =================== INSTANCE INTERFACE =================================
@@ -180,6 +175,7 @@ class Party(
 
         tp = self.transport
         lAddr = tp.listen(lHostName=contactAddress, port=contactPort)
+        assert lAddr[1] != 0
         log.info("Party listening on %r", lAddr)
         self._pt_listenAddress = lAddr
         uriHost.address = lAddr[0]
@@ -202,6 +198,8 @@ class Party(
             remoteAddress = self._pt_resolveProxyAddress(target)
 
         invD = self.newInviteDialog(toURI)
+        invD.localSession = self.newSession()
+        invD.localSession.listen()
 
         log.debug("Initialize dialog to %r", proxy)
         invD.initiate(remoteAddress=remoteAddress)
@@ -227,6 +225,18 @@ class Party(
         invD.delegate = self
 
         return invD
+
+    def newSession(self):
+        MS = self.MediaSession
+        if MS is None:
+            log.debug(
+                "No media session configured for %r instance.",
+                self.__class__.__name__)
+            return None
+
+        ma = self.mediaAddress
+        ms = self.__class__.MediaSession(username="-", address=ma)
+        return ms
 
     #
     # =================== DELEGATE IMPLEMENTATIONS ===========================
@@ -300,13 +310,4 @@ class Party(
                     target.__class__.__name__))
 
     def _pt_configureInvite(self, inv):
-        log.debug("Adding media session to invite.")
-        try:
-            sdpBody = self.mediaSession.sdp()
-        except Incomplete:
-            log.debug(
-                "Party has an incomplete media session, so sending INVITE "
-                "with no SDP.")
-            sdpBody = None
-        if sdpBody is not None:
-            inv.addBody(Body(type=sdpsyntax.SIPBodyType, content=sdpBody))
+        pass

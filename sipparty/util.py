@@ -562,7 +562,8 @@ class DerivedProperty(object):
 
     def __set__(self, obj, value):
         pname = self._rp_propName
-        if self._rp_check is not None and not self._rp_check(value):
+        if (value is not None and
+                self._rp_check is not None and not self._rp_check(value)):
             raise ValueError(
                 "%r is not an allowed value for attribute %r of class %r." %
                 (value, pname, obj.__class__.__name__))

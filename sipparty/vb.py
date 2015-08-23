@@ -23,6 +23,9 @@ import weakref
 log = logging.getLogger(__name__)
 log.setLevel(logging.WARNING)  # vb is verbose at lower levels.
 
+KeyTransformer = "transformer"
+KeyIgnoredExceptions = "ignore_exceptions"
+
 
 class BindingException(Exception):
     """Base class for all binding specific errors."""
@@ -46,9 +49,6 @@ class ValueBinder(object):
     #
     PathSeparator = "."
     PS = PathSeparator
-
-    KeyTransformer = "transformer"
-    KeyIgnoredExceptions = "ignore_exceptions"
 
     VB_Forward = 'forward'
     VB_Backward = 'backward'
@@ -140,11 +140,16 @@ class ValueBinder(object):
         (frompath, topath[, transformer]).
         """
         for binding in bindings:
+            transformer = None
+            ignored_exceptions = None
             if len(binding) > 2:
-                transformer = binding[2]
-            else:
-                transformer = None
-            self.bind(binding[0], binding[1], transformer)
+                opts = binding[2]
+                if KeyTransformer in opts:
+                    transformer = opts[KeyTransformer]
+                if KeyIgnoredExceptions in opts:
+                    ignored_exceptions = opts[KeyIgnoredExceptions]
+
+            self.bind(binding[0], binding[1], transformer, ignored_exceptions)
 
     def unbind(self, frompath, topath):
         """Unbind a binding. Raises NoSuchBinding() if the binding does not
@@ -233,8 +238,8 @@ class ValueBinder(object):
                                 self.__class__.__name__)))
                     for topath, bd in iteritems(bds):
                         subtopath = self.VB_PrependParent(topath)
-                        tf = bd[self.KeyTransformer]
-                        ie = bd[self.KeyIgnoredExceptions]
+                        tf = bd[KeyTransformer]
+                        ie = bd[KeyIgnoredExceptions]
                         log.debug("%r bind new value %r to %r", direction,
                                   subpath, subtopath)
                         val._vb_binddirection(subpath, subtopath, self, tf,
@@ -508,8 +513,8 @@ class ValueBinder(object):
             if val is not old_value:
                 log.debug("Pushing %r to %s", val, topath)
 
-                ie = bdict[ValueBinder.KeyIgnoredExceptions]
-                tf = bdict[ValueBinder.KeyTransformer]
+                ie = bdict[KeyIgnoredExceptions]
+                tf = bdict[KeyTransformer]
                 try:
                     new_val = val
                     if tf is not None:
@@ -561,8 +566,8 @@ class ValueBinder(object):
         ignore_exceptions = (
             tuple() if not ignore_exceptions else ignore_exceptions)
         bds[resolvedtopath] = {
-            ValueBinder.KeyTransformer: transformer,
-            ValueBinder.KeyIgnoredExceptions: ignore_exceptions
+            KeyTransformer: transformer,
+            KeyIgnoredExceptions: ignore_exceptions
         }
 
         currparent = self.vb_parent

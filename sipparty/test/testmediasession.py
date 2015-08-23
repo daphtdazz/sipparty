@@ -36,8 +36,6 @@ class TestSession(util.TestCaseREMixin, SIPPartyTestCase):
         ms = Session(username=b"alice")
         self.assertRaises(SDPIncomplete, lambda: ms.sdp())
         ms.address = b"127.0.0.1"
-        self.assertRaises(SDPIncomplete, lambda: ms.sdp())
-        ms.addressType = AddrTypes.IP4
         self.assertMatchesPattern(
             ms.sdp(),
             b'v=0\r\n'
@@ -49,9 +47,9 @@ class TestSession(util.TestCaseREMixin, SIPPartyTestCase):
         self.assertRaises(SDPIncomplete, lambda: ms.sdp())
         ms.mediaSession.port = 11000
         self.assertRaises(SDPIncomplete, lambda: ms.sdp())
-        ms.mediaSession.proto = b"RTP/AVP"
+        ms.mediaSession.transProto = b"RTP/AVP"
         self.assertRaises(SDPIncomplete, lambda: ms.sdp())
-        ms.mediaSession.fmt = b"123"
+        ms.mediaSession.fmts = [123]
         self.assertMatchesPattern(
             ms.sdp(),
             b'v=0\r\n'

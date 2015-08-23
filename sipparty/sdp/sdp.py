@@ -21,12 +21,19 @@ import logging
 import re
 import datetime
 from numbers import Integral
-from sipparty import (util, vb, parse)
+from sipparty import (util, parse)
+from sipparty.vb import (KeyTransformer, KeyIgnoredExceptions, ValueBinder)
 from sipparty.deepclass import (DeepClass, dck)
 import sdpsyntax
-from sdpsyntax import (NetTypes, AddrTypes, LineTypes, MediaTypes, username_re)
+from sdpsyntax import (
+    NetTypes, AddrTypes, LineTypes, MediaTypes, username_re, fmt_space_re,
+    AddressToSDPAddrType)
 
 log = logging.getLogger(__name__)
+AddrAddrTypeBinding = (
+    "address", "addressType", {
+        KeyTransformer: lambda x: AddressToSDPAddrType(x),
+        KeyIgnoredExceptions: (ValueError,)})
 
 
 class SDPException(Exception):
@@ -38,7 +45,7 @@ class SDPIncomplete(SDPException):
 
 
 @util.TwoCompatibleThree
-class SDPSection(parse.Parser, vb.ValueBinder):
+class SDPSection(parse.Parser, ValueBinder):
 
     @classmethod
     def Line(cls, lineType, value):
@@ -62,10 +69,14 @@ class ConnectionDescription(
             "netType": {
                 dck.check: lambda x: x in NetTypes,
                 dck.gen: lambda: NetTypes.IN},
-            "addressType": {dck.check: lambda x: x in AddrTypes},
+            "addressType": {
+                dck.check: lambda x: x is None or x in AddrTypes},
             "address": {dck.check: lambda x: isinstance(x, bytes)},
         }),
         SDPSection):
+
+    vb_bindings = (
+        AddrAddrTypeBinding,)
 
     parseinfo = {
         parse.Parser.Pattern:
@@ -127,8 +138,10 @@ class MediaDescription(
             "port": {
                 dck.check: lambda x: (
                     isinstance(x, Integral) and 0 < x <= 0xffff)},
-            "proto": {},
-            "fmt": {},
+            "transProto": {},
+            "fmts": {
+                dck.gen: list
+            },
             "connectionDescription": {
                 dck.check: lambda x: isinstance(x, ConnectionDescription),
                 dck.gen: ConnectionDescription}
@@ -141,7 +154,7 @@ class MediaDescription(
     parseinfo = {
         parse.Parser.Pattern:
             b"{LineTypes.media}=({media}){SP}({port})(?:/{integer})?{SP}"
-            "({proto}){SP}({fmt}(?:{SP}{fmt})*){eol}"
+            "({trans_proto}){SP}({fmt}(?:{SP}{fmt})*){eol}"
             "(?:{LineTypes.info}={text}{eol})?"
             "(?:{LineTypes.connectioninfo}=({text}){eol})?"
             "(?:{LineTypes.bandwidthinfo}={text}{eol})*"
@@ -151,31 +164,41 @@ class MediaDescription(
         parse.Parser.Mappings:
             [("mediaType",),
              ("port", int),
-             ("proto",),
-             ("fmt",),
+             ("transProto",),
+             # The standard values for formats are defined in
+             # https://tools.ietf.org/html/rfc3551#section-6
+             ("fmts", lambda fmtstr: [
+                int(fmt) for fmt in fmt_space_re.split(fmtstr)]),
              ("connectionDescription", ConnectionDescription)],
         parse.Parser.Repeats: True
     }
+
     vb_dependencies = (
         ("connectionDescription", ("addressType", "netType", "address")),)
+    vb_bindings = (
+        AddrAddrTypeBinding,)
 
     #
     # =================== INSTANCE INTERFACE ==================================
     #
     @property
     def isComplete(self):
-        for attr in ("mediaType", "port", "proto", "fmt"):
+        for attr in ("mediaType", "port", "transProto", "fmts"):
             if getattr(self, attr) is None:
                 return False
         return True
 
     def mediaLine(self):
+        fmts = b' '.join([bytes(str(fmt)) for fmt in self.fmts])
+        if len(fmts) == 0:
+            raise SDPIncomplete(
+                "Media description has no format numbers.")
         return self.Line(
             LineTypes.media, "%s %s %s %s" % (
-                self.mediaType, self.port, self.proto, self.fmt))
+                self.mediaType, self.port, self.transProto, fmts))
 
     def lineGen(self):
-        """m=<media> <port> <proto> <fmt> ..."""
+        """m=<media> <port> <transProto> <fmt> ..."""
         if not self.isComplete:
             raise SDPIncomplete(
                 "Media description incomplete: %r" % (self,))
@@ -199,7 +222,8 @@ class SessionDescription(
             "netType": {
                 dck.check: lambda x: x in NetTypes,
                 dck.gen: lambda: NetTypes.IN},
-            "addressType": {dck.check: lambda x: x in AddrTypes},
+            "addressType": {
+                dck.check: lambda x: x is None or x in AddrTypes},
             "address": {dck.check: lambda x: isinstance(x, bytes)},
             "sessionName": {
                 dck.check: lambda x: isinstance(x, bytes),
@@ -269,6 +293,10 @@ class SessionDescription(
     }
 
     username_pattern = re.compile("\S+")
+
+    vb_bindings = (
+        ("address", "connectionDescription.address"),
+        AddrAddrTypeBinding)
 
     @classmethod
     def ID(cls):

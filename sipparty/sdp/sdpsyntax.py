@@ -21,6 +21,7 @@ limitations under the License.
 """
 import re
 from sipparty import util
+from sipparty.transport import (IPv4address_re, IPv6address_re)
 
 NetTypes = util.Enum((b"IN",))
 AddrTypes = util.Enum((b"IP4", b"IP6"))
@@ -48,6 +49,7 @@ LineTypes = util.Enum(
 DIGIT = b"\d"
 number = b"{DIGIT}+".format(**locals())
 SP = b"\x20"
+space = SP
 VCHAR = b"\x21-\x7e"
 eol = b"\r?\n"
 token_char = b"[\x21\x23-\x27\x2a\x2b\x2d\x2e\x30-\x39\x41-\x5a\x5e-\x7e]"
@@ -74,10 +76,10 @@ stop_time = time_or_zero
 port = b"\d+"
 repeat_interval = b"[1-9]{DIGIT}*{fixed_len_time_unit}?".format(**locals())
 media = MediaTypes.REPattern()
-proto = b"{token}(?:/{token})*".format(**locals())
+trans_proto = b"{token}(?:/{token})*".format(**locals())
 fmt = token
 media_field = (
-    b"{LineTypes.media}={media}{SP}{port}(?:/{integer})?{SP}{proto}"
+    b"{LineTypes.media}={media}{SP}{port}(?:/{integer})?{SP}{trans_proto}"
     "(?:{SP}{fmt}){eol}"
     "".format(**locals()))
 
@@ -107,7 +109,8 @@ media_fields = (
     "(?:{LineTypes.attribute}={text}{eol})*"
     ")*".format(**locals()))
 
-MediaProtocols = util.Enum((b"RTP/AVP", ))
+MediaProtocols = util.Enum(
+    (b"RTP/AVP", ), normalize=lambda x: x.replace(b'_', b'/'))
 
 SIPBodyType = b"application/sdp"
 
@@ -115,3 +118,20 @@ SIPBodyType = b"application/sdp"
 # =================== Pre-compiled REs ========================================
 #
 username_re = re.compile("{username}$".format(**locals()))
+fmt_space_re = re.compile("{space}".format(**locals()))
+
+
+#
+# =================== Conversions =======================================
+#
+def AddressToSDPAddrType(address):
+
+    if IPv6address_re.match(address):
+        return AddrTypes.IP6
+
+    if IPv4address_re.match(address):
+        return AddrTypes.IP4
+
+    # address not obviously IP4 or IP6 so return None
+    raise ValueError(
+        "Address %r is not an IPv4 or IPv6 address" % (address,))

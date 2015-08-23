@@ -37,8 +37,8 @@ class TestDeepClass(SIPPartyTestCase):
 
     def testVBInteraction(self):
 
-        self.pushLogLevel("vb", logging.DETAIL)
-        self.pushLogLevel("deepclass", logging.DETAIL)
+        self.pushLogLevel("vb", logging.DEBUG)
+        self.pushLogLevel("deepclass", logging.DEBUG)
 
         class TDObj(object):
             pass

@@ -20,8 +20,9 @@ from six import (binary_type as bytes, add_metaclass, iteritems)
 import re
 import logging
 from numbers import (Integral)
-from sipparty import (util, vb, parse)
+from sipparty import (util, parse)
 from sipparty.util import BytesGenner
+from sipparty.vb import (KeyTransformer, ValueBinder)
 from sipparty.deepclass import (DeepClass, dck)
 from sipparty.transport import SOCK_TYPE_IP_NAMES
 from sipparty.sdp import sdpsyntax
@@ -54,7 +55,7 @@ class Message(
                 dck.gen: lambda: [], dck.set: "setBodies"},
             "parsedBytes": {dck.check: lambda x: isinstance(x, Integral)}
         }),
-        BytesGenner, vb.ValueBinder):
+        BytesGenner, ValueBinder):
     """Generic message class. Use `Request` or `Response` rather than using
     this directly.
     """
@@ -457,16 +458,21 @@ class InviteMessage(Message):
          "ContactHeader.field.value.uri.aor.username"),
         ("ContactHeader.host", "ViaHeader.host"),
         ("startline.type", "CSeqHeader.reqtype"),
-        ("bodies", "Content_LengthHeader.number", lambda bodies: reduce(
-            lambda x, y: x + y, [
-                summand
-                for lst in [0], [
-                    len(bd.content) for bd in bodies]
-                for summand in lst]
-        )),
-        ("bodies", "Content_TypeHeader.content_type", lambda bodies: (
-            None if not bodies else bodies[0].type
-        ))
+        ("bodies", "Content_LengthHeader.number", {
+            KeyTransformer: lambda bodies: reduce(
+                lambda x, y: x + y, [
+                    summand
+                    for lst in [0], [
+                        len(bd.content) for bd in bodies]
+                    for summand in lst
+                ]
+            )
+        }),
+        ("bodies", "Content_TypeHeader.content_type", {
+            KeyTransformer: lambda bodies: (
+                None if not bodies else bodies[0].type
+            )
+        })
     ]
 
     mandatoryheaders = [

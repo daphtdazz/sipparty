@@ -25,11 +25,13 @@ import numbers
 from sipparty import (splogging, vb, util, fsm, ParsedPropertyOfClass)
 from sipparty.fsm import (FSM, UnexpectedInput)
 from sipparty.deepclass import DeepClass, dck
+from sipparty.sdp import (sdpsyntax, SDPIncomplete)
 from components import (AOR, URI)
 from header import Call_IdHeader
 from request import Request
 from message import Message, MessageResponse
 from param import TagParam
+from body import Body
 import prot
 
 log = logging.getLogger(__name__)
@@ -53,7 +55,9 @@ class Dialog(
             "remoteAddress": {},
             "localTag": {},
             "remoteTag": {},
-            "transport": {}}),
+            "transport": {},
+            "localSession": {},
+            "remoteSession": {}}),
         fsm.FSM, vb.ValueBinder):
     """`Dialog` class has a slightly wider scope than a strict SIP dialog, to
     include one-off request response pairs (e.g. OPTIONS) as well as long-lived
@@ -161,7 +165,7 @@ class Dialog(
 
         RaiseBadInput()
 
-    def sendRequest(self, type, remoteAddress=None):
+    def sendRequest(self, reqType, remoteAddress=None):
 
         if self._dlg_callIDHeader is None:
             log.debug("First request, generate call ID header.")
@@ -181,7 +185,7 @@ class Dialog(
                     "is None." % (
                         reqdAttr, self.__class__.__name__))
 
-        req = getattr(Message, type)()
+        req = getattr(Message, reqType)()
         req.startline.uri = self.toURI
         req.ToHeader.uri = self.toURI
 
@@ -196,6 +200,19 @@ class Dialog(
         cid2 = req.Call_IdHeader
 
         log.debug("send request of type %r", req.type)
+
+        ls = self.localSession
+        if req.type == req.types.invite and ls:
+            log.debug("Add SDP")
+            try:
+                sdpBody = ls.sdp()
+            except SDPIncomplete as exc:
+                log.warning(
+                    "Party has an incomplete media session, so sending INVITE "
+                    "with no SDP: %s", exc)
+                sdpBody = None
+            if sdpBody is not None:
+                req.addBody(Body(type=sdpsyntax.SIPBodyType, content=sdpBody))
 
         if hasattr(self, "delegate"):
             dele = self.delegate

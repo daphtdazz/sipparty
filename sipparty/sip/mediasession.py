@@ -25,7 +25,7 @@ from sipparty.util import (FirstListItemProxy,)
 from sipparty.vb import ValueBinder
 from sipparty.deepclass import (DeepClass, dck)
 from sipparty.sdp import (SessionDescription, MediaDescription)
-from sipparty.sdp.sdpsyntax import (username_re,)
+from sipparty.sdp.sdpsyntax import (username_re, AddrTypes)
 from sipparty.sdp.mediatransport import MediaTransport
 
 log = logging.getLogger(__name__)
@@ -57,12 +57,14 @@ class Session(
     mediaSession = FirstListItemProxy("mediaSessions")
 
     def listen(self):
-        assert 0
+        for ms in self.mediaSessions:
+            ms.listen(self.address)
 
-    def addMediaSession(self, **kwargs):
-        nms = MediaSession(**kwargs)
-        self.mediaSessions.insert(0, nms)
-        self.description.addMediaDescription(nms.description)
+    def addMediaSession(self, mediaSession=None, **kwargs):
+        if mediaSession is None:
+            mediaSession = MediaSession(**kwargs)
+        self.mediaSessions.insert(0, mediaSession)
+        self.description.addMediaDescription(mediaSession.description)
 
     def sdp(self):
         return bytes(self.description)
@@ -79,8 +81,19 @@ class MediaSession(
         }),
         ValueBinder):
     vb_dependencies = (
-        ("description", ("mediaType", "port", "addressType", "proto", "fmt")),)
+        ("description", (
+            "mediaType", "port", "address", "addressType", "transProto",
+            "fmts")),)
 
+    def listen(self, session_address):
+        if hasattr(self, "address"):
+            lAddr = self.address
+        else:
+            lAddr = session_address
 
-class RTPMediaSession(MediaSession):
-    """An session."""
+        lAddrTuple = self.transport.listen(
+            lHostName=lAddr, port_filter=lambda pt: pt % 2 == 0)
+
+        self.address = lAddrTuple[0]
+        self.port = lAddrTuple[1]
+        return lAddrTuple

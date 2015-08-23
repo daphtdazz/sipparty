@@ -37,13 +37,13 @@ class TestSDP(util.TestCaseREMixin, unittest.TestCase):
         sd = SessionDescription()
         self.assertRaises(SDPIncomplete, lambda: bytes(sd))
         sd.username = b"alice"
-        sd.addressType = AddrTypes.IP4
         sd.address = b"atlanta.com"
+        sd.addressType = AddrTypes.IP4
         sd.addMediaDescription(
             mediaType=MediaTypes.audio, port=1815,
-            proto=b"RTP/AVP", fmt=0)
-        sd.mediaDescriptions[0].addressType = AddrTypes.IP4
+            transProto=b"RTP/AVP", fmts=[0])
         sd.mediaDescriptions[0].address = b"media.atlanta.com"
+        sd.mediaDescriptions[0].addressType = AddrTypes.IP4
 
         data = bytes(sd)
         self.assertMatchesPattern(

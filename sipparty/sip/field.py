@@ -34,8 +34,6 @@ import defaults
 from param import (Parameters, Param)
 from prot import Incomplete
 
-# More imports at end of file.
-
 log = logging.getLogger(__name__)
 
 

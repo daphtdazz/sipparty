@@ -39,5 +39,12 @@ class MySubClass(MyClass):
         raise AttributeError("%r instance has no attr %r." % (
             self.__class__.__name__, attr))
 
+
+def myfunc(**kwargs):
+    print("myfunc")
+
+myfunc()
+myfunc(a=1)
+
 ms = MySubClass()
 print(ms.superAttr)

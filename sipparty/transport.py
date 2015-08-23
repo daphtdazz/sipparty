@@ -39,8 +39,6 @@ log = logging.getLogger(__name__)
 prot_log = logging.getLogger("messages")
 bytes = six.binary_type
 itervalues = six.itervalues
-IPv4RE = re.compile("([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})")
-IPv6RE = re.compile("")
 
 # RFC 2373 IPv6 address format definitions.
 digitrange = b"0-9"
@@ -54,7 +52,13 @@ hexpart = b"(?:{hexseq}|{hexseq}::(?:{hexseq})?|::(?:{hexseq})?)".format(
     **locals())
 IPv4address = b"{DIGIT}{{1,3}}(?:[.]{DIGIT}{{1,3}}){{3}}".format(**locals())
 IPv6address = b"{hexpart}(?::{IPv4address})?".format(**locals())
+IPaddress = "(?:{IPv4address}|{IPv6address})".format(**locals())
 port = b"{DIGIT}+".format(**locals())
+
+# Some pre-compiled regular expression versions.
+IPv4address_re = re.compile(IPv4address + '$')
+IPv6address_re = re.compile(IPv6address + '$')
+IPaddress_re = re.compile(IPaddress + '$')
 
 
 class TransportException(Exception):
@@ -99,7 +103,7 @@ def SockTypeName(socktype):
     assert socktype in (socket.SOCK_STREAM, socket.SOCK_DGRAM)
 
 
-def GetBoundSocket(family, socktype, address):
+def GetBoundSocket(family, socktype, address, port_filter=None):
     """
     :param int family: The socket family, one of AF_INET or AF_INET6.
     :param int socktype: The socket type, SOCK_STREAM or SOCK_DGRAM.
@@ -139,23 +143,28 @@ def GetBoundSocket(family, socktype, address):
     def port_generator():
         if address[1] != 0:
             # The port was specified.
+            log.debug("Using just passed port %d", address[1])
             yield address[1]
             return
 
         # Guess a port from the unregistered range.
         for ii in range(49152, 0x10000):
-            yield ii
+            if port_filter is None or port_filter(ii):
+                yield ii
 
-    socketError = None
     for port in port_generator():
         try:
             # TODO: catch specific errors (e.g. address in use) to bail
             # immediately rather than inefficiently try all ports.
-            ssocket.bind(address)
+            log.detail("Try port %d", port)
+            ssocket.bind((address[0], port))
+            socketError = None
             break
         except socket.error as socketError:
+            log.debug("Socket error on (%r, %d)", address[0], port)
             pass
         except socket.gaierror as socketError:
+            log.debug("GAI error on (%r, %d)", address[0], port)
             break
 
     if socketError is not None:
@@ -266,16 +275,17 @@ class Transport(Singleton):
     def addDgramSocket(self, sck):
         self._tp_dGramSockets[sck.getsockname()] = sck
 
-    def listen(self, sockType=None, lHostName=None, port=None):
+    def listen(self, sockType=None, lHostName=None, port=None,
+               port_filter=None):
         sockType = self.fixSockType(sockType)
         if sockType not in SOCK_TYPES:
             raise ValueError(
                 "Listen socket type must be one of %r" % (SOCK_TYPES_NAMES,))
 
         if sockType == SOCK_DGRAM:
-            return self.listenDgram(lHostName, port)
+            return self.listenDgram(lHostName, port, port_filter)
 
-        return self.listenStream(lHostName, port)
+        return self.listenStream(lHostName, port, port_filter)
 
     #
     # =================== MAGIC METHODS =======================================
@@ -294,8 +304,8 @@ class Transport(Singleton):
             sockType = self.DefaultTransportType
         return sockType
 
-    def listenDgram(self, lAddrName, port):
-        sock = GetBoundSocket(None, SOCK_DGRAM, (lAddrName, port))
+    def listenDgram(self, lAddrName, port, port_filter):
+        sock = GetBoundSocket(None, SOCK_DGRAM, (lAddrName, port), port_filter)
         rt = self._tp_retryThread
         rt.addInputFD(sock, WeakMethod(self, "dgramDataAvailable"))
         self.addDgramSocket(sock)

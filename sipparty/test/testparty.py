@@ -30,6 +30,7 @@ from sipparty import (fsm, sip, util, vb, deepclass, parse)
 from sipparty.util import WaitFor
 from sipparty.sip import components, dialog, party
 from sipparty.sip.dialogs import SimpleCall
+from sipparty.media.sessions import SingleRTPSession
 
 log = logging.getLogger()
 
@@ -54,6 +55,7 @@ class TestParty(SIPPartyTestCase):
 
     def testBasicPartyUDP(self):
         self.pushLogLevel("party", logging.DEBUG)
+        self.pushLogLevel("transport", logging.DETAIL)
         self.subTestBasicParty(SOCK_DGRAM, "127.0.0.1")
 
     def testBasicPartyUDPIPv6(self):
@@ -63,7 +65,8 @@ class TestParty(SIPPartyTestCase):
 
         BasicParty = type(
             "BasicParty", (sip.party.Party,),
-            {"InviteDialog": SimpleCall})
+            {"InviteDialog": SimpleCall,
+             "MediaSession": SingleRTPSession})
 
         p1 = BasicParty(
             aor="alice@atlanta.com", contactURI_address=contactAddress,
