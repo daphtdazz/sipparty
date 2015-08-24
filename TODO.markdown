@@ -22,6 +22,8 @@
 21. ParseError should have SIPParseError subtype which should have a response code field so siptransport can know what response code to send.
 22. Fix slow UT termination time (weak reference needed somewhere?) 
 23. Generate remote session from SDP received and send data to from it.
+24. Collapse AOR into URI.
+25. quoted-string in display-name in name-addr cannot be followed by LWS??
 
 ## Done list. ##
 
