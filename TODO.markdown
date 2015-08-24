@@ -13,7 +13,6 @@
 9. Continuous Integration.
 10. Get rid of "delegateattributes", use "vb_dependencies". -- ?? semi done?
 12. Move sipheader out of util and probably into prot.
-14. Offers SDP.
 15. Document and fixing attribute naming convention in vb.py.
 16. deepclass representation is overly verbose / not detailed enough depending on whether we recurse to superclass's deepclasses.
 17. Cache Datagram sockets for faster allocation of a socket when sending data.
@@ -22,6 +21,7 @@
 20. Short form header names.
 21. ParseError should have SIPParseError subtype which should have a response code field so siptransport can know what response code to send.
 22. Fix slow UT termination time (weak reference needed somewhere?) 
+23. Generate remote session from SDP received and send data to from it.
 
 ## Done list. ##
 
