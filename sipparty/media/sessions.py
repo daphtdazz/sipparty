@@ -17,7 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 from sipparty.sdp.sdpsyntax import (MediaTypes, MediaProtocols)
-from sipparty.sip.mediasession import (Session, MediaSession)
+from sipparty.media import (Session, MediaSession)
 
 
 class SingleRTPSession(Session):

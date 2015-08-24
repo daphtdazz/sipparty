@@ -29,20 +29,12 @@ from six import itervalues
 from sipparty import (splogging, util, vb, parse, fsm, ParsedPropertyOfClass)
 from sipparty.util import DerivedProperty
 from sipparty.deepclass import DeepClass, dck
-from sipparty.sip import SIPTransport
-from sipparty.sip.body import Body
+from sipparty.sip import (
+    SIPTransport, Incomplete, DNameURI, AOR, URI, Host, Request, Message,
+    Body, defaults)
 from sipparty.transport import (SockTypeName, IPaddress_re)
 from sipparty.sdp import sdpsyntax
-import prot
-from prot import Incomplete
-from components import (DNameURI, AOR, URI, Host)
-import defaults
-from request import Request
-from message import (Message)
-import message
-import param
-from dialogs import SimpleCall
-from mediasession import (Session, MediaSession)
+from sipparty.media import (Session, MediaSession)
 
 __all__ = ('Party', 'PartySubclass')
 

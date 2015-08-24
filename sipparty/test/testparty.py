@@ -26,9 +26,9 @@ import weakref
 import unittest
 from socket import SOCK_STREAM, SOCK_DGRAM
 from setup import SIPPartyTestCase
-from sipparty import (fsm, sip, util, vb, deepclass, parse)
+from sipparty import (fsm, sip, util, vb, deepclass, parse, Party)
 from sipparty.util import WaitFor
-from sipparty.sip import components, dialog, party
+from sipparty.sip import components, dialog
 from sipparty.sip.dialogs import SimpleCall
 from sipparty.media.sessions import SingleRTPSession
 
@@ -64,7 +64,7 @@ class TestParty(SIPPartyTestCase):
     def subTestBasicParty(self, socketType, contactAddress):
 
         BasicParty = type(
-            "BasicParty", (sip.party.Party,),
+            "BasicParty", (Party,),
             {"InviteDialog": SimpleCall,
              "MediaSession": SingleRTPSession})
 

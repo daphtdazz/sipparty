@@ -1,4 +1,6 @@
-"""__init__.py
+"""parties.py
+
+Implements various convenient `Party` subclasses.
 
 Copyright 2015 David Park
 
@@ -14,14 +16,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import prot
-from prot import (Incomplete,)
-import components
-from components import (DNameURI, AOR, URI, Host)
-import defaults
-from request import (Request,)
-from header import (Header,)
-from message import (Message,)
-from siptransport import SIPTransport
-from dialog import (Dialog,)
-from body import Body
+from sipparty.party import Party
+
+
+class SingleRTPSessionSimplenParty(Party):
+    InviteDialog = SimpleCall
+    MediaSession = SingleRTPSession

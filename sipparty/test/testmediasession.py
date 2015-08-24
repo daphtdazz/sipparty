@@ -20,10 +20,9 @@ import logging
 from six import (binary_type as bytes)
 from setup import SIPPartyTestCase
 from sipparty import (util, vb, sip)
-from sipparty.sip import Session
-from sipparty.sip import mediasession
 from sipparty.sdp import SDPIncomplete
 from sipparty.sdp.sdpsyntax import (MediaTypes, AddrTypes, NetTypes)
+from sipparty.media import Session
 
 log = logging.getLogger(__name__)
 

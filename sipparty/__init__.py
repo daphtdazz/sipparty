@@ -26,3 +26,5 @@ from parse import (Parser, ParsedProperty, ParsedPropertyOfClass, ParseError)
 import sdp
 import sip
 from sip.request import (Request,)
+import party
+from party import Party
