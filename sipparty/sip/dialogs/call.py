@@ -27,7 +27,7 @@ S = util.Enum((
     "Terminated"))
 A = util.Enum((
     "sendRequestINVITE", "sendResponse200", "errorResponse", "sendRequestBYE",
-    "hasTerminated"))
+    "hasTerminated", "sendRequestACK"))
 I = util.Enum((
     "initiate", "receiveRequestINVITE", "receiveResponse18",
     "receiveResponse2", "receiveResponse4", "terminate", "receiveRequestBYE"))
@@ -56,7 +56,7 @@ class SimpleCall(Dialog):
                 NewState: S.InitiatingDialog
             },
             I.receiveResponse2: {
-                NewState: S.InDialog,
+                NewState: S.InDialog
             },
             I.receiveResponse4: {
                 NewState: S.Error,

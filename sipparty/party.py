@@ -68,7 +68,7 @@ def NewAOR():
 class Party(
         DeepClass("_pt_", {
             "dnameURI": {
-                dck.check: lambda dnu: isinstance(dnu, DNameURI),
+                dck.descriptor: ParsedPropertyOfClass(DNameURI),
                 dck.gen: DNameURI},
             "contactURI": {
                 dck.descriptor: ParsedPropertyOfClass(URI),
@@ -121,7 +121,7 @@ class Party(
             raise exc
         return icds
 
-    def __init__(self, socketType=None, **kwargs):
+    def __init__(self, dnameURI=None, **kwargs):
         """Create the party.
 
         :param dnameURI: The display name and URI of this party. To specify
@@ -129,7 +129,7 @@ class Party(
         of the URI, use dnameURI_uri_aor=AOR().
         :param
         """
-        super(Party, self).__init__(**kwargs)
+        super(Party, self).__init__(dnameURI=dnameURI, **kwargs)
         if log.level <= logging.DETAIL:
             log.detail(
                 "%r dir after super init: %r", self.__class__.__name__,
@@ -143,9 +143,9 @@ class Party(
             log.debug("Create new transport for")
             tp = SIPTransport()
             self.transport = tp
-            tp.DefaultTransportType = socketType
-        log.debug("transport sock type: %s", SockTypeName(
-            tp.DefaultTransportType))
+
+        if self.contactURI.address is None:
+            self.contactURI.address = socket.gethostname()
 
         return
 
@@ -275,14 +275,18 @@ class Party(
             if pAddr is not None:
                 log.debug("Target has listen address %r", pAddr)
                 return pAddr
-        assert 0, repr(target)
+
         if hasattr(target, "contactURI"):
             log.debug("Target has a proxy contact URI.")
             cURI = target.contactURI
             return (cURI.address, cURI.port)
 
-        raise ValueError("Can't resolve proxy from target %r" % (
-            target,))
+        try:
+            turi = self._pt_resolveTargetURI(target)
+        except ValueError:
+            raise ValueError("Can't resolve proxy from target %r" % (
+                target,))
+        return (turi.address, turi.port)
 
     def _pt_resolveProxyHostFromTarget(self, target):
         try:

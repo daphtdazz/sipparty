@@ -77,6 +77,7 @@ class Dialog(
     #
     # =================== CLASS INTERFACE =====================================
     #
+    States = States
     vb_dependencies = [
         ("transport", ["sendMessage"])
     ]
@@ -102,6 +103,8 @@ class Dialog(
             self._dlg_callIDHeader.value, self.localTag.value, rt.value)
 
     def __init__(self, **kwargs):
+        if "lock" not in kwargs:
+            kwargs["lock"] = True
         super(Dialog, self).__init__(**kwargs)
 
         self._dlg_callIDHeader = None

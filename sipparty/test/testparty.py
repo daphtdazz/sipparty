@@ -63,17 +63,17 @@ class TestParty(SIPPartyTestCase):
 
     def subTestBasicParty(self, socketType, contactAddress):
 
+        assert socketType == SOCK_DGRAM
+
         BasicParty = type(
             "BasicParty", (Party,),
             {"InviteDialog": SimpleCall,
              "MediaSession": SingleRTPSession})
 
         p1 = BasicParty(
-            aor="alice@atlanta.com", contactURI_address=contactAddress,
-            socketType=socketType)
+            aor="alice@atlanta.com", contactURI_address=contactAddress)
         p2 = BasicParty(
-            aor="bob@biloxi.com", contactURI_address=contactAddress,
-            socketType=socketType)
+            aor="bob@biloxi.com", contactURI_address=contactAddress)
         p1.listen()
         p2.listen()
         invD = p1.invite(p2)
@@ -88,8 +88,7 @@ class TestParty(SIPPartyTestCase):
 
         # Try another call.
         p3 = BasicParty(
-            aor="charlie@charlesville.com", contactURI_address=contactAddress,
-            socketType=socketType)
+            aor="charlie@charlesville.com", contactURI_address=contactAddress)
         p3.listen()
         invD3to2 = p2.invite(p3)
 

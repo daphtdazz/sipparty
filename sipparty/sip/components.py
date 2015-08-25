@@ -267,9 +267,6 @@ class DNameURI(
              uri_mapping]
     }
 
-    def __init__(self, **kwargs):
-        super(DNameURI, self).__init__(**kwargs)
-
     def __bytes__(self):
         if self.display_name and self.uri:
             return(b"\"{self.display_name}\" <{self.uri}>".format(**locals()))
