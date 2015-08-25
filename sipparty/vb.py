@@ -314,9 +314,9 @@ class ValueBinder(object):
         if deleattr is not None:
             if dele is None:
                 raise AttributeError(
-                        "Cannot set attribute %r on %r instance as it is "
-                        "delegated to attribute %r which is None." % (
-                            attr, self.__class__.__name__, deleattr))
+                    "Cannot set attribute %r on %r instance as it is "
+                    "delegated to attribute %r which is None." % (
+                        attr, self.__class__.__name__, deleattr))
 
             return setattr(dele, attr, val)
 
@@ -436,11 +436,11 @@ class ValueBinder(object):
         """
         attr, _ = self.VB_PartitionPath(path)
         if attr not in self._vb_delegate_attributes:
-            log.debug("Non-delegate binding %r", path)
+            log.debug("Non-delegated path %r", path)
             return path
 
         da = self._vb_delegate_attributes[attr]
-        log.debug("Delegate binding %r through %r", path, da)
+        log.debug("Delegated path %r through %r", path, da)
         return self.VB_JoinPath((da, path))
 
     def _vb_bindingsForDirection(self, direction):
@@ -549,8 +549,8 @@ class ValueBinder(object):
             ignore_exceptions):
         """
         """
-        log.debug("  %r bindings before bind %r",
-                  direction,
+        log.debug("%r %r bindings before bind %r",
+                  self.__class__.__name__, direction,
                   self._vb_bindingsForDirection(direction))
         resolvedfrompath = self._vb_resolveFromPath(frompath)
         resolvedtopath = self._vb_resolveFromPath(topath)
@@ -637,8 +637,8 @@ class ValueBinder(object):
         would undo this, and recurse to do:
         b.c._vb_unbinddirection("d", "..e.f", VB_Forward)
         """
-        log.debug("  %r bindings before unbind %r",
-                  direction,
+        log.debug("%r %r bindings before unbind %r",
+                  self.__class__.__name__, direction,
                   self._vb_bindingsForDirection(direction))
 
         resolvedfrompath = self._vb_resolveFromPath(frompath)

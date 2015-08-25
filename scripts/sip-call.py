@@ -70,6 +70,7 @@ if args.debug < logging.INFO:
 
 pt = SingleRTPSessionSimplenParty("sip:simple-call@domain.com")
 pt.listen()
+sipparty.vb.log.setLevel(logging.DEBUG)
 dlg = pt.invite(args.uri)
 dlg.waitForStateCondition(
     lambda state: state not in (

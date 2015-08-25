@@ -321,7 +321,8 @@ class Parser(object):
                 log.debug("  no data")
                 continue
 
-            def gen(x): return x
+            def gen(x):
+                return x
             attr = mapping[0]
             cls = bytes
             log.debug("  attribute %r", attr)

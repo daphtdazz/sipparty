@@ -486,8 +486,6 @@ class InviteMessage(Message):
          "ContactHeader.field.value.uri.aor.username"),
         ("ContactHeader.host", "ViaHeader.host"),
         ("startline.type", "CSeqHeader.reqtype"),
-        ContentLengthBinding,
-        ContentTypeBinding
     ]
 
     mandatoryheaders = [

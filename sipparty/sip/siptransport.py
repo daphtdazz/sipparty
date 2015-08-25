@@ -91,6 +91,9 @@ class SIPTransport(Transport):
         if isinstance(toAddr, bytes):
             toAddr = self.resolveHost(toAddr)
 
+        if toAddr[1] is None:
+            toAddr = (toAddr[0], self.DefaultPort)
+
         super(SIPTransport, self).sendMessage(
             bytes(msg), toAddr, sockType=sockType)
 
