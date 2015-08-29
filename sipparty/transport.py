@@ -96,11 +96,20 @@ def SockFamilyName(family):
 
 
 def SockTypeName(socktype):
-    if socktype == socket.SOCK_STREAM:
-        return "TCP"
-    if socktype == socket.SOCK_DGRAM:
-        return "UDP"
-    assert socktype in (socket.SOCK_STREAM, socket.SOCK_DGRAM)
+    if socktype == SOCK_STREAM:
+        return SOCK_TYPE_IP_NAMES.TCP
+    if socktype == SOCK_DGRAM:
+        return SOCK_TYPE_IP_NAMES.UDP
+
+    assert socktype in SOCK_TYPES
+
+
+def SockTypeFromName(socktypename):
+    if socktypename == SOCK_TYPE_IP_NAMES.TCP:
+        return SOCK_STREAM
+    if socktypename == SOCK_TYPE_IP_NAMES.UDP:
+        return SOCK_DGRAM
+    assert socktypename in SOCK_TYPE_IP_NAMES
 
 
 def GetBoundSocket(family, socktype, address, port_filter=None):
@@ -197,6 +206,8 @@ class Transport(Singleton):
     byteConsumer = DerivedProperty("_tp_byteConsumer")
 
     def __init__(self):
+        if self.singletonInited:
+            return
         super(Transport, self).__init__()
         self._tp_byteConsumer = None
         self._tp_retryThread = RetryThread()
@@ -206,11 +217,6 @@ class Transport(Singleton):
         self._tp_connBuffers = {}
         # Keyed by local address tuple.
         self._tp_dGramSockets = {}
-        # Keyed by toAddr, which is some hashable, so might be a proper tuple
-        # address or it might just be a hostname.
-
-        for fam in SOCK_FAMILIES:
-            self.addDgramSocket(socket.socket(fam, SOCK_DGRAM))
 
     def resolveHost(self, host, port=None, family=None):
         """Resolve a host.
@@ -239,21 +245,30 @@ class Transport(Singleton):
 
         raise(UnresolvableAddress(address=host, port=port))
 
-    def sendMessage(self, msg, toAddr, sockType=None):
+    def sendMessage(self, msg, toAddr, fromAddr=None, sockType=None):
         sockType = self.fixSockType(sockType)
         if sockType == SOCK_DGRAM:
-            return self.sendDgramMessage(msg, toAddr)
+            return self.sendDgramMessage(msg, toAddr, fromAddr)
 
-        return self.sendStreamMessage(msg, toAddr)
+        return self.sendStreamMessage(msg, toAddr, fromAddr)
 
-    def sendDgramMessage(self, msg, toAddr):
-        mbytes = bytes(msg)
-        log.debug("Send to %r", toAddr)
+    def sendDgramMessage(self, msg, toAddr, fromAddr):
+        assert isinstance(msg, bytes)
+
+        if fromAddr is not None:
+            try:
+                return self.sendDgramMessageFrom(msg, toAddr, fromAddr)
+            except BadNetwork:
+                log.error(
+                    "Bad network, currently have sockets: %r",
+                    self._tp_dGramSockets)
+                raise
 
         # TODO: cache sockets used for particular toAddresses so we can re-use
         # them faster.
 
         # Try and find a socket we can route through.
+        log.debug("Send msg to %r from anywhere", toAddr)
         for sck in itervalues(self._tp_dGramSockets):
             sname = sck.getsockname()
             try:
@@ -272,8 +287,27 @@ class Transport(Singleton):
         else:
             raise exc
 
+    def sendDgramMessageFrom(self, msg, toAddr, fromAddr):
+        assert fromAddr is not None
+        log.debug("Send %r -> %r", fromAddr, toAddr)
+
+        fromName, fromPort = fromAddr[:2]
+        if fromName is not None and IPv6address_re.match(fromName):
+            if len(fromAddr) == 2:
+                fromAddr = (fromAddr[0], fromAddr[1], 0, 0)
+            else:
+                assert len(fromAddr) == 4
+
+        if fromAddr not in self._tp_dGramSockets:
+            sck = GetBoundSocket(None, SOCK_DGRAM, fromAddr)
+            self.addDgramSocket(sck)
+        else:
+            sck = self._tp_dGramSockets[fromAddr]
+        sck.sendto(msg, toAddr)
+
     def addDgramSocket(self, sck):
         self._tp_dGramSockets[sck.getsockname()] = sck
+        log.debug("%r Dgram sockets now: %r", self, self._tp_dGramSockets)
 
     def listen(self, sockType=None, lHostName=None, port=None,
                port_filter=None):
@@ -290,11 +324,10 @@ class Transport(Singleton):
     #
     # =================== MAGIC METHODS =======================================
     #
-    def __del__(self):
-        log.debug("Deleting Transport")
-        sp = super(Transport, self)
-        if hasattr(sp, "__del__"):
-            sp.__del__()
+    def __new__(cls, *args, **kwargs):
+        if "singleton" not in kwargs:
+            kwargs["singleton"] = "Transport"
+        return super(Transport, cls).__new__(cls, *args, **kwargs)
 
     #
     # =================== INTERNAL METHODS ====================================

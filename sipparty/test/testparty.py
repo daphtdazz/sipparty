@@ -76,6 +76,7 @@ class TestParty(SIPPartyTestCase):
             aor="bob@biloxi.com", contactURI_address=contactAddress)
         p1.listen()
         p2.listen()
+        self.assertTrue(p1.transport is p2.transport)
         invD = p1.invite(p2)
 
         WaitFor(lambda: invD.state == invD.States.InDialog, 1)
@@ -90,6 +91,8 @@ class TestParty(SIPPartyTestCase):
         p3 = BasicParty(
             aor="charlie@charlesville.com", contactURI_address=contactAddress)
         p3.listen()
+        self.assertTrue(p3.transport is p1.transport)
+        self.assertTrue(p3.transport is p2.transport)
         invD3to2 = p2.invite(p3)
 
         WaitFor(lambda: invD3to2.state == invD3to2.States.InDialog, 1)

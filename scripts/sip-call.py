@@ -70,11 +70,25 @@ if args.debug < logging.INFO:
 
 pt = SingleRTPSessionSimplenParty("sip:simple-call@domain.com")
 pt.listen()
-sipparty.vb.log.setLevel(logging.DEBUG)
+
 dlg = pt.invite(args.uri)
+log.info("Call beginning...")
+
 dlg.waitForStateCondition(
     lambda state: state not in (
         dlg.States.Initial, dlg.States.InitiatingDialog))
 
+pause_secs = 30
+log.info("Call up, wait for %r seconds, or Ctrl-C", pause_secs)
+try:
+    time.sleep(pause_secs)
+except KeyboardInterrupt:
+    log.info("Ctrl-C causing us to continue.")
+
+dlg.hit(dlg.Inputs.terminate)
+log.info("Call terminating...")
+
+dlg.waitForStateCondition(
+    lambda state: state in (dlg.States.Terminated, dlg.States.Error))
 
 log.info("Finished.")

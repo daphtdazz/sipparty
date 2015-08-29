@@ -20,7 +20,7 @@ import six
 import logging
 import socket
 from weakref import WeakValueDictionary
-from sipparty import Transport
+from sipparty.transport import (Transport, SockTypeFromName)
 from sipparty.util import DerivedProperty
 from sipparty.parse import ParseError
 from sipparty.sip import Message
@@ -50,6 +50,8 @@ class SIPTransport(Transport):
     establishedDialogs = DerivedProperty("_sptr_establishedDialogs")
 
     def __init__(self):
+        if self.singletonInited:
+            return
         super(SIPTransport, self).__init__()
         self._sptr_messageConsumer = None
         self._sptr_messages = []
@@ -83,19 +85,34 @@ class SIPTransport(Transport):
         log.debug("Remove handler for AOR %r", aor)
         del hdlrs[aor]
 
-    def sendMessage(self, msg, toAddr, sockType=None):
-        log.debug("Send message to %r type %s", toAddr, sockType)
-        if isinstance(toAddr, Host):
-            toAddr = self.resolveHost(toAddr.address, toAddr.port)
+    def sendMessage(self, msg, toAddr, fromAddr=None):
+        log.debug("Send message %r -> %r type %s", fromAddr, toAddr)
 
-        if isinstance(toAddr, bytes):
-            toAddr = self.resolveHost(toAddr)
+        toAddr = self.fixTargetAddress(toAddr)
+        fromAddr = self.fixTargetAddress(fromAddr)
 
-        if toAddr[1] is None:
-            toAddr = (toAddr[0], self.DefaultPort)
+        sockType = SockTypeFromName(msg.viaheader.transport)
+
+        log.debug(
+            "Normalized addresses: %r -> %r type", fromAddr, toAddr, sockType)
 
         super(SIPTransport, self).sendMessage(
-            bytes(msg), toAddr, sockType=sockType)
+            bytes(msg), toAddr, sockType=sockType, fromAddr=fromAddr)
+
+    def fixTargetAddress(self, addr):
+        if addr is None:
+            return (None, 0)
+
+        if isinstance(addr, Host):
+            return self.resolveHost(addr.address, addr.port)
+
+        if isinstance(addr, bytes):
+            return self.resolveHost(addr)
+
+        if addr[1] is None:
+            return (addr[0], self.DefaultPort)
+
+        return addr
 
     def sipByteConsumer(self, lAddr, rAddr, data):
         log.debug(
@@ -225,11 +242,14 @@ class SIPTransport(Transport):
     #
     # =================== MAGIC METHODS =======================================
     #
-    def __del__(self):
-        log.debug("Deleting SIPTransport")
-        sp = super(SIPTransport, self)
-        if hasattr(sp, "__del__"):
-            sp.__del__()
+    def __new__(cls, *args, **kwargs):
+        if "singleton" not in kwargs:
+            kwargs["singleton"] = "SIPTransport"
+        inst = super(SIPTransport, cls).__new__(cls, *args, **kwargs)
+        if not hasattr(SIPTransport, "inst"):
+            SIPTransport.inst = inst
+        assert SIPTransport.inst is inst, (SIPTransport.inst, inst)
+        return inst
 
     #
     # =================== INTERNAL METHODS ====================================

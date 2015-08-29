@@ -224,7 +224,7 @@ class Dialog(
             log.error("Incomplete message: %r", req)
             raise
 
-        tp.sendMessage(bytes(req), self.remoteAddress)
+        tp.sendMessage(req, self.remoteAddress, fromAddr=self.contactURI.host)
         assert req.Call_IdHeader == self._dlg_callIDHeader, (
             req.Call_IdHeader, self._dlg_callIDHeader)
         tp.updateDialogGrouping(self)
@@ -250,7 +250,7 @@ class Dialog(
 
         self.configureResponse(resp, req, tform)
         self.transport.sendMessage(
-            bytes(resp), req.ContactHeader.host)
+            resp, req.ContactHeader.host, fromAddr=self.contactURI.host)
 
     def configureResponse(self, resp, req, tform):
         log.debug("Configure response starting %r, startline %r", resp,

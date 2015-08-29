@@ -678,15 +678,17 @@ class Singleton(object):
         if name not in cls._St_SharedInstances:
             cls._St_SharedInstances[name] = super(Singleton, cls).__new__(
                 cls, *args, **kwargs)
+
         return cls._St_SharedInstances[name]
 
-    singletonInited = DerivedProperty("_st_inited")
+    @property
+    def singletonInited(self):
+        return "_st_inited" in self.__dict__
 
     def __init__(self, *args, **kwargs):
-        if "_st_inited" in self.__dict__:
-            log.debug("Singleton already inited.")
+        if self.singletonInited:
             return
-        self._st_inited = True
+        self.__dict__["_st_inited"] = True
 
         log.debug("Init Singleton")
         super(Singleton, self).__init__(*args, **kwargs)

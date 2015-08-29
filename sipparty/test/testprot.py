@@ -25,6 +25,7 @@ import setup
 from setup import SIPPartyTestCase
 from six import binary_type as bytes, iteritems, add_metaclass
 from sipparty import (util, sip, vb, ParseError, Request)
+from sipparty.util import Singleton
 from sipparty.sip import (prot, components, Message, Header)
 from sipparty.sip.header import ContactHeader
 from sipparty.sip.components import URI
@@ -247,6 +248,12 @@ class TestProtocol(SIPPartyTestCase):
         self.assertRaises(AttributeError, lambda: MyClass.b)
         self.assertEqual(inst.a, 1)
         self.assertEqual(inst.b, 2)
+
+    def testSingleton(self):
+
+        s1 = Singleton("a")
+        s2 = Singleton("a")
+        self.assertTrue(s1 is s2)
 
     def testProt(self):
         for name, obj in iteritems(prot.__dict__):
