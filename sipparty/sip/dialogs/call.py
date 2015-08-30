@@ -17,18 +17,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 from sipparty import util, fsm
+from sipparty.util import Enum
 from sipparty.fsm import InitialStateKey as InitialState
-from sipparty.sip.dialog import Dialog, TransformKeys
+from sipparty.sip.dialog import Dialog
+from sipparty.sip.transform import TransformKeys
 from sipparty.sip.param import Param
 
 # States, Actions and Inputs.
-S = util.Enum((
+S = Enum((
     InitialState, "InitiatingDialog", "InDialog", "TerminatingDialog", "Error",
     "Terminated"))
-A = util.Enum((
+A = Enum((
     "sendRequestINVITE", "sendResponse200", "errorResponse", "sendRequestBYE",
-    "hasTerminated", "sendRequestACK"))
-I = util.Enum((
+    "hasTerminated"))
+I = Enum((
     "initiate", "receiveRequestINVITE", "receiveResponse18",
     "receiveResponse2", "receiveResponse4", "terminate", "receiveRequestBYE"))
 
@@ -64,13 +66,16 @@ class SimpleCall(Dialog):
             }
         },
         S.InDialog: {
+            I.receiveResponse2: {
+                NewState: S.InDialog
+            },
             I.terminate: {
                 NewState: S.TerminatingDialog,
                 Action: A.sendRequestBYE
             },
             I.receiveRequestBYE: {
                 NewState: S.Terminated,
-                Action: A.sendResponse200
+                Action: A.sendResponse200,
             }
         },
         S.TerminatingDialog: {
@@ -110,7 +115,7 @@ class SimpleCall(Dialog):
                 (Copy, "FromHeader",),
                 (Copy, "ToHeader",),
                 (Copy, "ViaHeader",),
-                (CopyFromRequest, "startline.uri",)
+                (CopyFrom, "request", "startline.uri")
             ]
         }
     }

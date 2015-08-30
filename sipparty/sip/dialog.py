@@ -26,6 +26,7 @@ from sipparty import (splogging, vb, util, fsm, ParsedPropertyOfClass)
 from sipparty.fsm import (FSM, UnexpectedInput)
 from sipparty.deepclass import DeepClass, dck
 from sipparty.sdp import (sdpsyntax, SDPIncomplete)
+from transform import (Transform,)
 from components import (AOR, URI)
 from header import Call_IdHeader
 from request import Request
@@ -42,9 +43,6 @@ States = util.Enum((
     "SuccessCompletion", "ErrorCompletion"))
 Inputs = util.Enum((
     "initiate", "receiveRequest", "terminate"))
-TransformKeys = util.Enum((
-    "Copy", "Add", "CopyFromRequest"))
-Tfk = TransformKeys
 
 
 class Dialog(
@@ -234,61 +232,18 @@ class Dialog(
 
         resp = MessageResponse(response)
 
-        reqtforms = self.Transforms[req.type]
-
-        code = response
-        while code > 0:
-            if code in reqtforms:
-                break
-            code /= 10
-        else:
-            raise KeyError(
-                "%r instance has no transform for %r -> %r." % (
-                    self.__class__.__name__, req.type, code))
-
-        tform = reqtforms[code]
-
-        self.configureResponse(resp, req, tform)
+        self.configureResponse(resp, req)
         self.transport.sendMessage(
             resp, req.ContactHeader.host, fromAddr=self.contactURI.host)
 
-    def configureResponse(self, resp, req, tform):
+    def configureResponse(self, resp, req):
         log.debug("Configure response starting %r, startline %r", resp,
                   resp.startline)
 
-        def raiseActTupleError(tp, msg):
-            raise ValueError(
-                "%r instance transform action %r is unrecognisable: %s" % (
-                    self.__class__.__name__, tp, msg))
+        Transform(self.Transforms, req, req.type, resp, resp.type)
 
         if req.type == req.types.invite and resp.type == 200:
             self.addLocalSessionSDP(resp)
-
-        for actTp in tform:
-            action = actTp[0]
-
-            if action not in Tfk:
-                raiseActTupleError(actTp, "Unrecognised action %r." % action)
-
-            if action == Tfk.Copy:
-                if len(actTp) < 2:
-                    raiseActTupleError(actTp, "No path to copy.")
-                path = actTp[1]
-                val = req.attributeAtPath(path)
-                resp.setAttributePath(path, val)
-                continue
-
-            if action == Tfk.Add:
-                if len(actTp) < 3:
-                    raiseActTupleError(actTp, "No generator for Add action.")
-                path = actTp[1]
-                gen = actTp[2]
-                resp.setAttributePath(path, gen(req))
-                continue
-
-            if action == Tfk.CopyFromRequest:
-                assert 0
-            assert 0
 
         resp.FromHeader.parameters.tag = self.remoteTag
         resp.ToHeader.parameters.tag = self.localTag

@@ -140,8 +140,8 @@ class FSM(object):
                         "{cls.__name__!r} definition transition dictionary "
                         "for "
                         "input {input!r} into state {old_state!r} doesn't "
-                        "have a {ns!r} value."
-                        "".format(ns=TransitionKeys.NewState, **locals()))
+                        "have a {_ns!r} value."
+                        "".format(_ns=TransitionKeys.NewState, **locals()))
                 if ns not in definition_dict:
                     raise KeyError(
                         "NewState %r for input %r to state %r for "
