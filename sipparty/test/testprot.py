@@ -302,7 +302,14 @@ class TestProtocol(SIPPartyTestCase):
                 self.assertEqual(exp, bytes(cp))
 
     def testMessageProperties(self):
+        self.pushLogLevel("vb", logging.DETAIL)
+        self.pushLogLevel("message", logging.DETAIL)
         inv = Message.invite()
+        inv.bodies = [Body()]
+        self.assertTrue(hasattr(inv, "Content_TypeHeader"))
+        inv.unbindAll()
+        self.assertEqual(len(inv._vb_forwardbindings), 0)
+        self.assertEqual(len(inv._vb_backwardbindings), 0)
 
 if __name__ == "__main__":
     sys.exit(unittest.main())

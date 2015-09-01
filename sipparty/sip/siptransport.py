@@ -20,11 +20,12 @@ import six
 import logging
 import socket
 from weakref import WeakValueDictionary
-from sipparty.transport import (Transport, SockTypeFromName)
 from sipparty.util import DerivedProperty
+from sipparty.transport import (Transport, SockTypeFromName)
 from sipparty.parse import ParseError
-from sipparty.sip import Message
+from message import Message
 from components import Host
+from transform import (TransformKeys,)
 import prot
 
 log = logging.getLogger(__name__)

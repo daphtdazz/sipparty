@@ -101,6 +101,15 @@ class TestVB(SIPPartyTestCase):
         e.a = a
         self.assertEqual(e.ea, a)
 
+        a.bind("x", "y")
+        a.x = 2
+        self.assertEqual(a.y, 2)
+        a.bind("x", "yy")
+        self.assertEqual(a.yy, 2)
+        a.unbindAll()
+        self.assertEqual(len(a._vb_forwardbindings), 0)
+        self.assertEqual(len(a._vb_backwardbindings), 0)
+
     def testDependentBindings(self):
 
         class A(vb.ValueBinder):
@@ -160,6 +169,24 @@ class TestVB(SIPPartyTestCase):
         for ivb in (a, b, bb):
             self.assertEqual(len(ivb._vb_backwardbindings), 0)
             self.assertEqual(len(ivb._vb_forwardbindings), 0)
+
+        a = A()
+        a.b = vb.ValueBinder()
+        a.bind("d", "c")
+        a.d = 1
+        self.assertEqual(a.b.c, 1)
+        a.unbindAll()
+        a.bind("d", "c")
+        a.d = None
+        self.assertEqual(a.c, None)
+        a.unbindAll()
+        a.bind("d", "c")
+        del a.d
+        self.assertEqual(a.c, None)
+        a.unbindAll()
+        a.bind("d", "c")
+        del a.b
+        a.unbindAll()
 
     def testOrphans(self):
         """Test that when a parent is deleted, the children can be rebound.

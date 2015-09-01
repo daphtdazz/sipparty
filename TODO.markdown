@@ -2,8 +2,9 @@
 
 ## List. ##
 
-2. SIPP test integration.
-3. Pumba integration.
+1. SIPP test integration.
+2. Pumba integration.
+3. Fix slow UT termination time (weak reference needed somewhere?) 
 4. REGISTER dialogues.
 5. Example scripts.
 6. TCP support. 
@@ -20,7 +21,6 @@
 19. Cumulative field_bindings for Message classes.
 20. Short form header names.
 21. ParseError should have SIPParseError subtype which should have a response code field so siptransport can know what response code to send.
-22. Fix slow UT termination time (weak reference needed somewhere?) 
 23. Generate remote session from SDP received and send data to from it.
 24. Collapse AOR into URI.
 25. quoted-string in display-name in name-addr cannot be followed by LWS??

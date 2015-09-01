@@ -56,7 +56,20 @@ def Transform(tform_dict, inobj, intype, outobj, outtype, **sources):
             continue
 
         if action == Tfk.CopyFrom:
-            assert 0
+            if len(actTp) < 3:
+                raiseActTupleError(
+                    actTp, "No attribute specified to %r action." % (
+                        Tfk.CopyFrom,))
+            source = actTp[1]
+            if source not in sources:
+                raiseActTupleError(
+                    actTp, "Source %r not passed into %r action." % (
+                        source, Tfk.CopyFrom))
+            tobj = sources[source]
+            path = actTp[2]
+            val = tobj.attributeAtPath(path)
+            outobj.setAttributePath(path, val)
+            continue
         assert 0
 
 

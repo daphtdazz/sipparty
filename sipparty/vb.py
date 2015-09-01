@@ -175,6 +175,9 @@ class ValueBinder(object):
                     log.debug("Push %r to %r", frompath, topath)
                     self._vb_push_value_to_target(val, topath, cdict)
 
+    def unbindAll(self):
+        self._vb_unbindAllCondition()
+
     @property
     def vb_parent(self):
         wp = self._vb_weakBindingParent
@@ -220,10 +223,11 @@ class ValueBinder(object):
                 existing_val._vb_unbindAllParent()
 
         if isinstance(val, ValueBinder):
-            log.detail("New value is bindable.")
+            log.detail("%r value is bindable.", val.__class__.__name__)
             for direction in self.VB_Directions:
                 _, _, _, bs, _ = self._vb_bindingdicts(attr, direction,
                                                        all=True)
+                log.detail("Update %r bindings with %r", direction, bs)
                 for subpath, bds in iteritems(bs):
                     if len(subpath) == 0:
                         continue

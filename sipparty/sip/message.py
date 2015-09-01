@@ -221,7 +221,8 @@ class Message(
 
     @classmethod
     def HeaderAttrNameFromType(cls, htype):
-        return "%s%s" % (getattr(Header.types, htype), "Header")
+        return "%s%s" % (getattr(
+            Header.types, htype).replace("-", "_"), "Header")
 
     @classmethod
     def MakeStartline(cls):
@@ -394,11 +395,12 @@ class Message(
 
         htype, hindex, hexist = self._msg_headerAttributeTypeIndexObject(attr)
         if htype is not None:
+            log.debug("Setting header type %r", htype)
             if hindex is None:
                 self.headers.append(val)
             else:
                 self.headers[hindex] = val
-            self.vb_updateAttributeBindings(attr, hexist, val)
+            self.vb_updateAttributeBindings(htype, hexist, val)
             return
 
         super(Message, self).__setattr__(attr, val)
@@ -412,7 +414,7 @@ class Message(
                     "%r instance has no attribute %r to delete" % (
                         self.__class__.__name__, attr))
             del self.headers[hindex]
-            self.vb_updateAttributeBindings(attr, hexist, None)
+            self.vb_updateAttributeBindings(htype, hexist, None)
             return
 
         return super(Message, self).__delattr__(attr)
@@ -446,7 +448,7 @@ class Message(
             log.debug("Didn't find existing one")
             index = None
 
-        return htype, index, existing_val
+        return self.HeaderAttrNameFromType(htype), index, existing_val
 
 
 @add_metaclass(type)

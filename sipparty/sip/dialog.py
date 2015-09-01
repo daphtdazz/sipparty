@@ -16,17 +16,16 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import six
+from six import binary_type as bytes
 import re
 import logging
 import abc
 import numbers
-
 from sipparty import (splogging, vb, util, fsm, ParsedPropertyOfClass)
 from sipparty.fsm import (FSM, UnexpectedInput)
 from sipparty.deepclass import DeepClass, dck
 from sipparty.sdp import (sdpsyntax, SDPIncomplete)
-from transform import (Transform,)
+from transform import (Transform, TransformKeys)
 from components import (AOR, URI)
 from header import Call_IdHeader
 from request import Request
@@ -36,13 +35,28 @@ from body import Body
 import prot
 
 log = logging.getLogger(__name__)
-bytes = six.binary_type
 
 States = util.Enum((
     fsm.InitialStateKey, "InitiatingDialog", "InDialog", "TerminatingDialog",
     "SuccessCompletion", "ErrorCompletion"))
 Inputs = util.Enum((
     "initiate", "receiveRequest", "terminate"))
+
+for tk in TransformKeys:
+    locals()[tk] = tk
+del tk
+
+AckTransforms = {
+    200: {
+        "ACK": (
+            (CopyFrom, "request", "FromHeader"),
+            (CopyFrom, "request", "Call_IDHeader"),
+            (CopyFrom, "request", "startline.uri"),
+            (Copy, "startline.protocol",),
+            (Copy, "ToHeader"),
+        )
+    }
+}
 
 
 class Dialog(
@@ -68,7 +82,6 @@ class Dialog(
 
         A dialog is identified at each UA with a dialog ID [this is composed
         of] Call-ID ... local tag ... remote tag.
-
 
     """
 
@@ -108,6 +121,7 @@ class Dialog(
         self._dlg_callIDHeader = None
         self._dlg_localTag = TagParam()
         self._dlg_remoteTag = None
+        self._dlg_requests = []
 
     def initiate(self, *args, **kwargs):
         log.debug("Initiating dialog...")
@@ -122,6 +136,10 @@ class Dialog(
         log.detail("%r", msg)
 
         mtype = msg.type
+
+        if mtype in (200,):
+            log.debug("ACKing %r message", mtype)
+            self.ackMessage(msg)
 
         def RaiseBadInput(msg=b""):
             raise(UnexpectedInput(
@@ -165,6 +183,18 @@ class Dialog(
             mtype /= 10
 
         RaiseBadInput()
+
+    def ackMessage(self, msg):
+
+        ack = Message.ACK(autofillheaders=False)
+        assert len(self._dlg_requests)
+
+        Transform(
+            AckTransforms, msg, msg.type, ack, ack.type,
+            request=self._dlg_requests[-1])
+
+        self.transport.sendMessage(
+            ack, self.remoteAddress, fromAddr=self.contactURI.host)
 
     def sendRequest(self, reqType, remoteAddress=None):
 
@@ -217,14 +247,15 @@ class Dialog(
                 "request." % (self.__class__.__name__,))
 
         try:
-            reqb = bytes(req)
+            tp.sendMessage(
+                req, self.remoteAddress, fromAddr=self.contactURI.host)
         except prot.Incomplete:
             log.error("Incomplete message: %r", req)
             raise
-
-        tp.sendMessage(req, self.remoteAddress, fromAddr=self.contactURI.host)
         assert req.Call_IdHeader == self._dlg_callIDHeader, (
             req.Call_IdHeader, self._dlg_callIDHeader)
+        req.unbindAll()
+        self._dlg_requests.append(req)
         tp.updateDialogGrouping(self)
 
     def sendResponse(self, response, req):

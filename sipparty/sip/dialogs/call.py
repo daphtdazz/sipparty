@@ -109,13 +109,4 @@ class SimpleCall(Dialog):
                 (Copy, "startline.protocol",)
             ]
         },
-        2: {
-            "ACK": [
-                (Copy, "startline.protocol",),
-                (Copy, "FromHeader",),
-                (Copy, "ToHeader",),
-                (Copy, "ViaHeader",),
-                (CopyFrom, "request", "startline.uri")
-            ]
-        }
     }
