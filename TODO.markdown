@@ -2,15 +2,15 @@
 
 ## List. ##
 
-1. SIPP test integration.
 2. Pumba integration.
-3. Fix slow UT termination time (weak reference needed somewhere?) 
+3. Fix slow termination time (weak reference needed somewhere?) 
 4. REGISTER dialogues.
 5. Example scripts.
 6. TCP support. 
 7. Proper python3 support.
     a. 'bytes' does not support % and .format(), so need to use BytesGenner and str instead where appropriate.
 8. UDP transport retrying. 
+9. Smarter ACK than simply "ACK all 200s" in dialog.py
 9. Continuous Integration.
 10. Get rid of "delegateattributes", use "vb_dependencies". -- ?? semi done?
 12. Move sipheader out of util and probably into prot.
@@ -42,10 +42,12 @@
    -- done 14/08/2015
 6. INVITEs with media sessions. -- done 23/08/2015
 7. 200s with media sessions. -- done 23/08/2015
+8. SIPP test integration -- done 4/09/2015
 
 ## Changelog ##
 
 10/08/2015 - first draft of TODO list.
+04/09/2015 - list at point of ability to make an entire call.
 
 ## Problems ##
 
