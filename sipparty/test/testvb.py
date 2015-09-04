@@ -203,8 +203,12 @@ class TestVB(SIPPartyTestCase):
         del a
 
         log.info("Check b has been unbound and can be rebound.")
+        self.assertTrue(b.vb_parent is None)
         c.b = b
+        self.assertFalse(b.vb_parent is None)
         self.assertEqual(c.val, 2)
+        c.unbindAll()
+        self.assertTrue(b.vb_parent is None)
 
     def testMultipleBindings(self):
         """Test that we can bind something to more than one thing."""
@@ -216,22 +220,6 @@ class TestVB(SIPPartyTestCase):
         a.val = 5
         self.assertEqual(a.val1, 5)
         self.assertEqual(a.val2, 5)
-
-    def testParentBindings(self):
-        a, ab = [vb.ValueBinder() for _ in range(2)]
-
-        ab.vb_parent = a
-
-        ab.bind(".c", "c")
-        a.c = 2
-        self.assertEqual(ab.c, 2)
-        self.assertTrue(ab.vb_parent is a)
-        self.assertTrue(a.vb_parent is ab)
-        ab.unbind(".c", "c")
-        self.assertEqual(len(ab._vb_forwardbindings), 0)
-        self.assertEqual(len(ab._vb_backwardbindings), 0)
-        self.assertEqual(len(a._vb_forwardbindings), 0)
-        self.assertEqual(len(a._vb_backwardbindings), 0)
 
     def testRefreshBindings(self):
 

@@ -232,12 +232,12 @@ class ValueBinder(object):
                     if len(subpath) == 0:
                         continue
                     if val.vb_parent is not None and val.vb_parent is not self:
-                        raise(ValueError(
+                        raise(BindingAlreadyExists(
                             "Could not update bindings for %r instance being "
-                            "stored at attribute %r of %r instance as that "
-                            "would change its parent unexpectedly. Bindings "
-                            "may only be created in such a way as to ensure "
-                            "no object may have two potential parents." % (
+                            "stored at attribute %r of %r instance as it "
+                            "already has a binding parent, so is already "
+                            "bound in an object graph and it cannot be bound "
+                            "into more than one at a time." % (
                                 val.__class__.__name__, attr,
                                 self.__class__.__name__)))
                     for topath, bd in iteritems(bds):
@@ -680,9 +680,31 @@ class ValueBinder(object):
             if len(attrbindings) == 0:
                 del bindings[fromattr]
 
+        self._vb_maybeReleaseParent()
+
         log.debug("  %r bindings after unbind %r",
                   direction,
                   self._vb_bindingsForDirection(direction))
+
+    def _vb_maybeReleaseParent(self):
+
+        def _attrGen():
+            for _bd in (self._vb_forwardbindings, self._vb_backwardbindings):
+                for _fa, _fabs in iteritems(_bd):
+                    yield _fa
+                    for _ta in _fabs:
+                        yield _ta
+        log.debug(
+            '  Maybe release parent, bindings: %r %r',
+            self._vb_forwardbindings, self._vb_backwardbindings)
+        for attr in _attrGen():
+            log.debug('Check immediate binding on attr %r', attr)
+            if attr == '':
+                log.debug("Parent is still in binding paths")
+                break
+        else:
+            log.debug("Parent is not in binding paths")
+            self.vb_parent = None
 
     def _vb_resolveboundobjectandattr(self, path):
         log.debug("resolve path %r", path)

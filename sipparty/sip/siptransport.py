@@ -138,7 +138,11 @@ class SIPTransport(Transport):
             log.error("Parse errror %s parsing message.", pe)
             return 0
 
-        self.consumeMessage(msg)
+        try:
+            self.consumeMessage(msg)
+        except Exception as exc:
+            log.error(
+                "Consuming %r message raised exception: %s" % (msg.type, exc))
         return msg.parsedBytes
 
     def consumeMessage(self, msg):

@@ -52,6 +52,7 @@ AckTransforms = {
             (CopyFrom, "request", "FromHeader"),
             (CopyFrom, "request", "Call_IDHeader"),
             (CopyFrom, "request", "startline.uri"),
+            (CopyFrom, "request", "viaheader"),
             (Copy, "startline.protocol",),
             (Copy, "ToHeader"),
         )
