@@ -43,6 +43,7 @@
 6. INVITEs with media sessions. -- done 23/08/2015
 7. 200s with media sessions. -- done 23/08/2015
 8. SIPP test integration -- done 4/09/2015
+9. Fix slow UT termination time (weak reference needed somewhere?) -- done 05/09/2015
 
 ## Changelog ##
 

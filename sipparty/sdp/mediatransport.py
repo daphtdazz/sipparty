@@ -19,6 +19,7 @@ limitations under the License.
 from six import (binary_type as bytes, itervalues)
 import logging
 from sipparty.transport import Transport
+from sipparty.util import WeakMethod
 
 log = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ class MediaTransport(Transport):
 
     def __init__(self):
         super(MediaTransport, self).__init__()
-        self.byteConsumer = self.mediaByteConsumer
+        self.byteConsumer = WeakMethod(self, "mediaByteConsumer")
 
     def mediaByteConsumer(self, lAddr, rAddr):
         pass

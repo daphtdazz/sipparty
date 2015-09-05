@@ -16,23 +16,19 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import six
-import copy
+from abc import (ABCMeta, abstractmethod)
+from collections import Callable
+import logging
+import re
+from sipparty import vb
+from six import (
+    add_metaclass, binary_type as bytes, iteritems, itervalues, PY2)
 import threading
 import time
 import timeit
-import logging
-import weakref
-import re
-from collections import Callable
-from abc import ABCMeta, abstractmethod
-
-import vb
+from weakref import (ref as weakref, WeakValueDictionary)
 
 log = logging.getLogger(__name__)
-bytes = six.binary_type
-itervalues = six.itervalues
-iteritems = six.iteritems
 
 # The clock. Defined here so that it can be overridden in the testbed.
 Clock = timeit.default_timer
@@ -44,7 +40,7 @@ class attributesubclassgen(type):
 
     So for example:
 
-    @six.add_metaclass(attributesubclassgen)
+    @add_metaclass(attributesubclassgen)
     class AttributeGen(object):
 
         types = Enum(("Subclass",))
@@ -601,7 +597,7 @@ def TwoCompatibleThree(cls):
 
     These are:
         __bytes__  - is called instead of __str__ in python 2."""
-    if six.PY2:
+    if PY2:
         class BytesToStrDescriptor(object):
             def __get__(self, obj, cls):
                 return (
@@ -615,7 +611,7 @@ def TwoCompatibleThree(cls):
 
 def WeakMethod(object, method, static_args=None, static_kwargs=None,
                default_rc=None):
-    wr = weakref.ref(object)
+    wr = weakref(object)
 
     static_args = static_args if static_args is not None else []
     static_kwargs = static_kwargs if static_kwargs is not None else {}
@@ -664,7 +660,7 @@ def WaitFor(condition, timeout_s, action_on_timeout=None, resolution=0.0001):
 class Singleton(object):
     """Classes inheriting from this will only have one instance."""
 
-    _St_SharedInstances = {}
+    _St_SharedInstances = WeakValueDictionary()
 
     def __new__(cls, *args, **kwargs):
         log.detail("Singleton.__new__(%r, %r)", args, kwargs)
@@ -675,11 +671,21 @@ class Singleton(object):
             name = ""
 
         log.debug("New with class %r, name %r", cls, name)
-        if name not in cls._St_SharedInstances:
-            cls._St_SharedInstances[name] = super(Singleton, cls).__new__(
-                cls, *args, **kwargs)
+        existing_inst = (
+            None
+            if name not in cls._St_SharedInstances else
+            cls._St_SharedInstances[name])
 
-        return cls._St_SharedInstances[name]
+        if existing_inst is not None:
+            log.debug("  Return Existing instance")
+            log.detail("  %r", existing_inst)
+            return existing_inst
+
+        log.debug("  New instance required.")
+        ns = super(Singleton, cls).__new__(cls, *args, **kwargs)
+        cls._St_SharedInstances[name] = ns
+
+        return ns
 
     @property
     def singletonInited(self):
@@ -694,7 +700,7 @@ class Singleton(object):
         super(Singleton, self).__init__(*args, **kwargs)
 
 
-@six.add_metaclass(ABCMeta)
+@add_metaclass(ABCMeta)
 class TupleRepresentable(object):
     """Semi-abstract base class for objects that can be represented
     by Tuples, providing equality and hash function."""

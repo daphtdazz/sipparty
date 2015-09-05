@@ -20,15 +20,14 @@ import six
 import socket
 import logging
 import copy
-import weakref
 import re
 import time
 import socket
 from six import itervalues
 
 from sipparty import (splogging, util, vb, parse, fsm, ParsedPropertyOfClass)
-from sipparty.util import DerivedProperty
-from sipparty.deepclass import DeepClass, dck
+from sipparty.util import (DerivedProperty, WeakMethod)
+from sipparty.deepclass import (DeepClass, dck)
 from sipparty.sip import (
     SIPTransport, Incomplete, DNameURI, AOR, URI, Host, Request, Message,
     Body, defaults)
@@ -173,7 +172,8 @@ class Party(
         uriHost.address = lAddr[0]
         uriHost.port = lAddr[1]
 
-        tp.addDialogHandlerForAOR(self.uri.aor, self.newDialogHandler)
+        tp.addDialogHandlerForAOR(
+            self.uri.aor, WeakMethod(self, "newDialogHandler"))
 
     def invite(self, target, proxy=None):
 

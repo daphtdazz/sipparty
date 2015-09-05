@@ -329,6 +329,12 @@ class Transport(Singleton):
             kwargs["singleton"] = "Transport"
         return super(Transport, cls).__new__(cls, *args, **kwargs)
 
+    def __del__(self):
+        self._tp_retryThread.cancel()
+        sp = super(Transport, self)
+        if hasattr(sp, "__del__"):
+            sp.__del__()
+
     #
     # =================== INTERNAL METHODS ====================================
     #

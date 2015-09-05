@@ -16,23 +16,21 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import six
 import logging
-import socket
-from weakref import WeakValueDictionary
-from sipparty.util import DerivedProperty
-from sipparty.transport import (Transport, SockTypeFromName)
 from sipparty.parse import ParseError
-from message import Message
+from sipparty.transport import (Transport, SockTypeFromName)
+from sipparty.util import (DerivedProperty, WeakMethod)
+from six import (binary_type as bytes, itervalues)
+import socket
+from weakref import (WeakValueDictionary, ref as weakref)
 from components import Host
-from transform import (TransformKeys,)
+from message import Message
 import prot
+from transform import (TransformKeys,)
 
 log = logging.getLogger(__name__)
 prot_log = logging.getLogger("messages")
 prot_log.setLevel(logging.INFO)
-bytes = six.binary_type
-itervalues = six.itervalues
 
 
 class SIPTransport(Transport):
@@ -47,6 +45,9 @@ class SIPTransport(Transport):
     # =================== INSTANCE INTERFACE ==================================
     #
     messageConsumer = DerivedProperty("_sptr_messageConsumer")
+
+    # Do not iterate over these dictionaries, as they are weak value
+    # dictionaries whose values may disappear at any time.
     provisionalDialogs = DerivedProperty("_sptr_provisionalDialogs")
     establishedDialogs = DerivedProperty("_sptr_establishedDialogs")
 
@@ -56,14 +57,12 @@ class SIPTransport(Transport):
         super(SIPTransport, self).__init__()
         self._sptr_messageConsumer = None
         self._sptr_messages = []
-        self._sptr_provisionalDialogs = {}
-        self._sptr_establishedDialogs = {}
+        self._sptr_provisionalDialogs = WeakValueDictionary()
+        self._sptr_establishedDialogs = WeakValueDictionary()
         # Dialog handler is keyed by AOR.
         self._sptr_dialogHandlers = {}
-        # Dialogs are keyed by dialogID
-        self._sptr_dialogs = WeakValueDictionary()
 
-        self.byteConsumer = self.sipByteConsumer
+        self.byteConsumer = WeakMethod(self, "sipByteConsumer")
 
     def addDialogHandlerForAOR(self, aor, handler):
         """Register a handler to call """
@@ -87,15 +86,14 @@ class SIPTransport(Transport):
         del hdlrs[aor]
 
     def sendMessage(self, msg, toAddr, fromAddr=None):
-        log.debug("Send message %r -> %r type %s", fromAddr, toAddr)
+        log.debug("Send message %r -> %r type %s", fromAddr, toAddr, msg.type)
 
         toAddr = self.fixTargetAddress(toAddr)
         fromAddr = self.fixTargetAddress(fromAddr)
 
         sockType = SockTypeFromName(msg.viaheader.transport)
 
-        log.debug(
-            "Normalized addresses: %r -> %r type", fromAddr, toAddr, sockType)
+        log.debug("Normalized addresses: %r -> %r type", fromAddr, toAddr)
 
         super(SIPTransport, self).sendMessage(
             bytes(msg), toAddr, sockType=sockType, fromAddr=fromAddr)
@@ -251,9 +249,6 @@ class SIPTransport(Transport):
         if "singleton" not in kwargs:
             kwargs["singleton"] = "SIPTransport"
         inst = super(SIPTransport, cls).__new__(cls, *args, **kwargs)
-        if not hasattr(SIPTransport, "inst"):
-            SIPTransport.inst = inst
-        assert SIPTransport.inst is inst, (SIPTransport.inst, inst)
         return inst
 
     #

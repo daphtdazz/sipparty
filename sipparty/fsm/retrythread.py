@@ -100,6 +100,7 @@ class RetryThread(threading.Thread):
         weak reference in Action.
         """
         super(RetryThread, self).__init__(**kwargs)
+        log.debug("RetryThread.__init__")
         self._rthr_action = action
         self._rthr_cancelled = False
         self._rthr_retryTimes = []
@@ -275,6 +276,7 @@ class RetryThread(threading.Thread):
         self._rthr_triggerSpin()
 
     def cancel(self):
+        log.debug("Cancel retrythread")
         self._rthr_cancelled = True
         self._rthr_triggerSpin()
 
