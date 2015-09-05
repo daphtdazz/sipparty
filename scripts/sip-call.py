@@ -62,8 +62,9 @@ class SipCallArgs(argparse.ArgumentParser):
 #
 args = SipCallArgs().args
 
-sipparty.sip.siptransport.prot_log.setLevel(logging.INFO)
+sipparty.sip.siptransport.prot_log.setLevel(logging.ERROR)
 if args.debug < logging.INFO:
+    sipparty.sip.siptransport.prot_log.setLevel(logging.INFO)
     log.setLevel(args.debug)
     sipparty.util.log.setLevel(logging.INFO)
     sipparty.fsm.retrythread.log.setLevel(logging.INFO)
@@ -92,3 +93,10 @@ dlg.waitForStateCondition(
     lambda state: state in (dlg.States.Terminated, dlg.States.Error))
 
 log.info("Finished.")
+
+# Deleting the party and dialogue speeds up termination time, as we don't need
+# to leave it to the python runtime to determine these references are no longer
+# in use. This is because there are background threads running that will wait
+# for these objects to be destroyed before terminating.
+del pt
+del dlg
