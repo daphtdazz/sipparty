@@ -302,8 +302,8 @@ class TestProtocol(SIPPartyTestCase):
                 self.assertEqual(exp, bytes(cp))
 
     def testMessageProperties(self):
-        self.pushLogLevel("vb", logging.DETAIL)
-        self.pushLogLevel("message", logging.DETAIL)
+        # self.pushLogLevel("vb", logging.DETAIL)
+        # self.pushLogLevel("message", logging.DETAIL)
         inv = Message.invite()
         inv.bodies = [Body()]
         self.assertTrue(hasattr(inv, "Content_TypeHeader"))

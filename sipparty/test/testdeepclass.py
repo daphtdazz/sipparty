@@ -30,15 +30,15 @@ from sipparty.sip import (prot, components)
 from sipparty.sip.components import URI
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.DETAIL)
+# log.setLevel(logging.DETAIL)
 
 
 class TestDeepClass(SIPPartyTestCase):
 
     def testVBInteraction(self):
 
-        self.pushLogLevel("vb", logging.DEBUG)
-        self.pushLogLevel("deepclass", logging.DEBUG)
+        # self.pushLogLevel("vb", logging.DEBUG)
+        # self.pushLogLevel("deepclass", logging.DEBUG)
 
         class TDObj(object):
             pass

@@ -76,7 +76,6 @@ class TestHeaders(SIPPartyTestCase):
         self.assertEqual(pvb.hostaddr2, "atlanta.com")
 
     def testNumHeader(self):
-        self.setLogLevel("deepclass", logging.DEBUG)
         cont_len_hdr = sip.Header.content_length()
         self.assertEqual(bytes(cont_len_hdr), b"Content-Length: 0")
 

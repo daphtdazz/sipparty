@@ -24,6 +24,7 @@ from sipparty import (util, fsm)
 if len(sys.argv) > 1 and sys.argv[1] == "discover":
     logging.basicConfig(level=logging.INFO)
 else:
+    assert 0
     logging.basicConfig(level=logging.DEBUG)
 
 util.log.setLevel(logging.INFO)

@@ -38,7 +38,7 @@ class TestVB(SIPPartyTestCase):
 
     def setUp(self):
         super(TestVB, self).setUp()
-        self.pushLogLevel("vb", logging.DETAIL)
+        # self.pushLogLevel("vb", logging.DETAIL)
 
     def testBindings(self):
         VB = vb.ValueBinder
