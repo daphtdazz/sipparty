@@ -20,7 +20,6 @@ from abc import (ABCMeta, abstractmethod)
 from collections import Callable
 import logging
 import re
-from sipparty import vb
 from six import (
     add_metaclass, binary_type as bytes, iteritems, itervalues, PY2)
 import threading
@@ -133,15 +132,15 @@ class attributesubclassgen(type):
 def sipheader(key):
     """Normalizer for SIP headers, which is almost title but not quite."""
     nk = key.title()
-    nk = nk.replace("_", "-")
-    if nk == "Call-Id":
-        nk = "Call-ID"
-    elif nk == "Www-Authenticate":
-        nk = "WWW-Authenticate"
-    elif nk == "Cseq":
-        nk = "CSeq"
-    elif nk == "Mime-Version":
-        nk = "MIME-Version"
+    nk = nk.replace(b"_", b"-")
+    if nk == b"Call-Id":
+        nk = b"Call-ID"
+    elif nk == b"Www-Authenticate":
+        nk = b"WWW-Authenticate"
+    elif nk == b"Cseq":
+        nk = b"CSeq"
+    elif nk == b"Mime-Version":
+        nk = b"MIME-Version"
 
     return nk
 
@@ -155,11 +154,14 @@ class Enum(set):
     def __init__(self, vals=None, normalize=None, aliases=None):
         self._en_normalize = normalize
         self._en_aliases = aliases
-        vlist = list(vals) if vals is not None else []
+
+        vlist = [] if not vals else list(vals)
+
         if aliases:
             for v in itervalues(aliases):
                 if v not in vlist:
                     vlist.append(v)
+
         super(Enum, self).__init__(vlist)
         self._en_list = vlist
 
@@ -183,6 +185,7 @@ class Enum(set):
         return self._en_list.index(item)
 
     def add(self, item):
+
         super(Enum, self).add(item)
         ll = self._en_list
         if item not in ll:
@@ -204,6 +207,51 @@ class Enum(set):
             return self._en_normalize(name)
 
         return name
+
+
+class AsciiBytesEnum(Enum):
+
+    def __init__(self, vals=None, normalize=None, aliases=None):
+        def bad_val_type(val):
+            raise TypeError(
+                '%r instance cannot be used in %r instance as it is not a '
+                'bytes-like type.' % (
+                    val.__class__.__name__, self.__class__.__name__))
+
+        if vals:
+            for vv in [
+                    _vv
+                    for _vl in (vals, aliases) if _vl is not None
+                    for _vv in _vl]:
+                if not isinstance(vv, bytes):
+                    bad_val_type(vv)
+        super(AsciiBytesEnum, self).__init__(
+            vals=vals, normalize=normalize, aliases=aliases)
+
+
+    def add(self, item):
+        if not isinstance(item, bytes):
+            raise TypeError(
+                'New %r instance is inconsistent with enum %r containing '
+                'only instances of %r' % (
+                    item.__class__.__name__, self, self._en_type.__name__))
+        super(AsciiBytesEnum, self).add(item)
+
+    def REPattern(self):
+        return b"(?:%s)" % b"|".join(self)
+
+    def AsciiStrREPattern(self):
+        ptrn = self.REPattern()
+        if PY2:
+            return ptrn
+        return str(ptrn, encoding='ascii')
+
+    def _en_fixAttr(self, name):
+        if not PY2 and isinstance(name, str):
+            name = bytes(name, encoding='ascii')
+
+        fixedStrAttr = super(AsciiBytesEnum, self)._en_fixAttr(name)
+        return fixedStrAttr
 
 
 class ClassType(object):
@@ -751,3 +799,29 @@ class TestCaseREMixin(object):
 
     def _tcrem_prettyFormat(self, string):
         return repr(string).replace("\\n", "\\n'\n'")
+
+
+def bglobals_g(gbls):
+    bglobals = {}
+    if PY2:
+        abytes = bytes
+    else:
+        abytes = lambda x: (
+            x if isinstance(x, bytes) else
+            bytes(x, encoding='ascii') if isinstance(x, str) else
+            bytes(x))
+
+    for key, val in iteritems(gbls):
+        if key.startswith('_'):
+            continue
+
+        if isinstance(val, bytes):
+            bglobals[abytes(key)] = val
+        elif isinstance(val, Enum):
+            for enum_val in val:
+                bglobals[b'%s.%s' % (abytes(key), abytes(enum_val))] = enum_val
+            for al in ([] if val._en_aliases is None else val._en_aliases):
+                bglobals[b'%s.%s' % (
+                    abytes(key), abytes(al))] = getattr(val, al)
+
+    return bglobals
