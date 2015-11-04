@@ -21,18 +21,19 @@ import re
 import logging
 import abc
 import numbers
-from sipparty import (splogging, vb, util, fsm, ParsedPropertyOfClass)
-from sipparty.fsm import (FSM, UnexpectedInput)
-from sipparty.deepclass import DeepClass, dck
-from sipparty.sdp import (sdpsyntax, SDPIncomplete)
-from transform import (Transform, TransformKeys)
-from components import (AOR, URI)
-from header import Call_IdHeader
-from request import Request
-from message import Message, MessageResponse
-from param import TagParam
-from body import Body
-import prot
+from .. import (vb, util, fsm)
+from ..fsm import (FSM, UnexpectedInput)
+from ..deepclass import DeepClass, dck
+from ..parse import ParsedPropertyOfClass
+from ..sdp import (sdpsyntax, SDPIncomplete)
+from .transform import (Transform, TransformKeys)
+from .components import (AOR, URI)
+from .header import Call_IdHeader
+from .request import Request
+from .message import Message, MessageResponse
+from .param import TagParam
+from .body import Body
+from . import prot
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ del tk
 
 AckTransforms = {
     200: {
-        "ACK": (
+        b"ACK": (
             (CopyFrom, "request", "FromHeader"),
             (CopyFrom, "request", "Call_IDHeader"),
             (CopyFrom, "request", "startline.uri"),
@@ -177,7 +178,7 @@ class Dialog(
             RaiseBadInput()
 
         while mtype >= 1:
-            attr = b"receiveResponse%d" % mtype
+            attr = "receiveResponse%d" % mtype
             if attr in self.Inputs:
                 log.debug("Response input found: %d", mtype)
                 return self.hit(attr, msg)
@@ -301,7 +302,8 @@ class Dialog(
     # =================== MAGIC METHODS =======================================
     #
     sendRequestRE = re.compile(
-        "^sendRequest(%s)$" % "|".join(Request.types), re.IGNORECASE)
+        "^sendRequest(%s)$" % "|".join(Request.types),
+        re.IGNORECASE)
     sendResponseRE = re.compile("^sendResponse([0-9]+)$", re.IGNORECASE)
 
     def __getattr__(self, attr):

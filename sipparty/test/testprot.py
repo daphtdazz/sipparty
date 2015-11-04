@@ -16,22 +16,21 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import sys
+import logging
 import os
 import re
-import logging
-import unittest
-import setup
 from setup import SIPPartyTestCase
-from six import binary_type as bytes, iteritems, add_metaclass
-from sipparty import (util, sip, vb, ParseError, Request)
-from sipparty.util import Singleton
-from sipparty.sip import (prot, components, Message, Header)
-from sipparty.sip.header import ContactHeader
-from sipparty.sip.components import URI
-from sipparty.sip.prot import (Incomplete)
-from sipparty.sdp import sdpsyntax
-from sipparty.sip.body import Body
+from six import (binary_type as bytes, iteritems, add_metaclass)
+import sys
+import unittest
+from .. import (util, sip, vb, ParseError, Request)
+from ..sdp import sdpsyntax
+from ..sip import (prot, components, Message, Header)
+from ..sip.body import Body
+from ..sip.components import URI
+from ..sip.header import ContactHeader
+from ..sip.prot import (Incomplete)
+from ..util import (Singleton, bglobals_r)
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DETAIL)
@@ -39,10 +38,10 @@ log.setLevel(logging.DETAIL)
 
 class TestProtocol(SIPPartyTestCase):
 
-    tag_pattern = "tag=[\da-f]{8}"
-    call_id_pattern = "[\da-f]{6}-\d{14}"
-    branch_pattern = "branch=z9hG4bK[\da-f]{1,}"
-    cseq_num_pattern = "\d{1,10}"
+    tag_pattern = b"tag=[\da-f]{8}"
+    call_id_pattern = b"[\da-f]{6}-\d{14}"
+    branch_pattern = b"branch=z9hG4bK[\da-f]{1,}"
+    cseq_num_pattern = b"\d{1,10}"
 
     def assertEqualMessages(self, msga, msgb):
         stra = bytes(msga)
@@ -83,17 +82,15 @@ class TestProtocol(SIPPartyTestCase):
         invite.fromheader.field.value.uri.aor.host = "atlanta.com"
         invite.viaheader.field.host.address = "127.0.0.1"
         self.assertTrue(re.match(
-            "INVITE sip:bob@baltimore.com SIP/2.0\r\n"
-            "From: <sip:alice@atlanta.com>;{3}\r\n"
-            "To: <sip:bob@baltimore.com>\r\n"
-            "Via: SIP/2.0/UDP 127.0.0.1;{1}\r\n"
+            b"INVITE sip:bob@baltimore.com SIP/2.0\r\n"
+            b"From: <sip:alice@atlanta.com>;%(tag_pattern)s\r\n"
+            b"To: <sip:bob@baltimore.com>\r\n"
+            b"Via: SIP/2.0/UDP 127.0.0.1;%(branch_pattern)s\r\n"
             # 6 random hex digits followed by a date/timestamp
-            "Call-ID: {0}\r\n"
-            "CSeq: {2} INVITE\r\n"
-            "Max-Forwards: 70\r\n".format(
-                TestProtocol.call_id_pattern, TestProtocol.branch_pattern,
-                TestProtocol.cseq_num_pattern, TestProtocol.tag_pattern),
-            bytes(invite)), repr(bytes(invite)))
+            b"Call-ID: %(call_id_pattern)s\r\n"
+            b"CSeq: %(cseq_num_pattern)s INVITE\r\n"
+            b"Max-Forwards: 70\r\n" % bglobals_r(TestProtocol.__dict__),
+            repr(bytes(invite)))
 
         self.assertEqual(bytes(invite.toheader), "To: <sip:bob@baltimore.com>")
         self.assertEqual(
@@ -158,50 +155,28 @@ class TestProtocol(SIPPartyTestCase):
             Body(type=sdpsyntax.SIPBodyType, content=b"This is a message"))
 
         self.assertTrue(re.match(
-            "INVITE sip:bill@biloxi.com SIP/2.0\r\n"
-            "From: <sip:alice@atlanta.com>;{3}\r\n"
+            b"INVITE sip:bill@biloxi.com SIP/2.0\r\n"
+            b"From: <sip:alice@atlanta.com>;%(tag_pattern)s\r\n"
             # Note that the To: URI hasn't changed because when the parse
             # happens a new uri gets created for each, and there's no link
             # between them.
-            "To: <sip:bill@biloxi.com>\r\n"
-            "Via: SIP/2.0/UDP arkansas.com\r\n"
-            "Via: SIP/2.0/UDP 127.0.0.1:5061;{1}\r\n"
+            b"To: <sip:bill@biloxi.com>\r\n"
+            b"Via: SIP/2.0/UDP arkansas.com\r\n"
+            b"Via: SIP/2.0/UDP 127.0.0.1:5061;{1}\r\n"
             # 6 random hex digits followed by a date/timestamp
-            "Call-ID: {0}\r\n"
-            "CSeq: {2} INVITE\r\n"
-            "Max-Forwards: 55\r\n"
-            "Content-Length: 17\r\n"
-            "Contact: <sip:alice@127.0.0.1:5061>\r\n"
-            "Content-Type: {4}\r\n"
-            "\r\n"
-            "This is a message$"
-            "".format(
+            b"Call-ID: {0}\r\n"
+            b"CSeq: {2} INVITE\r\n"
+            b"Max-Forwards: 55\r\n"
+            b"Content-Length: 17\r\n"
+            b"Contact: <sip:alice@127.0.0.1:5061>\r\n"
+            b"Content-Type: {4}\r\n"
+            b"\r\n"
+            b"This is a message$"
+            b"".format(
                 TestProtocol.call_id_pattern, TestProtocol.branch_pattern,
                 TestProtocol.cseq_num_pattern, TestProtocol.tag_pattern,
                 sdpsyntax.SIPBodyType),
             bytes(new_inv)), repr(bytes(new_inv)))
-
-    def testEnum(self):
-        en = util.Enum(("cat", "dog", "aardvark", "mouse"))
-
-        aniter = en.__iter__()
-        self.assertEqual(aniter.next(), "cat")
-        self.assertEqual(aniter.next(), "dog")
-        self.assertEqual(aniter.next(), "aardvark")
-        self.assertEqual(aniter.next(), "mouse")
-        self.assertRaises(StopIteration, lambda: aniter.next())
-
-        self.assertEqual(en[0], "cat")
-        self.assertEqual(en[1], "dog")
-        self.assertEqual(en[2], "aardvark")
-        self.assertEqual(en[3], "mouse")
-
-        self.assertEqual(en.index("cat"), 0)
-        self.assertEqual(en.index("dog"), 1)
-        self.assertEqual(en.index("aardvark"), 2)
-        self.assertEqual(en.index("mouse"), 3)
-
-        self.assertEqual(en[1:3], ["dog", "aardvark"])
 
     def testCumulativeProperties(self):
 
@@ -257,7 +232,7 @@ class TestProtocol(SIPPartyTestCase):
 
     def testProt(self):
         for name, obj in iteritems(prot.__dict__):
-            if name.endswith("range") or name in ('STAR',):
+            if name.endswith("range") or name in (b'STAR',):
                 continue
             if isinstance(obj, bytes):
                 try:
@@ -267,12 +242,12 @@ class TestProtocol(SIPPartyTestCase):
                         name, exc, obj))
 
         for ptrn, examples in (
-                (prot.userinfo, ('bob@',)),
-                (prot.hostname, ('biloxihostname.com',)),
-                (prot.host, ('biloxihost.com',)),
-                (prot.hostport, ('biloxible.com',)),
-                (prot.addr_spec, ('sip:bob@biloxi.com',)),
-                (prot.SIP_URI, ('sip:bob@biloxi.com',)),):
+                (prot.userinfo, (b'bob@',)),
+                (prot.hostname, (b'biloxihostname.com',)),
+                (prot.host, (b'biloxihost.com',)),
+                (prot.hostport, (b'biloxible.com',)),
+                (prot.addr_spec, (b'sip:bob@biloxi.com',)),
+                (prot.SIP_URI, (b'sip:bob@biloxi.com',)),):
             cre = re.compile(ptrn)
             for example in examples:
                 mo = cre.match(example)
@@ -285,11 +260,11 @@ class TestProtocol(SIPPartyTestCase):
     def testComponents(self):
         for cpnt, examples in (
                 (components.DNameURI, (
-                    ("<sip:bob@biloxi.com>",),)),
-                (Request, (('INVITE sip:bob@biloxi.com SIP/2.0',),)),
+                    (b"<sip:bob@biloxi.com>",),)),
+                (Request, ((b'INVITE sip:bob@biloxi.com SIP/2.0',),)),
                 (ContactHeader, (
-                    ('<sip:[::1]:5060;transport=UDP>',
-                     'Contact: <sip:[::1]:5060;transport=UDP>'),))):
+                    (b'<sip:[::1]:5060;transport=UDP>',
+                     b'Contact: <sip:[::1]:5060;transport=UDP>'),))):
             for example in examples:
                 log.info("Test example %r", example)
                 try:

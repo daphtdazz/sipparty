@@ -15,7 +15,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-import six
 from six import binary_type as bytes, iteritems
 import re
 import weakref
@@ -763,7 +762,7 @@ class ValueBinder(object):
         self.bindBindings(self.vb_bindings)
 
     def _vb_attributeIsPrivate(self, attr):
-        return attr.startswith(b"_vb_")
+        return attr.startswith("_vb_")
 
     def _vb_delegateForAttribute(self, attr):
         das = self._vb_delegate_attributes

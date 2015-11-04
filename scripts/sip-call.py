@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 """sip-call.py
 
 An example script that makes a phone call for illustration and basic testing

@@ -16,14 +16,16 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import socket
 import logging
-import prot
 from six import binary_type as bytes
-from sipparty import (vb, Parser, ParsedProperty, ParsedPropertyOfClass)
-from sipparty.util import TwoCompatibleThree, TupleRepresentable
-from sipparty.deepclass import (DeepClass, dck)
-import defaults
+import socket
+from . import defaults
+from .prot import Incomplete
+from .prot import (bdict as abnf_name_bdict, Incomplete)
+from .. import (vb,)
+from ..deepclass import (DeepClass, dck)
+from ..parse import (Parser, ParsedProperty, ParsedPropertyOfClass)
+from ..util import TwoCompatibleThree, TupleRepresentable
 
 log = logging.getLogger(__name__)
 
@@ -33,11 +35,11 @@ class Host(Parser, TupleRepresentable, vb.ValueBinder):
 
     parseinfo = {
         Parser.Pattern:
-            # Have to expand {host} because it uses {IPv6reference} instead of
-            # {IPv6address}.
-            "(?:[[]({IPv6address})[]]|({IPv4address})|({hostname}))"
-            "(?:{COLON}({port}))?$"
-            "".format(**prot.__dict__),
+            # Have to expand 'host' because it uses 'IPv6reference' instead of
+            # 'IPv6address'.
+            b"(?:[[](%(IPv6address)s)[]]|(%(IPv4address)s)|(%(hostname)s))"
+            b"(?:%(COLON)s(%(port)s))?$"
+            b"" % abnf_name_bdict,
         Parser.Mappings:
             [("address",),
              ("address",),
@@ -82,13 +84,13 @@ class Host(Parser, TupleRepresentable, vb.ValueBinder):
 
         if address and port:
             if isIpv6:
-                return b"[{address}]:{port}".format(**locals())
-            return b"{address}:{port}".format(**locals())
+                return b"[%s]:%s" % (address, port)
+            return b"%s:%s" % (address, port)
 
         if self.address:
             if isIpv6:
-                return b"[{address}]".format(**locals())
-            return b"{address}".format(**locals())
+                return b"[%s]" % address
+            return b"%s" % self.address
 
         return b""
 
@@ -107,8 +109,8 @@ class AOR(
 
     parseinfo = {
         Parser.Pattern:
-            b"(?:({user}|{telephone_subscriber})(?::{password})?@)?"
-            "({hostport})".format(**prot.__dict__),
+            b"(?:(%(user)s|%(telephone_subscriber)s)(?::%(password)s)?@)?"
+            b"(%(hostport)s)" % abnf_name_bdict,
         Parser.Mappings:
             [("username",),
              ("host", Host)],
@@ -144,7 +146,7 @@ class AOR(
 
         host = self.host
         if not host:
-            raise prot.Incomplete("AOR %r does not have a host." % self)
+            raise Incomplete("AOR %r does not have a host." % self)
 
         uname = self.username
         if uname:
@@ -182,13 +184,13 @@ class URI(
 
     parseinfo = {
         Parser.Pattern:
-            "(?:"
-            "(sips?):"  # Most likely sip or sips uri.
-            "((?:{userinfo})?{hostport})"
-            "({uri_parameters})({headers})?|"
-            "({scheme}):"  # Else some other scheme.
-            "({hier_part}|{opaque_part})"
-            ")".format(**prot.__dict__),
+            b"(?:"
+            b"(sips?):"  # Most likely sip or sips uri.
+            b"((?:%(userinfo)s)?%(hostport)s)"
+            b"(%(uri_parameters)s)(%(headers)s)?|"
+            b"(%(scheme)s):"  # Else some other scheme.
+            b"(%(hier_part)s|%(opaque_part)s)"
+            b")" % abnf_name_bdict,
         Parser.Mappings:
             [("scheme",),
              ("aor", AOR),
@@ -209,20 +211,19 @@ class URI(
 
     def __bytes__(self):
         if not self.scheme:
-            raise prot.Incomplete("URI %r does not have a scheme." % self)
+            raise Incomplete("URI %r does not have a scheme." % self)
 
         if self.absoluteURIPart:
             auripart = bytes(self.absoluteURIPart)
             if not auripart:
-                raise prot.Incomplete(
-                    "URI %r has an empty absoluteURIPart" % self)
+                raise Incomplete("URI %r has an empty absoluteURIPart" % self)
             return b"{0.scheme}:{0.absoluteURIPart}".format(self)
 
         aorbytes = bytes(self.aor)
         if not aorbytes:
-            raise prot.Incomplete(
-                "URI %r has an empty aor." % self)
-        return "{0.scheme}:{0.aor}{0.parameters}{0.headers}".format(self)
+            raise Incomplete("URI %r has an empty aor." % self)
+        return b'%s:%s%s%s' % (
+            self.scheme, self.aor, self.parameters, self.headers)
 
 
 @TwoCompatibleThree
@@ -256,10 +257,10 @@ class DNameURI(
     uri_mapping = ("uri", URI)
     parseinfo = {
         Parser.Pattern:
-            b"(?:{LAQUOT}({addr_spec}){RAQUOT}|"
-            "({addr_spec})|"
-            "({display_name}){LAQUOT}({addr_spec}){RAQUOT})"
-            "".format(**prot.__dict__),
+            b"(?:%(LAQUOT)s(%(addr_spec)s)%(RAQUOT)s|"
+            b"(%(addr_spec)s)|"
+            b"(%(display_name)s)%(LAQUOT)s(%(addr_spec)s)%(RAQUOT)s)"
+            b"" % abnf_name_bdict,
         Parser.Mappings:
             [uri_mapping,
              uri_mapping,
@@ -269,10 +270,10 @@ class DNameURI(
 
     def __bytes__(self):
         if self.display_name and self.uri:
-            return(b"\"{self.display_name}\" <{self.uri}>".format(**locals()))
+            return(b"\"%s\" <%s>" % (self.display_name, self.uri))
 
         if self.uri:
-            return(b"<{self.uri}>".format(**locals()))
+            return(b"<%s>" % self.uri)
 
-        raise prot.Incomplete(
+        raise Incomplete(
             "DNameURI %r needs at least a URI to mean something." % self)

@@ -17,11 +17,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
+from six import (binary_type as bytes)s
 import unittest
-from six import binary_type as bytes
-from sipparty import (sip, util)
-from sipparty.sdp import (
-    AddrTypes, MediaTypes, SessionDescription, SDPIncomplete)
+from ..sdp import (AddrTypes, MediaTypes, SessionDescription, SDPIncomplete)
+from ..util import (TestCaseREMixin)
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

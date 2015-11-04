@@ -57,9 +57,12 @@ class TestUtil(SIPPartyTestCase):
             self.assertRaises(
                 TypeError, lambda: util.AsciiBytesEnum(
                     (b'cat',), aliases={'cat': b'cat'}))
-        be = util.AsciiBytesEnum((b'cat', b'dog'), aliases={b'CAT': b'cat'})
+        be = util.AsciiBytesEnum(
+            (b'cat', b'dog'), aliases={b'CAT': b'cat'})
         self.assertTrue(b'cat' in be)
         self.assertEqual(b'cat', be.cat)
+        self.assertTrue(hasattr(be, 'cat'))
+        self.assertTrue(hasattr(be, 'CAT'))
 
     def testb_globals(self):
 

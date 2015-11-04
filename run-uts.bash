@@ -59,6 +59,13 @@ killchildren () {
     done
 }
 
+# Get the python version
+pyver=$(python --version 2>&1 | sed -nE 's/Python ([0-9]+.[0-9]+.[0-9]+)/\1/p')
+pymajver=${pyver%%.*}
+pyminver=${pyver#*.}
+pypatchver=${pyminver#*.}
+pyminver=${pyminver%.*}
+
 for signal in INT TERM ABRT QUIT
 do
     trap \
@@ -67,11 +74,18 @@ do
 "trap \"echo Kill children KILL; killchildren $$ KILL\" ${signal}" $signal
 done
 
+find . -name "*.pyc" -delete
+
 if (( ${#tests} > 0 ))
 then
     python -m unittest unittest_logging "${tests[@]}" &
 else
-    python unittest_logging.py discover &
+    if (( pymajver > 2 ))
+    then
+        python -m unittest &
+    else
+        python unittest_logging.py discover &
+    fi
 fi
 
 while ! wait

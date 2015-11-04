@@ -16,23 +16,20 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import six
-from six import (binary_type as bytes, itervalues, add_metaclass)
-import random
 import logging
-import prot
 from numbers import Integral
-from sipparty import (vb, parse, ParsedPropertyOfClass)
-from sipparty.util import (
-    BytesGenner, CCPropsFor, TwoCompatibleThree)
-from sipparty.transport import SOCK_TYPE_IP_NAMES
-from sipparty.deepclass import (DeepClass, dck)
-import components
-from components import (DNameURI, Host)
-from request import Request
-import defaults
-from param import (Parameters, Param)
-from prot import Incomplete
+import random
+from six import (binary_type as bytes, itervalues, add_metaclass)
+from ..deepclass import (DeepClass, dck)
+from ..parse import (Parser, ParsedPropertyOfClass)
+from ..util import (BytesGenner, CCPropsFor, TwoCompatibleThree)
+from ..transport import SOCK_TYPE_IP_NAMES
+from ..vb import ValueBinder
+from .components import (DNameURI, Host)
+from . import defaults
+from .param import (Parameters, Param)
+from .prot import (bdict, Incomplete, protocols)
+from .request import Request
 
 log = logging.getLogger(__name__)
 
@@ -46,9 +43,9 @@ class Field(
                 dck.descriptor: ParsedPropertyOfClass(Parameters),
                 dck.gen: Parameters}
         }),
-        parse.Parser,
+        Parser,
         BytesGenner,
-        vb.ValueBinder):
+        ValueBinder):
 
     # For headers that delegate properties, these are the properties to
     # delegate. Note that these are cumulative, so subclasses declaring their
@@ -58,14 +55,14 @@ class Field(
     # parseinfo is also cumulative, so any values set here will be overridden
     # if re-set in subclasses.
     parseinfo = {
-        parse.Parser.Pattern:
+        Parser.Pattern:
             # TODO: this is very coarse and could be improved. In particular it
             # does not cope with angle quoted URIs or double quoted display
             # names which contain semicolons.
-            "([^;]+)"  # String value.
-            "(.*)"  # Parameters.
-            "",
-        parse.Parser.Mappings:
+            b"([^;]+)"  # String value.
+            b"(.*)"  # Parameters.
+            b"",
+        Parser.Mappings:
             [("value",),
              ("parameters", Parameters)]
     }
@@ -104,14 +101,14 @@ class DNameURIField(
     vb_dependencies = (("value", delegateattributes),)
 
     parseinfo = {
-        parse.Parser.Pattern:
-            "({name_addr}|{addr_spec})"  # String value.
-            "((?:;{generic_param})*)"  # Parameters.
-            "".format(**prot.__dict__),
-        parse.Parser.Mappings:
+        Parser.Pattern:
+            b"(%(name_addr)s|%(addr_spec)s)"  # String value.
+            b"((?:;%(generic_param)s)*)"  # Parameters.
+            b"" % bdict,
+        Parser.Mappings:
             [("value", DNameURI),
              ("parameters", Parameters)],
-        parse.Parser.Repeats: True
+        Parser.Repeats: True
     }
 
 
@@ -121,7 +118,7 @@ class ViaField(
                 dck.descriptor: ParsedPropertyOfClass(Host), dck.gen: Host
             },
             "protocol": {
-                dck.check: lambda pcl: pcl in prot.protocols,
+                dck.check: lambda pcl: pcl in protocols,
                 dck.gen: lambda: defaults.sipprotocol
             },
             "transport": {
@@ -146,20 +143,20 @@ class ViaField(
         ("host", ("address", "port")),)
 
     parseinfo = {
-        parse.Parser.Pattern:
-            "({protocol_name}{SLASH}{protocol_version})"
-            "{SLASH}"
-            "({transport})"
-            "{LWS}"
-            "({sent_by})"
-            "({SEMI}{generic_param})*"  # Parameters.
-            "".format(**prot.__dict__),
-        parse.Parser.Mappings:
-            [("protocol", None, lambda x: x.replace(" ", "")),
+        Parser.Pattern:
+            b"(%(protocol_name)s%(SLASH)s%(protocol_version)s)"
+            b"%(SLASH)s"
+            b"(%(transport)s)"
+            b"%(LWS)s"
+            b"(%(sent_by)s)"
+            b"(%(SEMI)s%(generic_param)s)*"  # Parameters.
+            b"" % bdict,
+        Parser.Mappings:
+            [("protocol", None, lambda x: x.replace(b" ", b"")),
              ("transport",),
-             ("host", components.Host),
+             ("host", Host),
              ("parameters", Parameters)],
-        parse.Parser.Repeats: True
+        Parser.Repeats: True
     }
 
     def bytesGen(self):

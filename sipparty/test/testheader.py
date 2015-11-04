@@ -16,14 +16,13 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import six
 import logging
+import six
 import unittest
 from setup import SIPPartyTestCase
-import sipparty
-from sipparty import sip
-from sipparty.vb import ValueBinder
-from sipparty.sip import (prot, Header)
+from ..sip import (prot, Header)
+from ..sip.components import (Host)
+from ..vb import ValueBinder
 
 log = logging.getLogger(__name__)
 
@@ -34,7 +33,7 @@ class TestHeaders(SIPPartyTestCase):
 
         # self.pushLogLevel("header", logging.DEBUG)
 
-        ch = sip.Header.contact()
+        ch = Header.contact()
 
         for nonbool in (1, 2, "string", 0):
             self.assertRaises(ValueError,
@@ -53,12 +52,12 @@ class TestHeaders(SIPPartyTestCase):
             six.binary_type(ch),
             b"Contact: <sip:bill@billland.com>")
 
-        nh = sip.Header.Parse(six.binary_type(ch))
+        nh = Header.Parse(six.binary_type(ch))
         self.assertEqual(
             six.binary_type(ch),
             b"Contact: <sip:bill@billland.com>")
         self.assertEqual(
-            ch.field.value.uri.aor.host, sip.components.Host("billland.com"))
+            ch.field.value.uri.aor.host, Host("billland.com"))
 
     def testBindingContactHeaders(self):
 
@@ -76,7 +75,7 @@ class TestHeaders(SIPPartyTestCase):
         self.assertEqual(pvb.hostaddr2, "atlanta.com")
 
     def testNumHeader(self):
-        cont_len_hdr = sip.Header.content_length()
+        cont_len_hdr = Header.content_length()
         self.assertEqual(bytes(cont_len_hdr), b"Content-Length: 0")
 
 if __name__ == "__main__":

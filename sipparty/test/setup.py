@@ -19,9 +19,10 @@ limitations under the License.
 import logging
 import unittest
 from six import iteritems
-import sipparty
+import sys
 
 log = logging.getLogger(__name__)
+sipparty = sys.modules['sipparty']
 
 
 class SIPPartyTestCase(unittest.TestCase):

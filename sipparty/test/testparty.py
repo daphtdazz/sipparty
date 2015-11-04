@@ -16,21 +16,15 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import sys
-import os
-import re
-import timeit
-import time
 import logging
-import weakref
-import unittest
-from socket import SOCK_STREAM, SOCK_DGRAM
 from setup import SIPPartyTestCase
-from sipparty import (fsm, sip, util, vb, deepclass, parse, Party)
-from sipparty.util import WaitFor
-from sipparty.sip import components, dialog
-from sipparty.sip.dialogs import SimpleCall
-from sipparty.media.sessions import SingleRTPSession
+from socket import SOCK_STREAM, SOCK_DGRAM
+import unittest
+import weakref
+from ..media.sessions import SingleRTPSession
+from ..party import (Party)
+from ..sip.dialogs import SimpleCall
+from ..util import WaitFor
 
 log = logging.getLogger()
 

@@ -20,21 +20,19 @@ from six import (binary_type as bytes, add_metaclass, iteritems)
 import re
 import logging
 from numbers import (Integral)
-from sipparty import (util, parse)
-from sipparty.util import BytesGenner
-from sipparty.vb import (KeyTransformer, ValueBinder)
-from sipparty.deepclass import (DeepClass, dck)
-from sipparty.transport import SOCK_TYPE_IP_NAMES
-from sipparty.sdp import sdpsyntax
-from body import Body
-import prot
-from prot import Incomplete
-import components
-import param
-from param import Param
-from request import Request
-from response import Response
-from header import Header
+from .. import (util,)
+from ..deepclass import (DeepClass, dck)
+from ..parse import (ParseError,)
+from ..sdp import sdpsyntax
+from ..transport import SOCK_TYPE_IP_NAMES
+from ..util import BytesGenner
+from ..vb import (KeyTransformer, ValueBinder)
+from .body import Body
+from .header import Header
+from .param import Param
+from .prot import (bdict, Incomplete)
+from .request import Request
+from .response import Response
 
 log = logging.getLogger(__name__)
 ContentLengthBinding = (
@@ -42,8 +40,11 @@ ContentLengthBinding = (
         KeyTransformer: lambda bodies: reduce(
             lambda x, y: x + y, [
                 summand
-                for lst in [0], [
-                    len(bd.content) for bd in bodies]
+                for lst in (
+                    [0], [
+                        len(bd.content) for bd in bodies
+                    ]
+                )
                 for summand in lst
             ]
         )
@@ -106,10 +107,10 @@ class Message(
             "-", "[-_]"), flags=re.IGNORECASE)
     type = util.ClassType("Message")
 
-    MethodRE = re.compile("{Method}".format(**prot.__dict__))
-    ResponseRE = re.compile("{SIP_Version}".format(**prot.__dict__))
+    MethodRE = re.compile(b"%(Method)s" % bdict)
+    ResponseRE = re.compile(b"%(SIP_Version)s" % bdict)
     HeaderSeparatorRE = re.compile(
-        "({CRLF}(?:({token}){COLON}|{CRLF}))".format(**prot.__dict__))
+        b"(%(CRLF)s(?:(%(token)s)%(COLON)s|%(CRLF)s))" % bdict)
 
     body = util.FirstListItemProxy("bodies")
 
@@ -143,7 +144,7 @@ class Message(
                 configure_bindings=False)
             log.debug("Message is of type %r", message.type)
         else:
-            raise parse.ParseError(
+            raise ParseError(
                 "Startline is not a SIP startline: %r." % (startline,))
 
         def HNameContentsGen(hcit):
@@ -205,8 +206,8 @@ class Message(
     def requestname(cls):
         if not cls.isrequest():
             raise AttributeError(
-                "{cls.__name__!r} is not a request so has no request name."
-                .format(**locals()))
+                "{cls.__name__!r} is not a request so has no request "
+                "name.".format(**locals()))
 
         return cls.__name__.replace("Message", "")
 
@@ -221,8 +222,8 @@ class Message(
 
     @classmethod
     def HeaderAttrNameFromType(cls, htype):
-        return "%s%s" % (getattr(
-            Header.types, htype).replace("-", "_"), "Header")
+        return b"%s%s" % (getattr(
+            Header.types, htype).replace(b"-", b"_"), b"Header")
 
     @classmethod
     def MakeStartline(cls):

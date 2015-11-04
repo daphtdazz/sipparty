@@ -16,29 +16,23 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import six
-import socket
 import logging
-import copy
-import re
-import time
 import socket
-from six import itervalues
-
-from sipparty import (splogging, util, vb, parse, fsm, ParsedPropertyOfClass)
-from sipparty.util import (DerivedProperty, WeakMethod)
-from sipparty.deepclass import (DeepClass, dck)
-from sipparty.sip import (
+from six import (binary_type as bytes, itervalues)
+from .deepclass import (DeepClass, dck)
+from .media import (Session, MediaSession)
+from .parse import (ParsedPropertyOfClass)
+from .sdp import sdpsyntax
+from .sip import (
     SIPTransport, Incomplete, DNameURI, AOR, URI, Host, Request, Message,
     Body, defaults)
-from sipparty.transport import (SockTypeName, IPaddress_re)
-from sipparty.sdp import sdpsyntax
-from sipparty.media import (Session, MediaSession)
+from .transport import (SockTypeName, IPaddress_re)
+from .util import (DerivedProperty, WeakMethod)
+from .vb import ValueBinder
 
 __all__ = ('Party', 'PartySubclass')
 
 log = logging.getLogger(__name__)
-bytes = six.binary_type
 
 
 class PartyException(Exception):
@@ -80,7 +74,7 @@ class Party(
             },
             "transport": {dck.gen: lambda: None}
         }),
-        vb.ValueBinder):
+        ValueBinder):
     """A party in a sip call, aka an endpoint, caller or callee etc.
     """
 

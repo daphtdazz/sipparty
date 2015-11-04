@@ -16,18 +16,18 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import sys
+import logging
 import os
 import re
-import logging
-import unittest
 import setup
 from setup import SIPPartyTestCase
 from six import binary_type as bytes, iteritems, add_metaclass
-from sipparty import (util, sip, vb, ParseError, Request)
-from sipparty.deepclass import (DeepClass, dck)
-from sipparty.sip import (prot, components)
-from sipparty.sip.components import URI
+import sys
+import unittest
+from .. import (util, sip, vb, ParseError, Request)
+from ..deepclass import (DeepClass, dck)
+from ..sip import (prot, components)
+from ..sip.components import URI
 
 log = logging.getLogger(__name__)
 # log.setLevel(logging.DETAIL)

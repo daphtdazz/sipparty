@@ -16,20 +16,18 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import logging
-import six
-import re
 import datetime
-from sipparty import (parse,)
-from sipparty.util import (FirstListItemProxy,)
-from sipparty.vb import ValueBinder
-from sipparty.deepclass import (DeepClass, dck)
-from sipparty.sdp import (SessionDescription, MediaDescription)
-from sipparty.sdp.sdpsyntax import (username_re, AddrTypes)
-from sipparty.sdp.mediatransport import MediaTransport
+import logging
+import re
+from six import (binary_type as bytes)
+from ..deepclass import (DeepClass, dck)
+from ..sdp import (SessionDescription, MediaDescription)
+from ..sdp.mediatransport import MediaTransport
+from ..sdp.sdpsyntax import (username_re, AddrTypes)
+from ..util import (FirstListItemProxy,)
+from ..vb import ValueBinder
 
 log = logging.getLogger(__name__)
-bytes = six.binary_type
 
 
 class Session(

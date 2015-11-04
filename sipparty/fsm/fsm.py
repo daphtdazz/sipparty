@@ -19,17 +19,16 @@ limitations under the License.
 """
 import six
 from six import (binary_type as bytes, iteritems, add_metaclass)
+from six.moves import queue
 import collections
 import time
 import timeit
 import threading
-import Queue
 import weakref
 import copy
 import logging
-from sipparty import util
-import retrythread
-import fsmtimer
+from . import (fsmtimer, retrythread)
+from .. import util
 
 log = logging.getLogger(__name__)
 
@@ -342,8 +341,8 @@ class FSM(object):
                 os, inp, ns, self._fsm_makeAction(act), start_tmrs, stop_tmrs,
                 strt_thrs)
 
-        self._fsm_inputQueue = Queue.Queue()
-        self._fsm_oldThreadQueue = Queue.Queue()
+        self._fsm_inputQueue = queue.Queue()
+        self._fsm_oldThreadQueue = queue.Queue()
 
         if lock:
             # We should lock access to this FSM's state as it may be called

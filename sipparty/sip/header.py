@@ -17,23 +17,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import datetime
+import logging
+from numbers import Integral
 import random
 import re
-import logging
 from six import (binary_type as bytes, add_metaclass)
-from numbers import Integral
-from sipparty import (util, vb, Parser)
-from sipparty.util import (
-    BytesGenner, attributesubclassgen, TwoCompatibleThree, ClassType, Enum,
-    sipheader, FirstListItemProxy)
-from sipparty.deepclass import (DeepClass, dck)
-from param import Parameters
-import prot
-from prot import Incomplete
-import components
-from field import (DNameURIField, ViaField)
-from request import Request
-import defaults
+from ..deepclass import (DeepClass, dck)
+from ..parse import (Parser,)
+from ..util import (
+    BytesGenner, attributesubclassgen, TwoCompatibleThree, ClassType,
+    FirstListItemProxy)
+from ..vb import (ValueBinder)
+from . import defaults
+from .field import (DNameURIField, ViaField)
+from .param import Parameters
+from .prot import (bdict, Incomplete, HeaderTypesStr)
+from .request import Request
 
 log = logging.getLogger(__name__)
 
@@ -45,7 +44,7 @@ class Header(
             "header_value": {dck.gen: lambda: None},
             "type": {dck.descriptor: lambda x: ClassType("Header")}
             }),
-        Parser, BytesGenner, vb.ValueBinder):
+        Parser, BytesGenner, ValueBinder):
     """A SIP header.
 
     Each type of SIP header has its own subclass, and so generally the Header
@@ -62,31 +61,20 @@ class Header(
 
     # The `types` class attribute is used by the attributesubclassgen
     # metaclass to know what types of subclass may be created.
-    types = Enum(
-        ("Accept", "Accept-Encoding", "Accept-Language", "Alert-Info", "Allow",
-         "Authentication-Info", "Authorization", "Call-ID", "Call-Info",
-         "Contact", "Content-Disposition", "Content-Encoding",
-         "Content-Language", "Content-Length", "Content-Type", "CSeq", "Date",
-         "Error-Info", "Expires", "From", "In-Reply-To", "Max-Forwards",
-         "Min-Expires", "MIME-Version", "Organization", "Priority",
-         "Proxy-Authenticate", "Proxy-Authorization", "Proxy-Require",
-         "Record-Route", "Reply-To", "Require", "Retry-To", "Route", "Server",
-         "Subject", "Supported", "Timestamp", "To", "Unsupported",
-         "User-Agent", "Via", "Warning", "WWW-Authenticate"),
-        normalize=sipheader)
+    types = HeaderTypesStr
 
     parseinfo = {
         Parser.Pattern:
             # The type. Checked in the constructor whether it's a valid header
             # or not.
-            "({header_value})"  # Everything else to be parsed in parsecust().
-            "".format(**prot.__dict__),
+            b"(%(header_value)s)"  # Everything else to be parsed in parsecust().
+            b"" % bdict,
         Parser.Mappings:
             [("header_value",)]
     }
 
     def _hdr_prepend(self):
-        return bytes(self.type) + ": "
+        return bytes(self.type) + b": "
 
 
 class FieldsBasedHeader(
@@ -198,8 +186,8 @@ class ContactHeader(
         Parser.Pattern:
             # The type. Checked in the constructor whether it's a valid header
             # or not.
-            "(?:({STAR})|({header_value}))"
-            "".format(**prot.__dict__),
+            b"(?:(%(STAR)s)|(%(header_value)s))"
+            b"" % bdict,
         Parser.Mappings:
             [("isStar", bool),
              ("header_value",)]
@@ -242,7 +230,7 @@ class Call_IdHeader(
 
     parseinfo = {
         Parser.Pattern:
-            "(.*)$",  # No parameters.
+            b"(.*)$",  # No parameters.
         Parser.Mappings:
             [("key",)]
     }
@@ -258,10 +246,14 @@ class Call_IdHeader(
 
         dt = datetime.datetime.now()
         keydate = (
-            "{dt.year:04}{dt.month:02}{dt.day:02}{dt.hour:02}{dt.minute:02}"
-            "{dt.second:02}".format(dt=dt))
+            b"%(year)04d%(month)02d%(day)02d%(hour)02d%(minute)02d"
+            b"%(second)02d" % {
+                key: getattr(dt, key) for key in (
+                    'year', 'month', 'day', 'hour', 'minute', 'second'
+                )
+            })
 
-        return b"{keyval:06x}-{keydate}".format(**locals())
+        return b"%06x-%s" % (keyval, keydate)
 
     @property
     def value(self):
@@ -296,9 +288,9 @@ class CseqHeader(
 
     parseinfo = {
         Parser.Pattern:
-            "(\d+)"
-            " "
-            "([\w_-]+)$",  # No parameters.
+            b"(\d+)"
+            b" "
+            b"([\w_-]+)$",  # No parameters.
         Parser.Mappings:
             [("number", int),
              ("reqtype", None, lambda x: getattr(Request.types, x))]
@@ -324,7 +316,7 @@ class NumberHeader(
         Header):
     parseinfo = {
         Parser.Pattern:
-            "(\d+)$",  # No parameters.
+            b"(\d+)$",  # No parameters.
         Parser.Mappings:
             [("number", int)]
     }
@@ -355,8 +347,8 @@ class Content_TypeHeader(
 
     parseinfo = {
         Parser.Pattern:
-            "({m_type}{SLASH}{m_subtype})((?:{SEMI}{m_parameter})*)"
-            "".format(**prot.__dict__),  # No parameters.
+            b"(%(m_type)s%(SLASH)s%(m_subtype)s)((?:%(SEMI)s%(m_parameter)s)*)"
+            b"" % bdict,  # No parameters.
         Parser.Mappings:
             [("content_type",),
              ("parameters", Parameters)]

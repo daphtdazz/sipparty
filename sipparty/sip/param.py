@@ -16,19 +16,20 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from six import (itervalues, binary_type as bytes, add_metaclass)
-import random
 import logging
-from sipparty import (vb, Parser)
-from sipparty.util import (
-    BytesGenner, attributesubclassgen, TwoCompatibleThree, Enum, ClassType,
-    DerivedProperty)
-import prot
+import random
+from six import (itervalues, binary_type as bytes, add_metaclass)
+from ..parse import (Parser)
+from ..util import (
+    BytesGenner, attributesubclassgen, TwoCompatibleThree, AsciiBytesEnum,
+    ClassType, DerivedProperty)
+from ..vb import ValueBinder
+from .prot import (BranchMagicCookie, Incomplete)
 
 log = logging.getLogger(__name__)
 
 
-class Parameters(Parser, BytesGenner, vb.ValueBinder, dict):
+class Parameters(Parser, BytesGenner, ValueBinder, dict):
     """Class representing a list of parameters on a header or other object.
     """
     parseinfo = {
@@ -80,15 +81,15 @@ class Parameters(Parser, BytesGenner, vb.ValueBinder, dict):
 
 @add_metaclass(attributesubclassgen)
 @TwoCompatibleThree
-class Param(Parser, BytesGenner, vb.ValueBinder):
+class Param(Parser, BytesGenner, ValueBinder):
 
-    types = Enum(("branch", "tag",), normalize=lambda x: x.lower())
+    types = AsciiBytesEnum((b"branch", b"tag",), normalize=lambda x: x.lower())
 
     parseinfo = {
         Parser.Pattern:
-            "\s*([^\s=]+)"
-            "\s*=\s*"
-            "(.+)",
+            b"\s*([^\s=]+)"
+            b"\s*=\s*"
+            b"(.+)",
         Parser.Constructor:
             (1, lambda x: getattr(Param, x)()),
         Parser.Mappings:
@@ -163,14 +164,14 @@ class BranchParam(Param):
         try:
             str_to_hash = b"{0}-{1}".format(
                 bytes(self.startline), self.branch_num)
-        except prot.Incomplete:
+        except Incomplete:
             # So part of us is not complete. Return None.
             return None
 
         the_hash = hash(str_to_hash)
         if the_hash < 0:
             the_hash = - the_hash
-        nv = b"{0}{1:x}".format(prot.BranchMagicCookie, the_hash)
+        nv = b"{0}{1:x}".format(BranchMagicCookie, the_hash)
         log.debug("New %r value %r", self.__class__.__name__, nv)
         return nv
 
@@ -191,7 +192,7 @@ class TagParam(Param):
 
         # RFC 3261 asks for 32 bits of randomness. Expect random is good
         # enough.
-        value = "{0:08x}".format(random.randint(0, 2**32 - 1))
+        value = b"{0:08x}" % (random.randint(0, 2**32 - 1),)
 
         # The TagParam needs to learn its value and stick with it.
         self._prm_value = value

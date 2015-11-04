@@ -17,16 +17,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-from sipparty.parse import ParseError
-from sipparty.transport import (Transport, SockTypeFromName)
-from sipparty.util import (DerivedProperty, WeakMethod)
 from six import (binary_type as bytes, itervalues)
 import socket
 from weakref import (WeakValueDictionary, ref as weakref)
-from components import Host
-from message import Message
-import prot
-from transform import (TransformKeys,)
+from ..parse import ParseError
+from ..transport import (Transport, SockTypeFromName)
+from ..util import (DerivedProperty, WeakMethod)
+from . import prot
+from .components import Host
+from .message import Message
+from .transform import (TransformKeys,)
 
 log = logging.getLogger(__name__)
 prot_log = logging.getLogger("messages")

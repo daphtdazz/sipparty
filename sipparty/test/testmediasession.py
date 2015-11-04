@@ -17,17 +17,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-from six import (binary_type as bytes)
 from setup import SIPPartyTestCase
-from sipparty import (util, vb, sip)
-from sipparty.sdp import SDPIncomplete
-from sipparty.sdp.sdpsyntax import (MediaTypes, AddrTypes, NetTypes)
-from sipparty.media import Session
+from six import (binary_type as bytes)
+from ..media import Session
+from ..sdp import SDPIncomplete
+from ..sdp.sdpsyntax import (MediaTypes, AddrTypes, NetTypes)
+from ..util import TestCaseREMixins
 
 log = logging.getLogger(__name__)
 
 
-class TestSession(util.TestCaseREMixin, SIPPartyTestCase):
+class TestSession(TestCaseREMixin, SIPPartyTestCase):
 
     def testBasicSession(self):
 

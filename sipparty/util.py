@@ -132,15 +132,15 @@ class attributesubclassgen(type):
 def sipheader(key):
     """Normalizer for SIP headers, which is almost title but not quite."""
     nk = key.title()
-    nk = nk.replace(b"_", b"-")
-    if nk == b"Call-Id":
-        nk = b"Call-ID"
-    elif nk == b"Www-Authenticate":
-        nk = b"WWW-Authenticate"
-    elif nk == b"Cseq":
-        nk = b"CSeq"
-    elif nk == b"Mime-Version":
-        nk = b"MIME-Version"
+    nk = nk.replace("_", "-")
+    if nk == "Call-Id":
+        nk = "Call-ID"
+    elif nk == "Www-Authenticate":
+        nk = "WWW-Authenticate"
+    elif nk == "Cseq":
+        nk = "CSeq"
+    elif nk == "Mime-Version":
+        nk = "MIME-Version"
 
     return nk
 
@@ -214,9 +214,9 @@ class AsciiBytesEnum(Enum):
     def __init__(self, vals=None, normalize=None, aliases=None):
         def bad_val_type(val):
             raise TypeError(
-                '%r instance cannot be used in %r instance as it is not a '
+                '%r instance %r cannot be used in %r instance as it is not a '
                 'bytes-like type.' % (
-                    val.__class__.__name__, self.__class__.__name__))
+                    val.__class__.__name__, val, self.__class__.__name__))
 
         if vals:
             for vv in [

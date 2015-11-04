@@ -16,7 +16,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import six
+from six import (binary_type as bytes, iteritems, PY2)
 import socket
 import threading
 import time
@@ -26,39 +26,41 @@ import select
 from socket import (SOCK_STREAM, SOCK_DGRAM, AF_INET, AF_INET6)
 from numbers import Integral
 import re
-from sipparty import (fsm, FSM, RetryThread)
-from sipparty.util import (
-    DerivedProperty, WeakMethod, Singleton, TwoCompatibleThree, Enum)
+from .fsm import (FSM, RetryThread)
+from .util import (
+    DerivedProperty, WeakMethod, Singleton, TwoCompatibleThree, Enum,
+    bglobals_g, AsciiBytesEnum)
+
+
+def bglobals():
+    return bglobals_g(globals())
 
 SOCK_TYPES = Enum((SOCK_STREAM, SOCK_DGRAM))
-SOCK_TYPES_NAMES = Enum(("SOCK_STREAM", "SOCK_DGRAM"))
-SOCK_TYPE_IP_NAMES = Enum(("TCP", "UDP"))
+SOCK_TYPES_NAMES = AsciiBytesEnum((b"SOCK_STREAM", b"SOCK_DGRAM"))
+SOCK_TYPE_IP_NAMES = AsciiBytesEnum((b"TCP", b"UDP"))
 SOCK_FAMILIES = Enum((AF_INET, AF_INET6))
-SOCK_FAMILY_NAMES = Enum(("IPv4", "IPv6"))
+SOCK_FAMILY_NAMES = AsciiBytesEnum((b"IPv4", b"IPv6"))
 log = logging.getLogger(__name__)
 prot_log = logging.getLogger("messages")
-bytes = six.binary_type
-itervalues = six.itervalues
 
 # RFC 2373 IPv6 address format definitions.
 digitrange = b"0-9"
-DIGIT = b"[{digitrange}]".format(**locals())
-hexrange = b"{digitrange}a-fA-F".format(**locals())
-HEXDIG = b"[{hexrange}]".format(**locals())
-hex4 = b"{HEXDIG}{{1,4}}".format(**locals())
+DIGIT = b"[%(digitrange)s]" % bglobals()
+hexrange = b"%(digitrange)sa-fA-F" % bglobals()
+HEXDIG = b"[%(hexrange)s]" % bglobals()
+hex4 = b"%(HEXDIG)s{1,4}" % bglobals()
 # Surely IPv6 address length is limited?
-hexseq = b"{hex4}(?::{hex4})*".format(**locals())
-hexpart = b"(?:{hexseq}|{hexseq}::(?:{hexseq})?|::(?:{hexseq})?)".format(
-    **locals())
-IPv4address = b"{DIGIT}{{1,3}}(?:[.]{DIGIT}{{1,3}}){{3}}".format(**locals())
-IPv6address = b"{hexpart}(?::{IPv4address})?".format(**locals())
-IPaddress = "(?:{IPv4address}|{IPv6address})".format(**locals())
-port = b"{DIGIT}+".format(**locals())
+hexseq = b"%(hex4)s(?::%(hex4)s)*" % bglobals()
+hexpart = b"(?:%(hexseq)s|%(hexseq)s::(?:%(hexseq)s)?|::(?:%(hexseq)s)?)" % bglobals()
+IPv4address = b"%(DIGIT)s{1,3}(?:[.]%(DIGIT)s{1,3}){3}" % bglobals()
+IPv6address = b"%(hexpart)s(?::%(IPv4address)s)?" % bglobals()
+IPaddress = b"(?:%(IPv4address)s|%(IPv6address)s)" % bglobals()
+port = b"%(DIGIT)s+" % bglobals()
 
 # Some pre-compiled regular expression versions.
-IPv4address_re = re.compile(IPv4address + '$')
-IPv6address_re = re.compile(IPv6address + '$')
-IPaddress_re = re.compile(IPaddress + '$')
+IPv4address_re = re.compile(IPv4address + b'$')
+IPv6address_re = re.compile(IPv6address + b'$')
+IPaddress_re = re.compile(IPaddress + b'$')
 
 
 class TransportException(Exception):
@@ -178,8 +180,7 @@ def GetBoundSocket(family, socktype, address, port_filter=None):
 
     if socketError is not None:
         raise BadNetwork(
-            "Couldn't bind to address {address}".format(
-                **locals()),
+            "Couldn't bind to address %(address)s" % bglobals(),
             socketError)
 
     log.debug("Socket bound to %r type %r", ssocket.getsockname(), _family)

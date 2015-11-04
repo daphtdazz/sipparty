@@ -21,13 +21,13 @@ import logging
 import re
 import datetime
 from numbers import Integral
-from sipparty import (util, parse)
-from sipparty.vb import (KeyTransformer, KeyIgnoredExceptions, ValueBinder)
-from sipparty.deepclass import (DeepClass, dck)
-import sdpsyntax
-from sdpsyntax import (
+from .. import (util, parse)
+from ..vb import (KeyTransformer, KeyIgnoredExceptions, ValueBinder)
+from ..deepclass import (DeepClass, dck)
+from . import sdpsyntax
+from .sdpsyntax import (
     NetTypes, AddrTypes, LineTypes, MediaTypes, username_re, fmt_space_re,
-    AddressToSDPAddrType)
+    AddressToSDPAddrType, bdict)
 
 log = logging.getLogger(__name__)
 AddrAddrTypeBinding = (
@@ -80,8 +80,8 @@ class ConnectionDescription(
 
     parseinfo = {
         parse.Parser.Pattern:
-            b"({nettype}){SP}({addrtype}){SP}({address})"
-            "".format(**sdpsyntax.__dict__),
+            b"(%(nettype)s)%(SP)s(%(addrtype)s)%(SP)s(%(address)s)"
+            b"" % bdict,
         parse.Parser.Mappings:
             [("netType",),
              ("addressType",),
@@ -99,7 +99,7 @@ class ConnectionDescription(
                 "Connection description is not complete: %r." % self)
         yield self.Line(
             LineTypes.connectioninfo,
-            "%s %s %s" % (self.netType, self.addressType, self.address))
+            b"%s %s %s" % (self.netType, self.addressType, self.address))
 
 
 class TimeDescription(
@@ -115,11 +115,11 @@ class TimeDescription(
 
     parseinfo = {
         parse.Parser.Pattern:
-            b"{LineTypes.time}=({start_time}){SP}({stop_time})"
+            b"%(LineTypes.t)s=(%(start_time)s)%(SP)s(%(stop_time)s)"
             # TODO: Don't ignore repeats and timezone.
-            "(?:{eol}{repeat_fields})*{eol}"
-            "(?:{zone_adjustments}{eol})?"
-            "".format(**sdpsyntax.__dict__),
+            b"(?:%(eol)s%(repeat_fields)s)*%(eol)s"
+            b"(?:%(zone_adjustments)s%(eol)s)?"
+            b"" % bdict,
         parse.Parser.Mappings:
             [("startTime", int),
              ("stopTime", int)]
@@ -127,7 +127,7 @@ class TimeDescription(
 
     # TODO: Should have repeats as well for completeness.
     def lineGen(self):
-        yield self.Line(LineTypes.time, "%d %d" % (
+        yield self.Line(LineTypes.time, b"%d %d" % (
             self.startTime, self.endTime))
 
 
@@ -153,14 +153,14 @@ class MediaDescription(
     #
     parseinfo = {
         parse.Parser.Pattern:
-            b"{LineTypes.media}=({media}){SP}({port})(?:/{integer})?{SP}"
-            "({trans_proto}){SP}({fmt}(?:{SP}{fmt})*){eol}"
-            "(?:{LineTypes.info}={text}{eol})?"
-            "(?:{LineTypes.connectioninfo}=({text}){eol})?"
-            "(?:{LineTypes.bandwidthinfo}={text}{eol})*"
-            "(?:{LineTypes.encryptionkey}={text}{eol})?"
-            "(?:{LineTypes.attribute}={text}{eol})*"
-            "".format(**sdpsyntax.__dict__),
+            b"%(LineTypes.m)s=(%(media)s)%(SP)s(%(port)s)(?:/%(integer)s)?%(SP)s"
+            b"(%(trans_proto)s)%(SP)s(%(fmt)s(?:%(SP)s%(fmt)s)*)%(eol)s"
+            b"(?:%(LineTypes.i)s=%(text)s%(eol)s)?"
+            b"(?:%(LineTypes.c)s=(%(text)s)%(eol)s)?"
+            b"(?:%(LineTypes.b)s=%(text)s%(eol)s)*"
+            b"(?:%(LineTypes.k)s=%(text)s%(eol)s)?"
+            b"(?:%(LineTypes.a)s=%(text)s%(eol)s)*"
+            b"" % bdict,
         parse.Parser.Mappings:
             [("mediaType",),
              ("port", int),
@@ -194,7 +194,7 @@ class MediaDescription(
             raise SDPIncomplete(
                 "Media description has no format numbers.")
         return self.Line(
-            LineTypes.media, "%s %s %s %s" % (
+            LineTypes.media, b"%s %s %s %s" % (
                 self.mediaType, self.port, self.transProto, fmts))
 
     def lineGen(self):
@@ -252,28 +252,28 @@ class SessionDescription(
     parseinfo = {
         parse.Parser.Pattern:
             # Version
-            "{LineTypes.version}={supportedversions}{eol}"
+            b"%(LineTypes.v)s=%(supportedversions)s%(eol)s"
             # Origin
-            "{LineTypes.origin}=({username}){SP}({sessionid}){SP}"
-            "({sessionversion}){SP}({nettype}){SP}({addrtype}){SP}"
-            "({address}){eol}"
+            b"%(LineTypes.o)s=(%(username)s)%(SP)s(%(sessionid)s)%(SP)s"
+            b"(%(sessionversion)s)%(SP)s(%(nettype)s)%(SP)s(%(addrtype)s)%(SP)s"
+            b"(%(address)s)%(eol)s"
             # Session name, info, uri, email, phone.
-            "{LineTypes.sessionname}=({text}){eol}"
-            "(?:{LineTypes.info}=({text}){eol})?"
-            "(?:{LineTypes.uri}=({text}){eol})?"  # TODO: URI.
-            "(?:{LineTypes.email}=({text}){eol})*"  # TODO: email.
-            "(?:{LineTypes.phone}=({text}){eol})*"  # TODO: phone.
+            b"%(LineTypes.s)s=(%(text)s)%(eol)s"
+            b"(?:%(LineTypes.i)s=(%(text)s)%(eol)s)?"
+            b"(?:%(LineTypes.u)s=(%(text)s)%(eol)s)?"  # TODO: URI.
+            b"(?:%(LineTypes.e)s=(%(text)s)%(eol)s)*"  # TODO: email.
+            b"(?:%(LineTypes.p)s=(%(text)s)%(eol)s)*"  # TODO: phone.
             # Connection info.
-            "({LineTypes.connectioninfo}={text}{eol})?"
+            b"(%(LineTypes.c)s=%(text)s%(eol)s)?"
             # Bandwidth.
-            "(?:{LineTypes.bandwidthinfo}=({text}){eol})?"
+            b"(?:%(LineTypes.b)s=(%(text)s)%(eol)s)?"
             # Time.
-            "({time_fields})"
+            b"(%(time_fields)s)"
             # TODO: don't ignore key and attributes.
-            "(?:{LineTypes.encryptionkey}={text}{eol})?"
-            "(?:{LineTypes.attribute}={text}{eol})*"
-            "({media_fields})"
-            "".format(**sdpsyntax.__dict__),
+            b"(?:%(LineTypes.k)s=%(text)s%(eol)s)?"
+            b"(?:%(LineTypes.a)s=%(text)s%(eol)s)*"
+            b"(%(media_fields)s)"
+            b"" % bdict,
         parse.Parser.Mappings:
             [("username",),
              ("sessionID", int),

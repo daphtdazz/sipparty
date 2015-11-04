@@ -17,12 +17,12 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import logging
-import inspect
 from collections import Callable
+import inspect
+import logging
 from six import (iteritems, iterkeys)
-from sipparty.util import Enum, DerivedProperty
-from sipparty.vb import ValueBinder
+from .util import (Enum, DerivedProperty)
+from .vb import ValueBinder
 
 log = logging.getLogger(__name__)
 DeepClassKeys = Enum(("check", "get", "set", "gen", "descriptor",))

@@ -16,26 +16,19 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import sys
+import logging
 import os
 import re
-import time
-import timeit
-import logging
+import sys
 import unittest
-import six
-from sipparty import (util, sip, transport)
-from sipparty.fsm import (retrythread, fsm)
-from sipparty.sip import (siptransport, field)
-from sipparty.sip.components import AOR
+from .. import (sip, transport)
+from ..fsm import (retrythread, fsm)
+from ..sip import (siptransport, field)
+from ..sip.components import AOR
+from ..sip.siptransport import SIPTransport
+from ..util import WaitFor
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
-    log = logging.getLogger()
-else:
-    log = logging.getLogger(__name__)
-
-SIPTransport = siptransport.SIPTransport
+log = logging.getLogger(__name__)
 
 
 class TestSIPTransport(unittest.TestCase):
@@ -72,7 +65,7 @@ class TestSIPTransport(unittest.TestCase):
         tp.addDialogHandlerForAOR(msg.ToHeader.aor, newDialogHandler)
         tp.sendMessage(msg, laddr)
 
-        util.WaitFor(lambda: rcvd_message is not None, 1)
+        WaitFor(lambda: rcvd_message is not None, 1)
 
 if __name__ == "__main__":
     unittest.main()

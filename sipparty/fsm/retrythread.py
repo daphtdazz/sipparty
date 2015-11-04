@@ -31,14 +31,13 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import time
-import threading
-import socket
-import select
-import sys
 import logging
-
-from sipparty import util
+import select
+import socket
+import sys
+import threading
+import time
+from ..util import (Clock, OnlyWhenLocked)
 
 log = logging.getLogger(__name__)
 
@@ -193,7 +192,7 @@ class RetryThread(threading.Thread):
                     continue
 
                 next = self._rthr_retryTimes[0]
-                now = util.Clock()
+                now = Clock()
 
                 if next > now:
                     wait = next - now
@@ -226,7 +225,7 @@ class RetryThread(threading.Thread):
 
         log.debug("%s thread exiting.", self)
 
-    @util.OnlyWhenLocked
+    @OnlyWhenLocked
     def addInputFD(self, fd, action):
         """Add file descriptor `fd` as a source to wait for data from, with
         `action` to be called when there is data available from `fd`.
@@ -240,7 +239,7 @@ class RetryThread(threading.Thread):
         self._rthr_fdSources[newinputint] = newinput
         self._rthr_triggerSpin()
 
-    @util.OnlyWhenLocked
+    @OnlyWhenLocked
     def rmInputFD(self, fd):
         fd = int(_FDSource(fd, None))
         if fd not in self._rthr_fdSources:
