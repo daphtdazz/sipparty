@@ -806,10 +806,7 @@ def bglobals_g(gbls):
     if PY2:
         abytes = bytes
     else:
-        abytes = lambda x: (
-            x if isinstance(x, bytes) else
-            bytes(x, encoding='ascii') if isinstance(x, str) else
-            bytes(x))
+        abytes = lambda x: bytes(x, encoding='ascii')
 
     for key, val in iteritems(gbls):
         if key.startswith('_'):
@@ -817,11 +814,16 @@ def bglobals_g(gbls):
 
         if isinstance(val, bytes):
             bglobals[abytes(key)] = val
+
+        elif isinstance(val, AsciiBytesEnum):
+            for enum_val in val:
+                bglobals[b'%s.%s' % (abytes(key), enum_val)] = enum_val
+
         elif isinstance(val, Enum):
             for enum_val in val:
-                bglobals[b'%s.%s' % (abytes(key), abytes(enum_val))] = enum_val
-            for al in ([] if val._en_aliases is None else val._en_aliases):
-                bglobals[b'%s.%s' % (
-                    abytes(key), abytes(al))] = getattr(val, al)
+                bglobals['%s.%s' % (key, enum_val)] = enum_val
+
+        else:
+            bglobals[key] = val
 
     return bglobals

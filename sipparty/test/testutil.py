@@ -60,3 +60,20 @@ class TestUtil(SIPPartyTestCase):
         be = util.AsciiBytesEnum((b'cat', b'dog'), aliases={b'CAT': b'cat'})
         self.assertTrue(b'cat' in be)
         self.assertEqual(b'cat', be.cat)
+
+    def testb_globals(self):
+
+        a_ascii_enum = util.AsciiBytesEnum((b'a', b'c'))
+        a_normal_enum = util.Enum(('a', 'b'))
+        a_normal_bytes_var = b'bytes'
+        a_normal_string_var = 'string'
+
+        gdict = util.bglobals_g(locals())
+        self.assertTrue(b'a_ascii_enum.a' in gdict, gdict)
+        self.assertTrue(b'a_ascii_enum.c' in gdict, gdict)
+        self.assertTrue('a_normal_enum.a' in gdict, gdict)
+        self.assertTrue('a_normal_enum.b' in gdict, gdict)
+        # Bytes values have their keys converted to bytes also.
+        self.assertTrue(b'a_normal_bytes_var' in gdict, gdict)
+        self.assertTrue('a_normal_string_var' in gdict, gdict)
+
