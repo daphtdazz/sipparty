@@ -192,7 +192,7 @@ class TagParam(Param):
 
         # RFC 3261 asks for 32 bits of randomness. Expect random is good
         # enough.
-        value = b"{0:08x}" % (random.randint(0, 2**32 - 1),)
+        value = b"%08x" % (random.randint(0, 2**32 - 1),)
 
         # The TagParam needs to learn its value and stick with it.
         self._prm_value = value
