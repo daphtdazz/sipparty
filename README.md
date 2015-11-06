@@ -1,7 +1,7 @@
-? sphinx for documentation?
-http://sphinx-doc.org/domains.html#info-field-lists
-
 # sip-party
+
+.. image:: https://img.shields.io/travis/daphtdazz/sipparty/develop.svg
+           :target: http://travis-ci.org/daphtdazz/sipparty
 
 ## Layout
 
