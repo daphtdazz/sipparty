@@ -1,7 +1,4 @@
-# sip-party
-
-.. image:: https://img.shields.io/travis/daphtdazz/sipparty/develop.svg
-           :target: http://travis-ci.org/daphtdazz/sipparty
+# sipparty <a href="http://travis-ci.org/daphtdazz/sipparty">![Travis status](https://img.shields.io/travis/daphtdazz/sipparty.svg?branch=master)</a> #
 
 ## Layout
 
