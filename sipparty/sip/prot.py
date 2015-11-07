@@ -86,7 +86,7 @@ unreservedrange = b"%(alphanumrange)s%(markrange)s" % bglobals()
 unreserved = b"[%(unreservedrange)s]" % bglobals()
 reservedrange = b";/?:@&=+$,"
 reserved = b"[%(reservedrange)s]" % bglobals()
-escaped = b"%%(HEXDIG)s%(HEXDIG)s" % bglobals()
+escaped = b"%%%(HEXDIG)s%(HEXDIG)s" % bglobals()
 user_unreservedrange = b"&=+$,;?/"
 user_unreserved = b"[%(user_unreservedrange)s]" % bglobals()
 
@@ -238,7 +238,7 @@ m_parameter = b"%(token)s=(?:%(quoted_string)s|%(token)s)" % bglobals()
 
 RequestTypes = AsciiBytesEnum((
     b"ACK", b"BYE", b"CANCEL", b"INVITE", b"OPTIONS", b"REGISTER"),
-    normalize=lambda x: bytes(x).upper())
+    normalize=lambda x: x.upper())
 
 RequestTypesStr = str_enumify(RequestTypes)
 
@@ -255,8 +255,6 @@ HeaderTypes = AsciiBytesEnum(
      b"Timestamp", b"To", b"Unsupported", b"User-Agent", b"Via",
      b"Warning", b"WWW-Authenticate"),
     normalize=sipheader)
-
-HeaderTypesStr = str_enumify(HeaderTypes)
 
 ResponseCodeMessages = {
     1: b"Unknown Trying Response",

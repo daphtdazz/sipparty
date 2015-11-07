@@ -131,16 +131,27 @@ class attributesubclassgen(type):
 
 def sipheader(key):
     """Normalizer for SIP headers, which is almost title but not quite."""
+    global sipheaderreplacements
+    if 'sipheaderreplacements' not in globals():
+        sipheaderreplacements = {
+            b'Call-Id': b'Call-ID',
+            b'Www-Authenticate': b'WWW-Authenticate',
+            b'Cseq': b'CSeq',
+            b'Mime-Version': b'MIME-Version'
+        }
+        if not PY2:
+            for wrong, right in iteritems(dict(sipheaderreplacements)):
+                sipheaderreplacements[str(wrong, encoding='ascii')] = str(
+                    right, encoding='ascii')
+
     nk = key.title()
-    nk = nk.replace("_", "-")
-    if nk == "Call-Id":
-        nk = "Call-ID"
-    elif nk == "Www-Authenticate":
-        nk = "WWW-Authenticate"
-    elif nk == "Cseq":
-        nk = "CSeq"
-    elif nk == "Mime-Version":
-        nk = "MIME-Version"
+    if isinstance(key, str):
+        nk = nk.replace("_", "-")
+    else:
+        nk = nk.replace(b'_', b'-')
+
+    if nk in sipheaderreplacements:
+        nk = sipheaderreplacements[nk]
 
     return nk
 

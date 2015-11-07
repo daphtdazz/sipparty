@@ -16,7 +16,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from six import (binary_type as bytes, add_metaclass, iteritems)
+from six import (add_metaclass, binary_type as bytes, iteritems, next)
 import re
 import logging
 from numbers import (Integral)
@@ -125,7 +125,7 @@ class Message(
         lines = cls.HeaderSeparatorRE.split(string)
         log.detail("Header split: %r", lines)
         line_iter = iter(lines)
-        startline = line_iter.next()
+        startline = next(line_iter)
         used_bytes = len(startline)
 
         if cls.ResponseRE.match(startline):
@@ -150,11 +150,11 @@ class Message(
         def HNameContentsGen(hcit):
             try:
                 while True:
-                    hnamebytes = len(hcit.next())
-                    hname = hcit.next()
+                    hnamebytes = len(next(hcit))
+                    hname = next(hcit)
                     if hname is None:
                         return
-                    hcontents = hcit.next()
+                    hcontents = next(hcit)
                     nbytes = hnamebytes + len(hcontents)
                     yield (hname, hcontents, nbytes)
             except StopIteration:
@@ -222,8 +222,9 @@ class Message(
 
     @classmethod
     def HeaderAttrNameFromType(cls, htype):
-        return b"%s%s" % (getattr(
-            Header.types, htype).replace(b"-", b"_"), b"Header")
+        log.detail('Get header attribute name from type %r', htype)
+        htype = getattr(Header.types, htype)
+        return "%s%s" % (htype.replace("-", "_"), "Header")
 
     @classmethod
     def MakeStartline(cls):

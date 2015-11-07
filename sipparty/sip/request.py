@@ -25,7 +25,7 @@ from ..util import (attributesubclassgen, ClassType, TwoCompatibleThree)
 from ..vb import ValueBinder
 from . import defaults
 from .components import (URI)
-from .prot import (bdict, protocols, RequestTypesStr)
+from .prot import (bdict, protocols, RequestTypes)
 
 log = logging.getLogger(__name__)
 bytes = six.binary_type
@@ -51,7 +51,7 @@ class Request(
         ("uri", ("aor", "username", "host", "address", "port")),
     )
 
-    types = RequestTypesStr
+    types = RequestTypes.enum()
 
     # Parse description.
     parseinfo = {

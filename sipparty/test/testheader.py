@@ -17,12 +17,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-import six
-import unittest
-from setup import SIPPartyTestCase
+from six import (binary_type as bytes)
 from ..sip import (prot, Header)
 from ..sip.components import (Host)
 from ..vb import ValueBinder
+from .setup import SIPPartyTestCase
 
 log = logging.getLogger(__name__)
 
@@ -41,23 +40,23 @@ class TestHeaders(SIPPartyTestCase):
 
         ch.isStar = True
 
-        self.assertEqual(six.binary_type(ch), b"Contact: *")
+        self.assertEqual(bytes(ch), b"Contact: *")
 
         ch.isStar = False
-        self.assertRaises(prot.Incomplete, lambda: six.binary_type(ch))
+        self.assertRaises(prot.Incomplete, lambda: bytes(ch))
         ch.field.username = b"bill"
         ch.field.host = b"billland.com"
 
         self.assertEqual(
-            six.binary_type(ch),
+            bytes(ch),
             b"Contact: <sip:bill@billland.com>")
 
-        nh = Header.Parse(six.binary_type(ch))
+        nh = Header.Parse(bytes(ch))
         self.assertEqual(
-            six.binary_type(ch),
+            bytes(ch),
             b"Contact: <sip:bill@billland.com>")
         self.assertEqual(
-            ch.field.value.uri.aor.host, Host("billland.com"))
+            ch.field.value.uri.aor.host, Host(b"billland.com"))
 
     def testBindingContactHeaders(self):
 
@@ -77,6 +76,3 @@ class TestHeaders(SIPPartyTestCase):
     def testNumHeader(self):
         cont_len_hdr = Header.content_length()
         self.assertEqual(bytes(cont_len_hdr), b"Content-Length: 0")
-
-if __name__ == "__main__":
-    unittest.main()

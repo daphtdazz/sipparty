@@ -16,22 +16,23 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import datetime
+from datetime import datetime
+from collections import OrderedDict
 import logging
 from numbers import Integral
-import random
+from random import randint
 import re
-from six import (binary_type as bytes, add_metaclass)
+from six import (add_metaclass, binary_type as bytes, PY2)
 from ..deepclass import (DeepClass, dck)
 from ..parse import (Parser,)
 from ..util import (
     BytesGenner, attributesubclassgen, TwoCompatibleThree, ClassType,
     FirstListItemProxy)
-from ..vb import (ValueBinder)
+from ..vb import ValueBinder
 from . import defaults
 from .field import (DNameURIField, ViaField)
 from .param import Parameters
-from .prot import (bdict, Incomplete, HeaderTypesStr)
+from .prot import (bdict, Incomplete, HeaderTypes)
 from .request import Request
 
 log = logging.getLogger(__name__)
@@ -61,7 +62,7 @@ class Header(
 
     # The `types` class attribute is used by the attributesubclassgen
     # metaclass to know what types of subclass may be created.
-    types = HeaderTypesStr
+    types = HeaderTypes.enum()
 
     parseinfo = {
         Parser.Pattern:
@@ -74,16 +75,20 @@ class Header(
     }
 
     def _hdr_prepend(self):
-        return bytes(self.type) + b": "
+        if PY2:
+            return b'%s: ' % self.type
+
+        return b'%s: ' % bytes(self.type, encoding='ascii')
 
 
 class FieldsBasedHeader(
-        DeepClass("_dnurh_", {
-            "fields": {dck.gen: list, dck.descriptor: None},
-            "field": {
+        DeepClass("_dnurh_", OrderedDict((
+            ("fields", {dck.gen: list, dck.descriptor: None}),
+            ("field", {
                 dck.descriptor: lambda x: FirstListItemProxy("fields"),
-                dck.gen: "GenerateField"}
-        }),
+                dck.gen: "GenerateField"
+            }),
+        ))),
         Header):
 
     @classmethod
@@ -242,9 +247,9 @@ class Call_IdHeader(
         Returns a string composed of 6 random hexadecimal characters, followed
         by a hyphen, followed by a timestamp of form YYYYMMDDHHMMSS.
         """
-        keyval = random.randint(0, 2**24 - 1)
+        keyval = randint(0, 2**24 - 1)
 
-        dt = datetime.datetime.now()
+        dt = datetime.now()
         keydate = (
             b"%(year)04d%(month)02d%(day)02d%(hour)02d%(minute)02d"
             b"%(second)02d" % {
@@ -263,9 +268,9 @@ class Call_IdHeader(
 
         host = self.host
         if host:
-            return b"{0.key}@{0.host}".format(self)
+            return b"%s@%s" % (self.key, self.host)
 
-        return b"{0.key}".format(self)
+        return b"%s" % (self.key)
 
     def bytesGen(self):
         yield self._hdr_prepend()
@@ -280,7 +285,7 @@ class Call_IdHeader(
 class CseqHeader(
         DeepClass("_csh_", {
             "number": {
-                dck.gen: lambda: random.randint(0, 2**31 - 1),
+                dck.gen: lambda: randint(0, 2**31 - 1),
                 dck.check: lambda num: isinstance(num, Integral)},
             "reqtype": {dck.gen: lambda: None}
         }),
@@ -323,7 +328,7 @@ class NumberHeader(
 
     def bytesGen(self):
         yield self._hdr_prepend()
-        yield bytes("%d" % (self.number,))
+        yield b'%d' % self.number
 
 
 class Max_ForwardsHeader(NumberHeader):

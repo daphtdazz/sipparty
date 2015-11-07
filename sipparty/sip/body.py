@@ -30,14 +30,14 @@ class Body(
         DeepClass("_bdy_", {
             "type": {dck.check: lambda x: isinstance(x, bytes)},
             "content": {
-                dck.gen: lambda: b"",
+                dck.gen: lambda: b'',
                 dck.check: lambda x: isinstance(x, bytes)}
         }),
         Parser, BytesGenner):
 
     parseinfo = {
         Parser.Pattern:
-            b"(.*)",
+            b'(.*)',
         Parser.Mappings: [
             ("content",),
         ]

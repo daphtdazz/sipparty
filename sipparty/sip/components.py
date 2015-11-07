@@ -150,7 +150,7 @@ class AOR(
 
         uname = self.username
         if uname:
-            return b"{0}@{1}".format(uname, host)
+            return b"%s@%s" % (uname, host)
 
         return bytes(host)
 
@@ -163,8 +163,8 @@ class URI(
         DeepClass("_uri_", {
             "scheme": {dck.gen: lambda: defaults.scheme},
             "aor": {dck.descriptor: ParsedPropertyOfClass(AOR), dck.gen: AOR},
-            "parameters": {dck.gen: lambda: b""},
-            "headers": {dck.gen: lambda: b""},
+            "parameters": {dck.gen: lambda: b''},
+            "headers": {dck.gen: lambda: b''},
             "absoluteURIPart": {dck.gen: lambda: None}}),
         Parser, vb.ValueBinder):
     """A URI object.
@@ -217,7 +217,7 @@ class URI(
             auripart = bytes(self.absoluteURIPart)
             if not auripart:
                 raise Incomplete("URI %r has an empty absoluteURIPart" % self)
-            return b"{0.scheme}:{0.absoluteURIPart}".format(self)
+            return b"%s:%s" % (self.scheme, self.absoluteURIPart)
 
         aorbytes = bytes(self.aor)
         if not aorbytes:
