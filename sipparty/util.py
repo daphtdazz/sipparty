@@ -170,6 +170,7 @@ class Enum(set):
         return super(Enum, self).__contains__(nn)
 
     def __getattr__(self, attr):
+        log.detail('%s instance getattr %r', self.__class__.__name__, attr)
         nn = self._en_fixAttr(attr)
         if nn in self:
             return nn
@@ -203,8 +204,11 @@ class Enum(set):
 
     def _en_fixAttr(self, name):
         if self._en_aliases:
+            log.detail('Is %r is an alias', name)
             if name in self._en_aliases:
-                return self._en_aliases[name]
+                val = self._en_aliases[name]
+                log.debug('%r is an alias to %r', name, val)
+                return val
 
         if self._en_normalize:
             return self._en_normalize(name)
@@ -249,6 +253,7 @@ class AsciiBytesEnum(Enum):
 
     def _en_fixAttr(self, name):
         if isinstance(name, str):
+            log.detail('Convert %r to ascii bytes', name)
             name = bytes(name, encoding='ascii')
 
         fixedStrAttr = super(AsciiBytesEnum, self)._en_fixAttr(name)
@@ -579,10 +584,10 @@ class DerivedProperty(object):
         # log.debug("Get derived prop for obj %r class %r.", obj, cls)
         target = obj if obj is not None else cls
 
-        log.debug("Get the underlying value (if any).")
+        log.detail("Get the underlying value (if any).")
         pname = self._rp_propName
         val = getattr(target, pname)
-        log.debug("Underlying value %r.", val)
+        log.detail("Underlying value %r.", val)
 
         gt = self._rp_get
         if gt is None:

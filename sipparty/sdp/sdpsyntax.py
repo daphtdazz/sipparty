@@ -33,21 +33,21 @@ AddrTypes = AsciiBytesEnum((b"IP4", b"IP6"))
 MediaTypes = AsciiBytesEnum((b"audio", b"video", b"text", b"application", b"message"))
 LineTypes = AsciiBytesEnum(
     aliases={
-        "version": b"v",
-        "origin": b"o",
-        "sessionname": b"s",
-        "info": b"i",
-        "uri": b"u",
-        "email": b"e",
-        "phone": b"p",
-        "connectioninfo": b"c",
-        "bandwidthinfo": b"b",
-        "time": b"t",
-        "repeat": b"r",
-        "timezone": b"z",
-        "encryptionkey": b"k",
-        "attribute": b"a",
-        "media": b"m"
+        b"version": b"v",
+        b"origin": b"o",
+        b"sessionname": b"s",
+        b"info": b"i",
+        b"uri": b"u",
+        b"email": b"e",
+        b"phone": b"p",
+        b"connectioninfo": b"c",
+        b"bandwidthinfo": b"b",
+        b"time": b"t",
+        b"repeat": b"r",
+        b"timezone": b"z",
+        b"encryptionkey": b"k",
+        b"attribute": b"a",
+        b"media": b"m"
     })
 
 DIGIT = b"\d"

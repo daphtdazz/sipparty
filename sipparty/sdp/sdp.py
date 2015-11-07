@@ -47,9 +47,19 @@ class SDPIncomplete(SDPException):
 @util.TwoCompatibleThree
 class SDPSection(parse.Parser, ValueBinder):
 
-    @classmethod
-    def Line(cls, lineType, value):
-        return b"%s=%s" % (lineType, bytes(value))
+    @staticmethod
+    def Line(lineType, value):
+        if isinstance(value, bytes):
+            return b'%s=%s' % (lineType, value)
+
+        if isinstance(value, Integral):
+            return b'%s=%d' % (lineType, value)
+
+        if hasattr(value, '__bytes__'):
+            return b'%s=%s' % (lineType, bytes(value))
+
+        raise ValueError(
+            'Don\'t know how to make bytes out of %r' % value)
 
     def lineGen(self):
         raise AttributeError(
@@ -189,12 +199,12 @@ class MediaDescription(
         return True
 
     def mediaLine(self):
-        fmts = b' '.join([bytes(str(fmt)) for fmt in self.fmts])
+        fmts = b' '.join([b'%d' % fmt for fmt in self.fmts])
         if len(fmts) == 0:
             raise SDPIncomplete(
                 "Media description has no format numbers.")
         return self.Line(
-            LineTypes.media, b"%s %s %s %s" % (
+            LineTypes.media, b"%s %d %s %s" % (
                 self.mediaType, self.port, self.transProto, fmts))
 
     def lineGen(self):
