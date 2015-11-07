@@ -17,18 +17,17 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import six
-from six import (binary_type as bytes, iteritems, add_metaclass)
+from collections import (Callable, OrderedDict)
+from copy import copy
+import logging
+from six import (iteritems, add_metaclass)
 from six.moves import queue
-import collections
 import time
 import timeit
 import threading
 import weakref
-import copy
-import logging
-from . import (fsmtimer, retrythread)
 from .. import util
+from . import (fsmtimer, retrythread)
 
 log = logging.getLogger(__name__)
 
@@ -198,7 +197,7 @@ class FSM(object):
 
         trans_dict = self._fsm_transitions
         if old_state not in trans_dict:
-            state_trans = {}
+            state_trans = OrderedDict()
         else:
             state_trans = trans_dict[old_state]
 
@@ -301,7 +300,7 @@ class FSM(object):
         super(FSM, self).__init__()
 
         if name is None:
-            name = self._fsm_name + bytes(self.__class__.NextFSMNum)
+            name = '%s%s' % (self._fsm_name, self.__class__.NextFSMNum)
             self.__class__.NextFSMNum += 1
 
         if asynchronous_timers:
@@ -315,10 +314,10 @@ class FSM(object):
 
         # Need to learn configuration from the class.
         class_transitions = self._fsm_transitions
-        self._fsm_transitions = {}
+        self._fsm_transitions = OrderedDict()
         class_timers = self._fsm_timers
         self._fsm_timers = {}
-        self.Inputs = copy.copy(self.Inputs)
+        self.Inputs = copy(self.Inputs)
 
         self._fsm_state = (
             self._fsm_state if hasattr(self, "_fsm_state") else None)
@@ -399,7 +398,7 @@ class FSM(object):
         self._fsm_popTimerNow()
 
     def waitForStateCondition(self, condition, timeout=5):
-        assert isinstance(condition, collections.Callable)
+        assert isinstance(condition, Callable)
         assert self._lock, (
             "'waitForStateCondition' may only be called on FSM instances that "
             "use locking (initialize with lock=True).")
@@ -440,7 +439,7 @@ class FSM(object):
         if action is None:
             return None
 
-        if isinstance(action, collections.Callable):
+        if isinstance(action, Callable):
             return action
 
         if isinstance(self, type):
@@ -449,7 +448,7 @@ class FSM(object):
             # the class not the instance.
             return action
 
-        if not isinstance(action, bytes):
+        if not isinstance(action, str):
             raise ValueError("Action %r not a callable nor a method name." %
                              (action,))
 
@@ -466,7 +465,7 @@ class FSM(object):
             if hasattr(self, action):
                 log.debug("  Self has %r.", action)
                 func = getattr(self, action)
-                if isinstance(func, collections.Callable):
+                if isinstance(func, Callable):
                     run_self = True
                     srv = func(*args, **kwargs)
 
@@ -494,7 +493,7 @@ class FSM(object):
                  self.delegate
                  if hasattr(self, "delegate") else None))
 
-        weak_action.__name__ = "weak_action_" + bytes(action)
+        weak_action.__name__ = "weak_action_%s" % action
         return weak_action
 
     @util.class_or_instance_method
@@ -546,7 +545,7 @@ class FSM(object):
                 # self._fsm_popTimerNow()
             log.debug("FSM Thread %r out.", cthr.name)
 
-        fsmThread.name = bytes(action)
+        fsmThread.name = str(action)
         return fsmThread
 
     def __del__(self):

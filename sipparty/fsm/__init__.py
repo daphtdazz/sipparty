@@ -17,3 +17,4 @@ limitations under the License.
 from .fsm import (
     FSM, FSMTimeout, InitialStateKey, TransitionKeys, UnexpectedInput)
 from .retrythread import RetryThread
+from .fsmtimer import Timer

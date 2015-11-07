@@ -17,7 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-from six import PY2
+from six import (PY2, next)
 import unittest
 from .. import util
 from .setup import SIPPartyTestCase
@@ -31,12 +31,11 @@ class TestUtil(SIPPartyTestCase):
         en = util.Enum(("cat", "dog", "aardvark", "mouse"))
 
         aniter = en.__iter__()
-        next = aniter.next if PY2 else aniter.__next__
-        self.assertEqual(next(), "cat")
-        self.assertEqual(next(), "dog")
-        self.assertEqual(next(), "aardvark")
-        self.assertEqual(next(), "mouse")
-        self.assertRaises(StopIteration, lambda: next())
+        self.assertEqual(next(aniter), "cat")
+        self.assertEqual(next(aniter), "dog")
+        self.assertEqual(next(aniter), "aardvark")
+        self.assertEqual(next(aniter), "mouse")
+        self.assertRaises(StopIteration, lambda: next(aniter))
 
         self.assertEqual(en[0], "cat")
         self.assertEqual(en[1], "dog")

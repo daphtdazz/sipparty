@@ -68,7 +68,7 @@ class attributesubclassgen(type):
         superName = cls._supername
         for name, obj in iteritems(SCDict):
             subClassType, sep, empty = name.partition(superName)
-            if sep != superName or empty != b"":
+            if sep != superName or empty != '':
                 continue
 
             log.debug("Found subclass type %r.", subClassType)
@@ -76,14 +76,14 @@ class attributesubclassgen(type):
 
     def __getattr__(cls, name):
 
-        if name == b"types":
+        if name == 'types':
             sp = super(attributesubclassgen, cls)
             if hasattr(sp, "__getattr__"):
                 return sp.__getattr__(name)
             raise AttributeError(
-                b"%r class has no attribute 'types'.", cls.__name__)
+                '%r class has no attribute \'types\'.', cls.__name__)
 
-        if hasattr(cls, "types"):
+        if hasattr(cls, 'types'):
             tps = cls.types
             try:
                 name = getattr(tps, name)
@@ -198,6 +198,9 @@ class Enum(set):
     def REPattern(self):
         return "(?:%s)" % "|".join(self)
 
+    def enum(self):
+        return self
+
     def _en_fixAttr(self, name):
         if self._en_aliases:
             if name in self._en_aliases:
@@ -228,7 +231,6 @@ class AsciiBytesEnum(Enum):
         super(AsciiBytesEnum, self).__init__(
             vals=vals, normalize=normalize, aliases=aliases)
 
-
     def add(self, item):
         if not isinstance(item, bytes):
             raise TypeError(
@@ -240,18 +242,20 @@ class AsciiBytesEnum(Enum):
     def REPattern(self):
         return b"(?:%s)" % b"|".join(self)
 
-    def AsciiStrREPattern(self):
-        ptrn = self.REPattern()
-        if PY2:
-            return ptrn
-        return str(ptrn, encoding='ascii')
+    def enum(self):
+        return Enum(
+            [str(val, encoding='ascii') for val in self._en_list],
+            aliases=self._en_aliases, normalize=self._en_normalize)
 
     def _en_fixAttr(self, name):
-        if not PY2 and isinstance(name, str):
+        if isinstance(name, str):
             name = bytes(name, encoding='ascii')
 
         fixedStrAttr = super(AsciiBytesEnum, self)._en_fixAttr(name)
         return fixedStrAttr
+
+if PY2:
+    AsciiBytesEnum = Enum
 
 
 class ClassType(object):
@@ -618,7 +622,7 @@ class DerivedProperty(object):
             log.debug("Set %r to %r.", pname, value)
             log.debug("Self: %r.", self)
             setattr(obj, pname, value)
-        elif isinstance(st, bytes) and hasattr(obj, st):
+        elif isinstance(st, str) and hasattr(obj, st):
             meth = getattr(obj, st)
             if not isinstance(meth, Callable):
                 raise ValueError(
@@ -684,7 +688,7 @@ class Timeout(Exception):
     pass
 
 
-def WaitFor(condition, timeout_s, action_on_timeout=None, resolution=0.0001):
+def WaitFor(condition, timeout_s=1, action_on_timeout=None, resolution=0.0001):
     now = Clock()
     next_log = now + 1
     until = now + timeout_s

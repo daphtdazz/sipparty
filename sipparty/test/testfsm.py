@@ -17,56 +17,44 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-from six import (binary_type as bytes)
+from six import PY2
 import socket
 import sys
 import threading
 import time
 import timeit
-import unittest
+if PY2:
+    from mock import (MagicMock, patch)
+else:
+    from unittest.mock import (MagicMock, patch)
 from ..fsm import (
-    FSM, FSMDefinitions, FSMTimeout, InitialStateKey, Timer, TransitionKeys,
+    FSM, FSMTimeout, InitialStateKey, RetryThread, Timer,
+    TransitionKeys,
     UnexpectedInput)
-from ..fsm.retrythread import RetryThread
-from ..util import (Clock, Enum)
+from ..fsm import fsmtimer
+from ..fsm import retrythread
+from ..util import (Clock, Enum, WaitFor)
+from .setup import SIPPartyTestCase
 
 log = logging.getLogger(__name__)
 
 
-class TestFSM(unittest.TestCase):
+class TestFSM(SIPPartyTestCase):
 
-    RClock = timeit.default_timer
-
-    def wait_for(self, func, timeout=2):
-        assert timeout > 0.05
-        now = self.RClock()
-        next_log = now + 1
-        until = now + timeout
-        while self.RClock() < until:
-            if func():
-                break
-            time.sleep(0.01)
-            if self.RClock() > next_log:
-                next_log = self.RClock() + 1
-                log.debug("Still waiting...")
-
-        else:
-            self.assertTrue(0, "Timed out waiting for %r" % func)
-
-    def clock(self):
-        return self._clock
+    Clock = MagicMock()
 
     def setUp(self):
-        self._clock = 0
-        Clock = self.clock
-        RetryThread.Clock = self.clock
         self.retry = 0
         self.cleanup = 0
+        self.pushLogLevel('fsm.fsm', logging.DETAIL)
+        self.pushLogLevel('fsm.fsmtimer', logging.DETAIL)
+
+        self.Clock.return_value = 0
 
     def testSimple(self):
         nf = FSM(name="testfsm")
         self.assertEqual(
-            bytes(nf),
+            str(nf),
             "'FSM' 'testfsm':\n"
             "  (No states or transitions.)\n"
             "Current state: None")
@@ -78,16 +66,10 @@ class TestFSM(unittest.TestCase):
         nf.addTransition("stopping", "stop", "stopping")
         nf.addTransition("stopping", "stop_done", "initial")
         nf.state = "initial"
+
         self.assertEqual(
-            bytes(nf),
+            str(nf),
             "'FSM' 'testfsm':\n"
-            "  'stopping':\n"
-            "    'stop_done' -> 'initial'\n"
-            "    'stop' -> 'stopping'\n"
-            "\n"
-            "  'running':\n"
-            "    'stop' -> 'stopping'\n"
-            "\n"
             "  'initial':\n"
             "    'start' -> 'starting'\n"
             "\n"
@@ -95,12 +77,22 @@ class TestFSM(unittest.TestCase):
             "    'start' -> 'starting'\n"
             "    'start_done' -> 'running'\n"
             "\n"
-            "Current state: 'initial'")
+            "  'running':\n"
+            "    'stop' -> 'stopping'\n"
+            "\n"
+            "  'stopping':\n"
+            "    'stop' -> 'stopping'\n"
+            "    'stop_done' -> 'initial'\n"
+            "\n"
+            "Current state: 'initial'"
+        )
 
         nf.hit("start")
         self.assertEqual(nf.state, "starting")
         self.assertRaises(UnexpectedInput, lambda: nf.hit("stop"))
 
+    @patch.object(fsmtimer, 'Clock', new=Clock)
+    @patch.object(retrythread, 'Clock', new=Clock)
     def testTimer(self):
         nf = FSM(name="TestTimerFSM")
 
@@ -125,29 +117,29 @@ class TestFSM(unittest.TestCase):
         nf.hit("start")
         self.assertEqual(self.retry, 0)
         nf.checkTimers()
-        self._clock = 4.9999
+        self.Clock.return_value = 4.9999
         nf.checkTimers()
         self.assertEqual(self.retry, 0)
-        self._clock = 5
+        self.Clock.return_value = 5
         nf.checkTimers()
         self.assertEqual(self.retry, 1)
-        self._clock += 5
+        self.Clock.return_value += 5
         nf.checkTimers()
         self.assertEqual(self.retry, 2)
-        self._clock += 5
+        self.Clock.return_value += 5
         nf.checkTimers()
         self.assertEqual(self.retry, 2)
 
         # Timers are capable of being restarted, so we should be able to
         # restart.
         nf.hit("start")
-        self._clock += 5
+        self.Clock.return_value += 5
         nf.checkTimers()
         self.assertEqual(self.retry, 3)
 
         # Transition to running and check the timer is stopped.
         nf.hit("start_done")
-        self._clock += 5
+        self.Clock.return_value += 5
         nf.checkTimers()
         self.assertEqual(self.retry, 3)
 
@@ -166,7 +158,7 @@ class TestFSM(unittest.TestCase):
         nf.hit("cleanup")
         cleanup = 0
         for ii in range(20):
-            self._clock += 5
+            self.Clock.return_value += 5
             cleanup += 1
             nf.checkTimers()
             self.assertEqual(self.cleanup, cleanup)
@@ -199,10 +191,10 @@ class TestFSM(unittest.TestCase):
         nf.state = "initial"
         log.debug("Hit async FSM with start")
         nf.hit("start")
-        self.wait_for(lambda: nf.state == "starting", timeout=2)
-        self._clock = 0.1
+        WaitFor(lambda: nf.state == "starting", timeout_s=2)
+        self.Clock.return_value = 0.1
         log.debug("clock incremented")
-        self.wait_for(lambda: retry[0] == 1, timeout=2)
+        WaitFor(lambda: retry[0] == 1, timeout_s=2)
 
     def testActions(self):
         nf = FSM(name="TestActionsFSM", asynchronous_timers=True)
@@ -221,7 +213,7 @@ class TestFSM(unittest.TestCase):
         expect_args = 3
         expect_kwargs = 2
         nf.hit("start", 1, 2, 3, a=1, b=2)
-        self.wait_for(lambda: actnow_hit[0] == 1)
+        WaitFor(lambda: actnow_hit[0] == 1)
 
         actnext_hit = [0]
 
@@ -230,8 +222,10 @@ class TestFSM(unittest.TestCase):
 
         nf.addTransition("running", "stop", "stopped", action=actnext)
         nf.hit("stop", 1)
-        self.wait_for(lambda: actnext_hit[0] == 1)
+        WaitFor(lambda: actnext_hit[0] == 1)
 
+    @patch.object(fsmtimer, 'Clock', new=Clock)
+    @patch.object(retrythread, 'Clock', new=Clock)
     def testFSMClass(self):
 
         actnow_hit = [0]
@@ -277,11 +271,11 @@ class TestFSM(unittest.TestCase):
         self.assertRaises(AttributeError, lambda: nf.addFDSource(1, None))
 
         self.assertEqual(nf.retries, 0)
-        self._clock = 1
+        self.Clock.return_value = 1
         nf.checkTimers()
         self.assertEqual(nf.retries, 1)
         nf.hit("start_done")
-        self._clock = 2
+        self.Clock.return_value = 2
         nf.checkTimers()
         self.assertEqual(nf.retries, 1)
         nf.hit("stop")
@@ -290,7 +284,7 @@ class TestFSM(unittest.TestCase):
         # The timer endeavours not to lose pops, so if we set the clock
         # forward some number of seconds and check 3 times in a row, we
         # should pop on each one.
-        self._clock = 10
+        self.Clock.return_value = 10
         nf.checkTimers()
         self.assertEqual(nf.retries, 2)
         nf.checkTimers()
@@ -344,7 +338,7 @@ class TestFSM(unittest.TestCase):
         datain = b"hello world"
         sck1.send(datain)
 
-        self.wait_for(lambda: len(data) == len(datain))
+        WaitFor(lambda: len(data) == len(datain))
 
         log.debug("Remove source %d -> %d", sck2.fileno(), sck1.fileno())
         nf.rmFDSource(sck2)
@@ -391,7 +385,7 @@ class TestFSM(unittest.TestCase):
             nf.hit("jump")
             nf.hit("stop")
 
-        self.wait_for(lambda: thr_res[0] == 8 * 2)
+        WaitFor(lambda: thr_res[0] == 8 * 2)
 
     def testWaitFor(self):
         fsm = FSM()
@@ -446,7 +440,3 @@ class TestFSM(unittest.TestCase):
             self.assertRaises(UnexpectedInput,
                               lambda: fsm1.hit("bad input"))
         log.info("END EXPECT EXCEPTION IN ASYNC MODE")
-
-
-if __name__ == "__main__":
-    sys.exit(unittest.main())

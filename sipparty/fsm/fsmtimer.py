@@ -18,7 +18,7 @@ limitations under the License.
 """
 import collections
 import logging
-import six
+from six import next
 from ..util import Clock
 
 log = logging.getLogger(__name__)
@@ -119,7 +119,7 @@ class Timer(object):
             return
 
         try:
-            wait_time = self._tmr_currentPauseIter.next()
+            wait_time = next(self._tmr_currentPauseIter)
         except StopIteration:
             self.stop()
             return

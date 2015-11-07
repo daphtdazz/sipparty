@@ -289,7 +289,7 @@ class RetryThread(threading.Thread):
 
     def _rthr_triggerSpin(self):
         log.debug("%r Trigger spin", self)
-        self._rthr_triggerRunFD.send('1')
+        self._rthr_triggerRunFD.send(b'1')
 
     def _rthr_shouldKeepRunning(self):
         return not self._rthr_cancelled and self._rthr_masterThread.isAlive()

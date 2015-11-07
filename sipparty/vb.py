@@ -451,7 +451,7 @@ class ValueBinder(object):
             return getattr(self, "_vb_%sbindings" % direction)
         except AttributeError as exc:
             raise AttributeError(
-                bytes(exc) +
+                str(exc) +
                 " Are you sure you called super().__init__() for this class?")
 
     def _vb_bindingdicts(self, path, direction, create=False, all=False):
