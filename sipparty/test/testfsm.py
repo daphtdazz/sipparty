@@ -46,8 +46,9 @@ class TestFSM(SIPPartyTestCase):
     def setUp(self):
         self.retry = 0
         self.cleanup = 0
-        self.pushLogLevel('fsm.fsm', logging.DETAIL)
-        self.pushLogLevel('fsm.fsmtimer', logging.DETAIL)
+        # self.pushLogLevel('fsm.fsm', logging.DETAIL)
+        # self.pushLogLevel('fsm.fsmtimer', logging.DETAIL)
+        # self.pushLogLevel('fsm.retrythread', logging.DETAIL)
 
         self.Clock.return_value = 0
 

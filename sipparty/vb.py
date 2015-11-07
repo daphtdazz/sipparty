@@ -76,6 +76,9 @@ class ValueBinder(object):
     # =================== INSTANCE INTERFACE =================================
     #
     def __init__(self, **kwargs):
+        log.detail(
+            'Initialize new VaueBinder properties for %r instance',
+            self.__class__.__name__)
         for reqdattr in (
                 ("_vb_forwardbindings", {}), ("_vb_backwardbindings", {}),
                 ("_vb_weakBindingParent", None),
@@ -278,16 +281,13 @@ class ValueBinder(object):
                         self.__class__.__name__, attr))
             return self.__dict__[attr]
 
-        # Avoid recursion if some subclass has not called init.
-        assert "_vb_delegate_attributes" in sd, (
-            "ValueBinder subclass %r has not called super.__init__()" % (
-                self.__class__.__name__))
-
         # Check for delegate attributes.
-        das = sd["_vb_delegate_attributes"]
-        if attr in das:
-            log.detail("Delegate attribute %r", attr)
-            return getattr(getattr(self, das[attr]), attr)
+        if '_vb_delegate_attributes' in sd:
+            log.detail('Looking for a delegate attribute')
+            das = sd["_vb_delegate_attributes"]
+            if attr in das:
+                log.detail("Delegate attribute %r", attr)
+                return getattr(getattr(self, das[attr]), attr)
 
         if hasattr(super(ValueBinder, self), "__getattr__"):
             return super(ValueBinder, self).__getattr__(attr)

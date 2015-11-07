@@ -70,7 +70,7 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
         def __init__(self, **kwargs):
 
             clname = self.__class__.__name__
-            log.detail("DeepClass %r init with %r", clname,
+            log.detail("DeepClass %r init with kwargs: %r", clname,
                        kwargs)
 
             # Preload the top level attributes dictionary and our instance
@@ -120,6 +120,7 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
                     tlaa[0] = kwVal
 
             # See if we have any delegates to pass to.
+            log.debug('Check VB dependencies')
             dele_attrs = {}
             if hasattr(self, "vb_dependencies"):
                 if not isinstance(self, ValueBinder):
@@ -171,7 +172,7 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
                         "Generating attribute %r of %r instance", tlattr,
                         clname)
                     gen = tlad[dck.gen]
-                    if isinstance(gen, bytes):
+                    if isinstance(gen, str):
                         genAttr = getattr(self.__class__, gen)
                         if isinstance(genAttr, Callable):
                             log.debug(
@@ -197,7 +198,7 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
 
         def _dc_kvReprGen(self):
             for attr in iterkeys(topLevelAttributeDescs):
-                yield b"%s=%r" % (attr, getattr(self, attr))
+                yield "%s=%r" % (attr, getattr(self, attr))
             return
             sp = super(DeepClass, self)
             if hasattr(sp, "_dc_kvReprGen"):
@@ -205,7 +206,7 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
                     yield kvp
 
         def __repr__(self):
-            return(b"%s(%s)" % (
-                self.__class__.__name__, b", ".join(self._dc_kvReprGen())))
+            return("%s(%s)" % (
+                self.__class__.__name__, ", ".join(self._dc_kvReprGen())))
 
     return DeepClass
