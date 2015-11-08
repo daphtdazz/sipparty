@@ -17,7 +17,6 @@ limitations under the License.
 from . import components
 from .components import (DNameURI, AOR, URI, Host)
 from .prot import (Incomplete,)
-#import components
 from .request import (Request,)
 from .header import (Header,)
 from .message import (Message,)

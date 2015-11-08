@@ -30,7 +30,8 @@ def bglobals():
 
 NetTypes = AsciiBytesEnum((b"IN",))
 AddrTypes = AsciiBytesEnum((b"IP4", b"IP6"))
-MediaTypes = AsciiBytesEnum((b"audio", b"video", b"text", b"application", b"message"))
+MediaTypes = AsciiBytesEnum((
+    b"audio", b"video", b"text", b"application", b"message"))
 LineTypes = AsciiBytesEnum(
     aliases={
         b"version": b"v",
@@ -83,8 +84,8 @@ media = MediaTypes.REPattern()
 trans_proto = b"%(token)s(?:/%(token)s)*" % bglobals()
 fmt = token
 media_field = (
-    b"%(LineTypes.m)s=%(media)s%(SP)s%(port)s(?:/%(integer)s)?%(SP)s%(trans_proto)s"
-    b"(?:%(SP)s%(fmt)s)%(eol)s" % bglobals())
+    b"%(LineTypes.m)s=%(media)s%(SP)s%(port)s(?:/%(integer)s)?%(SP)s"
+    b"%(trans_proto)s(?:%(SP)s%(fmt)s)%(eol)s" % bglobals())
 
 repeat_fields = (
     b"%(LineTypes.m)s=%(repeat_interval)s(?:%(SP)s%(typed_time)s){2,}"

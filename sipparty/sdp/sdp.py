@@ -163,8 +163,9 @@ class MediaDescription(
     #
     parseinfo = {
         parse.Parser.Pattern:
-            b"%(LineTypes.m)s=(%(media)s)%(SP)s(%(port)s)(?:/%(integer)s)?%(SP)s"
-            b"(%(trans_proto)s)%(SP)s(%(fmt)s(?:%(SP)s%(fmt)s)*)%(eol)s"
+            b"%(LineTypes.m)s=(%(media)s)%(SP)s(%(port)s)"
+            b"(?:/%(integer)s)?%(SP)s(%(trans_proto)s)%(SP)s"
+            b"(%(fmt)s(?:%(SP)s%(fmt)s)*)%(eol)s"
             b"(?:%(LineTypes.i)s=%(text)s%(eol)s)?"
             b"(?:%(LineTypes.c)s=(%(text)s)%(eol)s)?"
             b"(?:%(LineTypes.b)s=%(text)s%(eol)s)*"
@@ -265,8 +266,8 @@ class SessionDescription(
             b"%(LineTypes.v)s=%(supportedversions)s%(eol)s"
             # Origin
             b"%(LineTypes.o)s=(%(username)s)%(SP)s(%(sessionid)s)%(SP)s"
-            b"(%(sessionversion)s)%(SP)s(%(nettype)s)%(SP)s(%(addrtype)s)%(SP)s"
-            b"(%(address)s)%(eol)s"
+            b"(%(sessionversion)s)%(SP)s(%(nettype)s)%(SP)s"
+            b"(%(addrtype)s)%(SP)s(%(address)s)%(eol)s"
             # Session name, info, uri, email, phone.
             b"%(LineTypes.s)s=(%(text)s)%(eol)s"
             b"(?:%(LineTypes.i)s=(%(text)s)%(eol)s)?"

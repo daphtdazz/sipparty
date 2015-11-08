@@ -139,7 +139,9 @@ BranchMagicCookie = b"z9hG4bK"
 
 
 toplabel = b"%(ALPHA)s(?:[%(alphanumrange)s-]*%(alphanum)s)?" % bglobals()
-domainlabel = b"(?:%(alphanum)s|%(alphanum)s[%(alphanumrange)s-]*%(alphanum)s)" % bglobals()
+domainlabel = (
+    b"(?:%(alphanum)s|%(alphanum)s[%(alphanumrange)s-]*%(alphanum)s)" %
+    bglobals())
 hostname = b"(?:%(domainlabel)s[.])*%(toplabel)s[.]?" % bglobals()
 IPv6reference = b"[[]%(IPv6address)s[]]" % bglobals()
 host = b"(?:%(hostname)s|%(IPv4address)s|%(IPv6reference)s)" % bglobals()
@@ -151,7 +153,8 @@ sent_protocol = b"%(protocol_name)s%(SLASH)s%(protocol_version)s" % bglobals()
 # TODO qdtext should include UTF8-NONASCII.
 qdtext = b"(?:%(LWS)s|[\x21\x23-\x5B\x5D-\x7E])" % bglobals()
 quoted_pair = b"\\[\x00-\x09\x0B-\x0C\x0E-\x7F]"
-quoted_string = b"%(SWS)s%(DQUOTE)s(?:%(qdtext)s|%(quoted_pair)s)*%(DQUOTE)s" % bglobals()
+quoted_string = (
+    b"%(SWS)s%(DQUOTE)s(?:%(qdtext)s|%(quoted_pair)s)*%(DQUOTE)s" % bglobals())
 gen_value = b"(?:%(token)s|%(host)s|%(quoted_string)s)" % bglobals()
 generic_param = b"%(token)s(?:%(EQUAL)s%(gen_value)s)?" % bglobals()
 sent_by = b"%(host)s(?:%(COLON)s%(port)s)?" % bglobals()

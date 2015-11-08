@@ -330,7 +330,7 @@ class Parser(object):
                 if mapping_len > max_mapping_len:
                     raise ValueError(
                         'Parser mapping %r has unexpected entries (expected '
-                            'length was %d)' % (mapping, max_mapping_len))
+                        'length was %d)' % (mapping, max_mapping_len))
 
                 new_gen = mapping[1]
                 if new_gen is not None:

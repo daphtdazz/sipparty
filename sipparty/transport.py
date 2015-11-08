@@ -51,7 +51,9 @@ HEXDIG = b"[%(hexrange)s]" % bglobals()
 hex4 = b"%(HEXDIG)s{1,4}" % bglobals()
 # Surely IPv6 address length is limited?
 hexseq = b"%(hex4)s(?::%(hex4)s)*" % bglobals()
-hexpart = b"(?:%(hexseq)s|%(hexseq)s::(?:%(hexseq)s)?|::(?:%(hexseq)s)?)" % bglobals()
+hexpart = (
+    b"(?:%(hexseq)s|%(hexseq)s::(?:%(hexseq)s)?|::(?:%(hexseq)s)?)" %
+    bglobals())
 IPv4address = b"%(DIGIT)s{1,3}(?:[.]%(DIGIT)s{1,3}){3}" % bglobals()
 IPv6address = b"%(hexpart)s(?::%(IPv4address)s)?" % bglobals()
 IPaddress = b"(?:%(IPv4address)s|%(IPv6address)s)" % bglobals()

@@ -96,7 +96,8 @@ class TestProtocol(SIPPartyTestCase):
                 b"Max-Forwards: 70\r\n" % self.message_patterns, inv_bytes),
             inv_bytes)
 
-        self.assertEqual(bytes(invite.toheader), b"To: <sip:bob@baltimore.com>")
+        self.assertEqual(
+            bytes(invite.toheader), b"To: <sip:bob@baltimore.com>")
         self.assertEqual(
             bytes(invite.call_idheader),
             bytes(getattr(invite, "Call_IdHeader")))

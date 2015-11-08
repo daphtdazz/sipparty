@@ -862,8 +862,12 @@ def bglobals_g(gbls):
 
 
 if PY2:
-    abytes = lambda x: x
+    def abytes(x):
+        return x
     astr = abytes
 else:
-    abytes = lambda x: bytes(x, encoding='ascii')
-    astr = lambda x: str(x, encoding='ascii')
+    def abytes(x):
+        return bytes(x, encoding='ascii')
+
+    def astr(x):
+        return str(x, encoding='ascii')

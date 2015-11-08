@@ -26,8 +26,8 @@ from six import (add_metaclass, binary_type as bytes, PY2)
 from ..deepclass import (DeepClass, dck)
 from ..parse import (Parser,)
 from ..util import (
-    abytes, astr, attributesubclassgen, BytesGenner, ClassType, FirstListItemProxy,
-    TwoCompatibleThree,)
+    abytes, astr, attributesubclassgen, BytesGenner, ClassType,
+    FirstListItemProxy, TwoCompatibleThree,)
 from ..vb import ValueBinder
 from . import defaults
 from .field import (DNameURIField, ViaField)
@@ -68,7 +68,7 @@ class Header(
         Parser.Pattern:
             # The type. Checked in the constructor whether it's a valid header
             # or not.
-            b"(%(header_value)s)"  # Everything else to be parsed in parsecust().
+            b"(%(header_value)s)"  # Everything else parsed in parsecust().
             b"" % bdict,
         Parser.Mappings:
             [("header_value",)]
