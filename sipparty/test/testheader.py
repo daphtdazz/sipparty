@@ -56,7 +56,7 @@ class TestHeaders(SIPPartyTestCase):
             bytes(ch),
             b"Contact: <sip:bill@billland.com>")
         self.assertEqual(
-            ch.field.value.uri.aor.host, Host(b"billland.com"))
+            ch.field.value.uri.aor.host, Host(address=b"billland.com"))
 
     def testBindingContactHeaders(self):
 
@@ -66,12 +66,11 @@ class TestHeaders(SIPPartyTestCase):
         pvb.bind("ch.address", "hostaddr2")
 
         pvb.ch = Header.contact()
-        pvb.hostaddr = "atlanta.com"
-        self.assertEqual(pvb.ch.address,
-                         "atlanta.com")
+        pvb.hostaddr = b'atlanta.com'
+        self.assertEqual(pvb.ch.address, b'atlanta.com')
         self.assertEqual(pvb.ch.field.value.uri.aor.host.address,
-                         "atlanta.com")
-        self.assertEqual(pvb.hostaddr2, "atlanta.com")
+                         b'atlanta.com')
+        self.assertEqual(pvb.hostaddr2, b'atlanta.com')
 
     def testNumHeader(self):
         cont_len_hdr = Header.content_length()

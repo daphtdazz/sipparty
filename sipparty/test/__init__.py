@@ -20,11 +20,3 @@ limitations under the License.
 import logging
 import sys
 from .. import (util, fsm)
-
-if len(sys.argv) > 1 and sys.argv[1] == "discover":
-    logging.basicConfig(level=logging.INFO)
-else:
-    logging.basicConfig(level=logging.DEBUG)
-
-util.log.setLevel(logging.INFO)
-fsm.retrythread.log.setLevel(logging.INFO)

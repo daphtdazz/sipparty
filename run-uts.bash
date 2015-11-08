@@ -84,7 +84,7 @@ else
     then
         python -m unittest &
     else
-        python unittest_logging.py discover &
+        python -m unittest discover &
     fi
 fi
 
