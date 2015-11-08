@@ -24,7 +24,7 @@ from six import PY2
 from ..transport import (
     digitrange, DIGIT, hexrange, HEXDIG, hex4, hexseq, hexpart, IPv4address,
     IPv6address, port)
-from ..util import (bglobals_g, AsciiBytesEnum, Enum, sipheader)
+from ..util import (AsciiBytesEnum, astr, bglobals_g, Enum, sipheader)
 
 
 def bglobals():
@@ -34,9 +34,9 @@ def bglobals():
 def str_enumify(bytes_enum):
     if PY2:
         return bytes_enum
-    return Enum([
-        str(rtype, encoding='ascii') for rtype in bytes_enum
-    ], normalize=bytes_enum._en_normalize, aliases=bytes_enum._en_aliases)
+    return Enum(
+        [astr(rtype) for rtype in bytes_enum],
+        normalize=bytes_enum._en_normalize, aliases=bytes_enum._en_aliases)
 
 protocols = AsciiBytesEnum((b"SIP/2.0",), normalize=lambda p: p.upper())
 

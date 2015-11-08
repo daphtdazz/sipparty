@@ -41,7 +41,7 @@ class Response(Parser, ValueBinder):
             b'(%(Reason_Phrase)s)' % bdict,
         Parser.Mappings:
             [('protocol',),
-             ('code', int),  # The code should be an int.
+             ('code', int),
              ('codeMessage',)],
     }
 

@@ -22,16 +22,16 @@ import socket
 from . import defaults
 from .prot import Incomplete
 from .prot import (bdict as abnf_name_bdict, Incomplete)
-from .. import (vb,)
 from ..deepclass import (DeepClass, dck)
 from ..parse import (Parser, ParsedProperty, ParsedPropertyOfClass)
 from ..util import TwoCompatibleThree, TupleRepresentable
+from ..vb import ValueBinder
 
 log = logging.getLogger(__name__)
 
 
 @TwoCompatibleThree
-class Host(Parser, TupleRepresentable, vb.ValueBinder):
+class Host(Parser, TupleRepresentable, ValueBinder):
 
     parseinfo = {
         Parser.Pattern:
@@ -84,8 +84,8 @@ class Host(Parser, TupleRepresentable, vb.ValueBinder):
 
         if address and port:
             if isIpv6:
-                return b"[%s]:%s" % (address, port)
-            return b"%s:%s" % (address, port)
+                return b"[%s]:%d" % (address, port)
+            return b"%s:%d" % (address, port)
 
         if self.address:
             if isIpv6:
@@ -101,10 +101,10 @@ class Host(Parser, TupleRepresentable, vb.ValueBinder):
 @TwoCompatibleThree
 class AOR(
         DeepClass("_aor_", {
-            "username": {},
+            "username": {dck.check: lambda x: isinstance(x, bytes)},
             "host": {
                 dck.descriptor: ParsedPropertyOfClass(Host), dck.gen: Host}}),
-        Parser, TupleRepresentable, vb.ValueBinder):
+        Parser, TupleRepresentable, ValueBinder):
     """A AOR object."""
 
     parseinfo = {
@@ -166,7 +166,7 @@ class URI(
             "parameters": {dck.gen: lambda: b''},
             "headers": {dck.gen: lambda: b''},
             "absoluteURIPart": {dck.gen: lambda: None}}),
-        Parser, vb.ValueBinder):
+        Parser, ValueBinder):
     """A URI object.
 
     This decomposes addr-spec from RFC 3261:
@@ -233,7 +233,7 @@ class DNameURI(
             "display_name": {dck.gen: lambda: b""},
             "headers": {dck.gen: lambda: b""},
             "absoluteURIPart": {dck.gen: lambda: None}}),
-        Parser, vb.ValueBinder):
+        Parser, ValueBinder):
     """A display name plus a uri value object.
 
     This is basically (name-addr/addr-spec) where:
@@ -253,7 +253,7 @@ class DNameURI(
     vb_dependencies = [
         ("uri", ("aor", "username", "host", "address", "port"))]
 
-    display_name_mapping = ("display_name", None, lambda x: x.strip())
+    display_name_mapping = ("display_name", lambda x: x.strip())
     uri_mapping = ("uri", URI)
     parseinfo = {
         Parser.Pattern:

@@ -18,20 +18,20 @@ limitations under the License.
 """
 import logging
 import re
-import six
+from six import (add_metaclass, binary_type as bytes)
 from ..deepclass import (DeepClass, dck)
 from ..parse import (ParsedPropertyOfClass, Parser)
-from ..util import (attributesubclassgen, ClassType, TwoCompatibleThree)
+from ..util import (
+    abytes, astr, attributesubclassgen, ClassType, TwoCompatibleThree)
 from ..vb import ValueBinder
 from . import defaults
 from .components import (URI)
 from .prot import (bdict, protocols, RequestTypes)
 
 log = logging.getLogger(__name__)
-bytes = six.binary_type
 
 
-@six.add_metaclass(attributesubclassgen)
+@add_metaclass(attributesubclassgen)
 @TwoCompatibleThree
 class Request(
         DeepClass("_rq_", {
@@ -56,10 +56,10 @@ class Request(
     # Parse description.
     parseinfo = {
         Parser.Pattern: (
-            b"(%(Method)s)%(SP)s(%(Request_URI)s)%(SP)s(%(SIP_Version)s)"
-            b"" % bdict),
+            b'(%(Method)s)%(SP)s(%(Request_URI)s)%(SP)s(%(SIP_Version)s)'
+            b'' % bdict),
         Parser.Constructor:
-            (1, lambda a: getattr(Request, a)()),
+            (1, lambda a: getattr(Request, astr(a))()),
         Parser.Mappings:
             [None,  # First group is for the constructor.
              ("uri", URI),
@@ -69,7 +69,7 @@ class Request(
     type = ClassType("Request")
 
     def __bytes__(self):
-        return b'%s %s %s' % (self.type, self.uri, self.protocol)
+        return b'%s %s %s' % (abytes(self.type), self.uri, self.protocol)
 
     def __repr__(self):
         return (

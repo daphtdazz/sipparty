@@ -19,7 +19,7 @@ limitations under the License.
 import logging
 import os
 import re
-from six import (binary_type as bytes, iteritems, add_metaclass)
+from six import (add_metaclass, binary_type as bytes, iteritems, PY2)
 import sys
 import unittest
 from .setup import SIPPartyTestCase
@@ -43,6 +43,9 @@ class TestProtocol(SIPPartyTestCase):
     call_id_pattern = b"[\da-f]{6}-\d{14}"
     branch_pattern = b"branch=z9hG4bK[\da-f]{1,}"
     cseq_num_pattern = b"\d{1,10}"
+
+    message_patterns = bglobals_g(locals())
+    message_patterns.update(sdpsyntax.bdict)
 
     def assertEqualMessages(self, msga, msgb):
         stra = bytes(msga)
@@ -90,7 +93,7 @@ class TestProtocol(SIPPartyTestCase):
             # 6 random hex digits followed by a date/timestamp
             b"Call-ID: %(call_id_pattern)s\r\n"
             b"CSeq: %(cseq_num_pattern)s INVITE\r\n"
-            b"Max-Forwards: 70\r\n" % bglobals_g(TestProtocol.__dict__),
+            b"Max-Forwards: 70\r\n" % self.message_patterns,
             repr(bytes(invite))), bytes(invite))
 
         self.assertEqual(bytes(invite.toheader), "To: <sip:bob@baltimore.com>")
@@ -102,9 +105,11 @@ class TestProtocol(SIPPartyTestCase):
 
     def testParse(self):
 
-        self.pushLogLevel("header", logging.DEBUG)
-        self.pushLogLevel("message", logging.DEBUG)
-        self.pushLogLevel("parse", logging.DEBUG)
+        # self.pushLogLevel("header", logging.DEBUG)
+        # self.pushLogLevel("message", logging.DEBUG)
+        # self.pushLogLevel("parse", logging.DETAIL)
+        # self.pushLogLevel('param', logging.DETAIL)
+        # self.pushLogLevel('util', logging.DETAIL)
 
         invite = Message.invite()
 
@@ -121,11 +126,16 @@ class TestProtocol(SIPPartyTestCase):
         self.assertTrue(
             invite.startline.uri is invite.toheader.uri, (
                 id(invite.startline.uri), id(invite.toheader.uri)))
-        invite.startline.username = "bob"
+        # In python3 you can't use strings for these.
+        if not PY2:
+            self.assertRaises(
+                ValueError,
+                lambda: setattr(invite.startline, 'username', 'bob'))
+        invite.startline.username = b"bob"
         self.assertEqual(invite.startline.username, invite.toheader.username)
-        invite.startline.uri.aor.host = "biloxi.com"
-        invite.fromheader.field.value.uri.aor.username = "alice"
-        invite.fromheader.field.value.uri.aor.host = "atlanta.com"
+        invite.startline.uri.aor.host = b"biloxi.com"
+        invite.fromheader.field.value.uri.aor.username = b"alice"
+        invite.fromheader.field.value.uri.aor.host = b"atlanta.com"
         invite.contactheader.uri = b"sip:localuser@127.0.0.1:5061"
         invite.max_forwardsheader.number = 55
         self.assertEqual(invite.contactheader.port, 5061)
@@ -149,8 +159,8 @@ class TestProtocol(SIPPartyTestCase):
         self.assertEqual(
             bytes(new_inv.viaheader.host.address), b"127.0.0.1")
 
-        new_inv.viaheader.host = "arkansas.com"
-        new_inv.startline.uri.aor.username = "bill"
+        new_inv.viaheader.host = b"arkansas.com"
+        new_inv.startline.uri.aor.username = b"bill"
 
         new_inv.addBody(
             Body(type=sdpsyntax.SIPBodyType, content=b"This is a message"))
@@ -163,20 +173,17 @@ class TestProtocol(SIPPartyTestCase):
             # between them.
             b"To: <sip:bill@biloxi.com>\r\n"
             b"Via: SIP/2.0/UDP arkansas.com\r\n"
-            b"Via: SIP/2.0/UDP 127.0.0.1:5061;{1}\r\n"
+            b"Via: SIP/2.0/UDP 127.0.0.1:5061;%(branch_pattern)s\r\n"
             # 6 random hex digits followed by a date/timestamp
-            b"Call-ID: {0}\r\n"
-            b"CSeq: {2} INVITE\r\n"
+            b"Call-ID: %(call_id_pattern)s\r\n"
+            b"CSeq: %(cseq_num_pattern)s INVITE\r\n"
             b"Max-Forwards: 55\r\n"
             b"Content-Length: 17\r\n"
             b"Contact: <sip:alice@127.0.0.1:5061>\r\n"
-            b"Content-Type: {4}\r\n"
+            b"Content-Type: %(SIPBodyType)s\r\n"
             b"\r\n"
             b"This is a message$"
-            b"".format(
-                TestProtocol.call_id_pattern, TestProtocol.branch_pattern,
-                TestProtocol.cseq_num_pattern, TestProtocol.tag_pattern,
-                sdpsyntax.SIPBodyType),
+            b"" % self.message_patterns,
             bytes(new_inv)), repr(bytes(new_inv)))
 
     def testCumulativeProperties(self):
@@ -280,6 +287,3 @@ class TestProtocol(SIPPartyTestCase):
         inv.unbindAll()
         self.assertEqual(len(inv._vb_forwardbindings), 0)
         self.assertEqual(len(inv._vb_backwardbindings), 0)
-
-if __name__ == "__main__":
-    sys.exit(unittest.main())

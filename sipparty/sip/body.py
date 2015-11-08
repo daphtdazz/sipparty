@@ -44,4 +44,4 @@ class Body(
     }
 
     def bytesGen(self):
-        return bytes(self.content)
+        yield self.content

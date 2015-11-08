@@ -141,8 +141,7 @@ def sipheader(key):
         }
         if not PY2:
             for wrong, right in iteritems(dict(sipheaderreplacements)):
-                sipheaderreplacements[str(wrong, encoding='ascii')] = str(
-                    right, encoding='ascii')
+                sipheaderreplacements[astr(wrong)] = astr(right)
 
     nk = key.title()
     if isinstance(key, str):
@@ -259,13 +258,13 @@ class AsciiBytesEnum(Enum):
 
     def enum(self):
         return Enum(
-            [str(val, encoding='ascii') for val in self._en_list],
+            [astr(val) for val in self._en_list],
             aliases=self._en_aliases, normalize=self._en_normalize)
 
     def _en_fixAttr(self, name):
         if isinstance(name, str):
             log.detail('Convert %r to ascii bytes', name)
-            name = bytes(name, encoding='ascii')
+            name = abytes(name)
 
         fixedStrAttr = super(AsciiBytesEnum, self)._en_fixAttr(name)
         return fixedStrAttr
@@ -282,7 +281,7 @@ class ClassType(object):
     def __get__(self, instance, owner):
         class_name = owner.__name__
         capp = self.class_append
-        log.debug("Class is %r, append is %r", class_name, capp)
+        log.detail("Class is %r, append is %r", class_name, capp)
         class_short_name = class_name.replace(capp, "")
         try:
             return getattr(owner.types, class_short_name)
@@ -606,7 +605,7 @@ class DerivedProperty(object):
             return getattr(target, pname)
 
         # Get might be a method name...
-        if isinstance(gt, bytes) and hasattr(target, gt):
+        if isinstance(gt, str) and hasattr(target, gt):
             meth = getattr(target, gt)
             if not isinstance(meth, Callable):
                 raise ValueError(
@@ -807,8 +806,20 @@ class BytesGenner(object):
             "%r class has not overridden 'bytesGen' which is required to "
             "inherit from BytesGenner" % (self.__class__.__name__,))
 
+    def safeBytesGen(self):
+        for bb in self.bytesGen():
+            log.detail('Next bytes %r', bb)
+            if not isinstance(bb, bytes):
+                raise TypeError(
+                    '%r instance generated un-bytes-like object %r' % (
+                        self.__class__.__name__, bb))
+            yield bb
+
     def __bytes__(self):
-        return b''.join(self.bytesGen())
+        log.detail(
+            'Generating bytes for BytesGenner subclass %r',
+            type(self).__name__)
+        return b''.join(self.safeBytesGen())
 
 
 class TestCaseREMixin(object):
@@ -828,10 +839,6 @@ class TestCaseREMixin(object):
 
 def bglobals_g(gbls):
     bglobals = {}
-    if PY2:
-        abytes = bytes
-    else:
-        abytes = lambda x: bytes(x, encoding='ascii')
 
     for key, val in iteritems(gbls):
         if key.startswith('_'):
@@ -852,3 +859,11 @@ def bglobals_g(gbls):
             bglobals[key] = val
 
     return bglobals
+
+
+if PY2:
+    abytes = lambda x: x
+    astr = abytes
+else:
+    abytes = lambda x: bytes(x, encoding='ascii')
+    astr = lambda x: str(x, encoding='ascii')

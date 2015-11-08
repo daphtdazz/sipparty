@@ -2,8 +2,6 @@
 
 ## List. ##
 
-2. Pumba integration.
-3. Fix slow termination time (weak reference needed somewhere?) 
 4. REGISTER dialogues.
 5. Example scripts.
 6. TCP support. 
@@ -12,6 +10,7 @@
 8. UDP transport retrying. 
 9. Smarter ACK than simply "ACK all 200s" in dialog.py
 9. Continuous Integration.
+10. Pumba integration.
 10. Get rid of "delegateattributes", use "vb_dependencies". -- ?? semi done?
 12. Move sipheader out of util and probably into prot.
 15. Document and fixing attribute naming convention in vb.py.
@@ -24,6 +23,9 @@
 23. Generate remote session from SDP received and send data to from it.
 24. Collapse AOR into URI.
 25. quoted-string in display-name in name-addr cannot be followed by LWS??
+26. Parser only copes with binary types...
+27. Disable checking on deepclass attributes.
+28. Allow the DeepClass attribute dictionary to be a list / tuple of (key, value) tuples to enforce ordering.
 
 ## Done list. ##
 

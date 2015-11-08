@@ -21,8 +21,8 @@ import random
 from six import (itervalues, binary_type as bytes, add_metaclass)
 from ..parse import (Parser)
 from ..util import (
-    BytesGenner, attributesubclassgen, TwoCompatibleThree, AsciiBytesEnum,
-    ClassType, DerivedProperty)
+    abytes, astr, Enum, attributesubclassgen, BytesGenner, ClassType,
+    DerivedProperty, TwoCompatibleThree)
 from ..vb import ValueBinder
 from .prot import (BranchMagicCookie, Incomplete)
 
@@ -33,7 +33,7 @@ class Parameters(Parser, BytesGenner, ValueBinder, dict):
     """Class representing a list of parameters on a header or other object.
     """
     parseinfo = {
-        Parser.Pattern: "^(.*)$"
+        Parser.Pattern: b"^(.*)$"
     }
 
     def __init__(self):
@@ -64,8 +64,7 @@ class Parameters(Parser, BytesGenner, ValueBinder, dict):
                     self.__class__.__name__, attr, self.keys()))
 
     def parsecust(self, string, mo):
-
-        parms = string.lstrip(";").split(";")
+        parms = string.lstrip(b';').split(b';')
         log.debug("Parameters: %r", parms)
 
         for parm in parms:
@@ -74,8 +73,9 @@ class Parameters(Parser, BytesGenner, ValueBinder, dict):
 
     def bytesGen(self):
         for pm in itervalues(self):
+            log.detail('Add param type %r', pm.__class__.__name__)
             yield b';'
-            for by in pm.bytesGen():
+            for by in pm.safeBytesGen():
                 yield by
 
 
@@ -83,7 +83,7 @@ class Parameters(Parser, BytesGenner, ValueBinder, dict):
 @TwoCompatibleThree
 class Param(Parser, BytesGenner, ValueBinder):
 
-    types = AsciiBytesEnum((b"branch", b"tag",), normalize=lambda x: x.lower())
+    types = Enum(("branch", "tag",), normalize=lambda x: x.lower())
 
     parseinfo = {
         Parser.Pattern:
@@ -91,7 +91,7 @@ class Param(Parser, BytesGenner, ValueBinder):
             b"\s*=\s*"
             b"(.+)",
         Parser.Constructor:
-            (1, lambda x: getattr(Param, x)()),
+            (1, lambda x: getattr(Param, astr(x))()),
         Parser.Mappings:
             [None,
              ("value",)]
@@ -109,8 +109,8 @@ class Param(Parser, BytesGenner, ValueBinder):
         return underlyingValue
 
     def bytesGen(self):
-        log.debug("Param Bytes")
-        yield bytes(self.name)
+        log.debug("%r bytesGen", self.__class__.__name__)
+        yield bytes(abytes(self.name))
         yield b'='
         yield bytes(self.value)
 
@@ -155,6 +155,10 @@ class BranchParam(Param):
         self.branch_num = branch_num
 
     def getValue(self, underlyingValue):
+        log.detail(
+            'Get %r instance value, underlying is %r', self.__class__.__name__,
+            underlyingValue)
+
         if underlyingValue is not None:
             return underlyingValue
 
@@ -162,8 +166,7 @@ class BranchParam(Param):
             return None
 
         try:
-            str_to_hash = b"{0}-{1}".format(
-                bytes(self.startline), self.branch_num)
+            str_to_hash = "%s-%d" % (self.startline, self.branch_num)
         except Incomplete:
             # So part of us is not complete. Return None.
             return None
@@ -171,7 +174,7 @@ class BranchParam(Param):
         the_hash = hash(str_to_hash)
         if the_hash < 0:
             the_hash = - the_hash
-        nv = b"{0}{1:x}".format(BranchMagicCookie, the_hash)
+        nv = b"%s%x" % (BranchMagicCookie, the_hash)
         log.debug("New %r value %r", self.__class__.__name__, nv)
         return nv
 
@@ -187,6 +190,9 @@ class TagParam(Param):
         self.tagtype = tagtype
 
     def getValue(self, underlyingValue):
+        log.detail(
+            'Get %r instance value, underlying is %r', self.__class__.__name__,
+            underlyingValue)
         if underlyingValue is not None:
             return underlyingValue
 

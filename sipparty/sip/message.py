@@ -17,6 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 from six import (add_metaclass, binary_type as bytes, iteritems, next)
+from six.moves import reduce
 import re
 import logging
 from numbers import (Integral)
@@ -25,7 +26,7 @@ from ..deepclass import (DeepClass, dck)
 from ..parse import (ParseError,)
 from ..sdp import sdpsyntax
 from ..transport import SOCK_TYPE_IP_NAMES
-from ..util import BytesGenner
+from ..util import (astr, BytesGenner)
 from ..vb import (KeyTransformer, ValueBinder)
 from .body import Body
 from .header import Header
@@ -163,7 +164,7 @@ class Message(
         for hname, hcontents, bytes_used in HNameContentsGen(line_iter):
             log.debug("Add header %r", hname)
             log.detail("Contents: %r", hcontents)
-            newh = getattr(Header, hname).Parse(hcontents)
+            newh = getattr(Header, astr(hname)).Parse(hcontents)
             log.detail("Header parsed as: %r", newh)
             message.addHeader(newh)
             used_bytes += bytes_used
@@ -351,7 +352,7 @@ class Message(
         eol = b'\r\n'
         yield eol
         for hdr in self.headers:
-            for bs in hdr.bytesGen():
+            for bs in hdr.safeBytesGen():
                 yield bs
             yield eol
         yield eol
@@ -360,7 +361,7 @@ class Message(
         assert len(bds) <= 1, "Only support one body currently."
 
         for body in bds:
-            for bs in body.bytesGen():
+            for bs in body.safeBytesGen():
                 yield bs
 
     def __getattr__(self, attr):
@@ -376,9 +377,11 @@ class Message(
         hmo = self.headerattrre.match(attr)
         if hmo is not None:
             canonicalheadername = util.sipheader(hmo.group(1))
-            for header in self.headers:
-                if header.type == canonicalheadername:
-                    return header
+            hdrs = self.headers
+            if hdrs:
+                for header in hdrs:
+                    if header.type == canonicalheadername:
+                        return header
 
         try:
             return getattr(super(Message, self), attr)

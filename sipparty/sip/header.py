@@ -26,8 +26,8 @@ from six import (add_metaclass, binary_type as bytes, PY2)
 from ..deepclass import (DeepClass, dck)
 from ..parse import (Parser,)
 from ..util import (
-    BytesGenner, attributesubclassgen, TwoCompatibleThree, ClassType,
-    FirstListItemProxy)
+    abytes, astr, attributesubclassgen, BytesGenner, ClassType, FirstListItemProxy,
+    TwoCompatibleThree,)
 from ..vb import ValueBinder
 from . import defaults
 from .field import (DNameURIField, ViaField)
@@ -78,7 +78,7 @@ class Header(
         if PY2:
             return b'%s: ' % self.type
 
-        return b'%s: ' % bytes(self.type, encoding='ascii')
+        return b'%s: ' % abytes(self.type)
 
 
 class FieldsBasedHeader(
@@ -129,7 +129,7 @@ class FieldsBasedHeader(
                     yield b','
                     first_field = False
 
-                for bs in fld.bytesGen():
+                for bs in fld.safeBytesGen():
                     yield bs
 
         except Incomplete as exc:
@@ -253,7 +253,7 @@ class Call_IdHeader(
         keydate = (
             b"%(year)04d%(month)02d%(day)02d%(hour)02d%(minute)02d"
             b"%(second)02d" % {
-                key: getattr(dt, key) for key in (
+                abytes(key): getattr(dt, key) for key in (
                     'year', 'month', 'day', 'hour', 'minute', 'second'
                 )
             })
@@ -298,7 +298,7 @@ class CseqHeader(
             b"([\w_-]+)$",  # No parameters.
         Parser.Mappings:
             [("number", int),
-             ("reqtype", None, lambda x: getattr(Request.types, x))]
+             ("reqtype", lambda x: getattr(Request.types, astr(x)))]
     }
 
     def bytesGen(self):
@@ -307,9 +307,9 @@ class CseqHeader(
             raise Incomplete("CSeqHeader has no request type.")
 
         yield self._hdr_prepend()
-        yield bytes("%d" % self.number)
+        yield b'%d' % self.number
         yield b' '
-        yield bytes(self.reqtype)
+        yield abytes(self.reqtype)
 
 
 class NumberHeader(
@@ -362,10 +362,10 @@ class Content_TypeHeader(
     def bytesGen(self):
         yield self._hdr_prepend()
         if not self.content_type:
-            assert 0, self.content_type
             raise Incomplete("Content Header has no type.")
+
         yield bytes(self.content_type)
-        for bs in self.parameters.bytesGen():
+        for bs in self.parameters.safeBytesGen():
             yield bs
 
 Header.addSubclassesFromDict(locals())

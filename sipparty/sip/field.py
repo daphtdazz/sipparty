@@ -152,7 +152,7 @@ class ViaField(
             b"(%(SEMI)s%(generic_param)s)*"  # Parameters.
             b"" % bdict,
         Parser.Mappings:
-            [("protocol", None, lambda x: x.replace(b" ", b"")),
+            [("protocol", lambda x: x.replace(b" ", b"")),
              ("transport",),
              ("host", Host),
              ("parameters", Parameters)],
@@ -178,5 +178,5 @@ class ViaField(
         if not hbytes:
             raise Incomplete("Via header has no or 0-length host.")
         yield hbytes
-        for bs in self.parameters.bytesGen():
+        for bs in self.parameters.safeBytesGen():
             yield bs

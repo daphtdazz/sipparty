@@ -278,6 +278,3 @@ class TestVB(SIPPartyTestCase):
         a.b = "not"
         self.assertEqual(a.b, "not")
         self.assertEqual(a.c, 2)
-
-if __name__ == "__main__":
-    sys.exit(unittest.main())
