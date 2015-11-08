@@ -1,7 +1,4 @@
-? sphinx for documentation?
-http://sphinx-doc.org/domains.html#info-field-lists
-
-# sip-party
+# sipparty <a href="http://travis-ci.org/daphtdazz/sipparty">![Travis status](https://img.shields.io/travis/daphtdazz/sipparty.svg?branch=master)</a> #
 
 ## Layout
 
