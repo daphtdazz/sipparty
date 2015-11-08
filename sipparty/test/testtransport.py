@@ -26,6 +26,3 @@ log = logging.getLogger(__name__)
 
 class TestTransport(unittest.TestCase):
     pass
-
-if __name__ == "__main__":
-    sys.exit(unittest.main())

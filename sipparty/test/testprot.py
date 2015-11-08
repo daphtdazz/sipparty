@@ -22,7 +22,6 @@ import re
 from six import (add_metaclass, binary_type as bytes, iteritems, PY2)
 import sys
 import unittest
-from .setup import SIPPartyTestCase
 from ..parse import ParseError
 from ..sdp import sdpsyntax
 from ..sip import (prot, components, Message, Header)
@@ -32,9 +31,9 @@ from ..sip.header import ContactHeader
 from ..sip.prot import (Incomplete)
 from ..sip.request import Request
 from ..util import (Singleton, bglobals_g)
+from .setup import SIPPartyTestCase
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.DETAIL)
 
 
 class TestProtocol(SIPPartyTestCase):

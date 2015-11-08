@@ -28,8 +28,8 @@ from numbers import Integral
 import re
 from .fsm import (FSM, RetryThread)
 from .util import (
-    DerivedProperty, WeakMethod, Singleton, TwoCompatibleThree, Enum,
-    bglobals_g, AsciiBytesEnum)
+    AsciiBytesEnum, astr, bglobals_g, DerivedProperty, Enum, Singleton,
+    TwoCompatibleThree, WeakMethod)
 
 
 def bglobals():
@@ -61,6 +61,10 @@ port = b"%(DIGIT)s+" % bglobals()
 IPv4address_re = re.compile(IPv4address + b'$')
 IPv6address_re = re.compile(IPv6address + b'$')
 IPaddress_re = re.compile(IPaddress + b'$')
+
+
+def default_hostname():
+    return socket.gethostname()
 
 
 class TransportException(Exception):
@@ -127,12 +131,14 @@ def GetBoundSocket(family, socktype, address, port_filter=None):
         family = 0
     if socktype is None:
         socktype = 0
-    assert family in (0, socket.AF_INET, socket.AF_INET6)
+    if family != 0 and family not in SOCK_FAMILIES:
+        raise ValueError('Invalid family %d: not 0 or one of %r' % (
+            SOCK_FAMILY_NAMES,))
     assert socktype in (0, socket.SOCK_STREAM, socket.SOCK_DGRAM)
 
     address = list(address)
     if address[0] is None:
-        address[0] = socket.gethostname()
+        address[0] = default_hostname()
 
     # family e.g. AF_INET / AF_INET6
     # socktype e.g. SOCK_STREAM
@@ -159,10 +165,11 @@ def GetBoundSocket(family, socktype, address, port_filter=None):
             return
 
         # Guess a port from the unregistered range.
-        for ii in range(49152, 0x10000):
+        for ii in range(49152, 0xffff):
             if port_filter is None or port_filter(ii):
                 yield ii
 
+    socketError = None
     for port in port_generator():
         try:
             # TODO: catch specific errors (e.g. address in use) to bail
@@ -171,16 +178,17 @@ def GetBoundSocket(family, socktype, address, port_filter=None):
             ssocket.bind((address[0], port))
             socketError = None
             break
-        except socket.error as socketError:
+        except socket.error as _se:
             log.debug("Socket error on (%r, %d)", address[0], port)
-            pass
-        except socket.gaierror as socketError:
+            socketError = _se
+        except socket.gaierror as _se:
             log.debug("GAI error on (%r, %d)", address[0], port)
+            socketError = _se
             break
 
     if socketError is not None:
         raise BadNetwork(
-            "Couldn't bind to address %(address)s" % bglobals(),
+            "Couldn't bind to address %s" % address[0],
             socketError)
 
     log.debug("Socket bound to %r type %r", ssocket.getsockname(), _family)
@@ -198,8 +206,8 @@ class Transport(Singleton):
 
     @classmethod
     def FormatBytesForLogging(cls, mbytes):
-        return "\\n\n".join(
-            [repr(bs)[1:-1] for bs in mbytes.split("\n")]).rstrip("\n")
+        return '\\n\n'.join(
+            [repr(astr(bs))[1:-1] for bs in mbytes.split(b'\n')]).rstrip('\n')
 
     #
     # =================== INSTANCE INTERFACE ==================================
@@ -227,8 +235,10 @@ class Transport(Singleton):
         """
         if port is None:
             port = self.DefaultPort
-        if not isinstance(port, Integral) or 0 > port > 0xffff:
-            raise ValueError("Invalid port: %r", port)
+        if not isinstance(port, Integral):
+            raise TypeError('Port is not an Integer: %r' % port)
+        if 0 > port > 0xffff:
+            raise ValueError('Invalid port number: %r' % port)
         if family not in (None, AF_INET, AF_INET6):
             raise ValueError("Invalid socket family %r" % family)
 
@@ -276,10 +286,10 @@ class Transport(Singleton):
                 if len(toAddr) != len(sname):
                     log.debug("Different socket family type skipped.")
                     continue
-                sck.sendto(mbytes, toAddr)
+                sck.sendto(msg, toAddr)
                 prot_log.info(
                     "Sent %r -> %r\n>>>>>\n%s\n>>>>>", sname,
-                    toAddr, self.FormatBytesForLogging(mbytes))
+                    toAddr, self.FormatBytesForLogging(msg))
                 return
             except socket.error as exc:
                 log.debug(
@@ -289,10 +299,19 @@ class Transport(Singleton):
             raise exc
 
     def sendDgramMessageFrom(self, msg, toAddr, fromAddr):
-        assert fromAddr is not None
+        """:param msg: The message (a bytes-able) to send.
+        :param toAddr: The place to send to. This should be *post* address
+        resolution, so this must be either a 2 (IPv4) or a 4 (IPv6) tuple.
+        """
         log.debug("Send %r -> %r", fromAddr, toAddr)
 
+        assert isinstance(toAddr, tuple)
+        assert len(toAddr) in (2, 4)
+
+        family = AF_INET if len(toAddr) == 2 else AF_INET6
+
         fromName, fromPort = fromAddr[:2]
+
         if fromName is not None and IPv6address_re.match(fromName):
             if len(fromAddr) == 2:
                 fromAddr = (fromAddr[0], fromAddr[1], 0, 0)
@@ -300,7 +319,7 @@ class Transport(Singleton):
                 assert len(fromAddr) == 4
 
         if fromAddr not in self._tp_dGramSockets:
-            sck = GetBoundSocket(None, SOCK_DGRAM, fromAddr)
+            sck = GetBoundSocket(family, SOCK_DGRAM, fromAddr)
             self.addDgramSocket(sck)
         else:
             sck = self._tp_dGramSockets[fromAddr]

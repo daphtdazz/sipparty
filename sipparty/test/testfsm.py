@@ -23,10 +23,6 @@ import sys
 import threading
 import time
 import timeit
-if PY2:
-    from mock import (MagicMock, patch)
-else:
-    from unittest.mock import (MagicMock, patch)
 from ..fsm import (
     FSM, FSMTimeout, InitialStateKey, RetryThread, Timer,
     TransitionKeys,
@@ -34,7 +30,7 @@ from ..fsm import (
 from ..fsm import fsmtimer
 from ..fsm import retrythread
 from ..util import (Clock, Enum, WaitFor)
-from .setup import SIPPartyTestCase
+from .setup import (MagicMock, patch, SIPPartyTestCase)
 
 log = logging.getLogger(__name__)
 

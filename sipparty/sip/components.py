@@ -17,6 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
+from numbers import Integral
 from six import binary_type as bytes
 import socket
 from . import defaults
@@ -31,7 +32,13 @@ log = logging.getLogger(__name__)
 
 
 @TwoCompatibleThree
-class Host(Parser, TupleRepresentable, ValueBinder):
+class Host(
+        DeepClass("_hst_", {
+            "address": {dck.check: lambda x: isinstance(x, bytes)},
+            "port": {
+                dck.check: (
+                    lambda x: isinstance(x, Integral) and 0 <= x <= 0xffff)}}),
+        Parser, TupleRepresentable, ValueBinder):
 
     parseinfo = {
         Parser.Pattern:
@@ -47,13 +54,8 @@ class Host(Parser, TupleRepresentable, ValueBinder):
              ("port", int)],
     }
 
-    def __init__(self, address=None, port=None, **kwargs):
-        super(Host, self).__init__()
-        self.address = address
-        self.port = port
-
     def addrTuple(self):
-        addrHost = "" if self.address is None else self.address
+        addrHost = '' if self.address is None else astr(self.address)
         addrPort = defaults.port if self.port is None else self.port
         addrFlowInfo = 0
         addrScopeID = 0
@@ -72,9 +74,9 @@ class Host(Parser, TupleRepresentable, ValueBinder):
 
         isIpv6 = False
         if address:
-            log.detail("Resolve address: %s", bytes(address))
+            log.detail("Resolve address: %r", address)
             try:
-                ais = socket.getaddrinfo(bytes(address), 0)
+                ais = socket.getaddrinfo(address, 0)
                 for ai in ais:
                     if ai[0] == socket.AF_INET:
                         break
