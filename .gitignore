@@ -71,3 +71,6 @@ target/
 
 # out
 *.out
+
+# backup files
+*.swp
