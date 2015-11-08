@@ -83,7 +83,7 @@ class Response(Parser, ValueBinder):
         self.codeMessage = codeMessage
 
     def __bytes__(self):
-        return b'%s %s %s' % (self.protocol, self.code, self.codeMessage)
+        return b'%s %d %s' % (self.protocol, self.code, self.codeMessage)
 
     def __repr__(self):
         return (

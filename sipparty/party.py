@@ -27,7 +27,7 @@ from .sip import (
     SIPTransport, Incomplete, DNameURI, AOR, URI, Host, Request, Message,
     Body, defaults)
 from .transport import (SockTypeName, IPaddress_re)
-from .util import (DerivedProperty, WeakMethod)
+from .util import (abytes, DerivedProperty, WeakMethod)
 from .vb import ValueBinder
 
 __all__ = ('Party', 'PartySubclass')
@@ -163,7 +163,7 @@ class Party(
         assert lAddr[1] != 0
         log.info("Party listening on %r", lAddr)
         self._pt_listenAddress = lAddr
-        uriHost.address = lAddr[0]
+        uriHost.address = abytes(lAddr[0])
         uriHost.port = lAddr[1]
 
         tp.addDialogHandlerForAOR(
@@ -221,7 +221,7 @@ class Party(
             return None
 
         ma = self.mediaAddress
-        ms = self.__class__.MediaSession(username="-", address=ma)
+        ms = self.__class__.MediaSession(username=b'-', address=ma)
         return ms
 
     #
@@ -260,8 +260,7 @@ class Party(
             log.debug("Attempt to parse a URI from the target.")
             return URI.Parse(target)
 
-        raise ValueError("Can't resolve URI from target %r" % (
-            target))
+        raise ValueError("Can't resolve URI from target %r" % (target))
 
     def _pt_resolveProxyAddress(self, target):
         if hasattr(target, "listenAddress"):
@@ -277,8 +276,8 @@ class Party(
 
         try:
             turi = self._pt_resolveTargetURI(target)
-        except ValueError:
-            raise ValueError("Can't resolve proxy from target %r" % (
+        except (TypeError, ValueError) as exc:
+            raise type(exc)("Can't resolve proxy from target %r" % (
                 target,))
         return (turi.address, turi.port)
 

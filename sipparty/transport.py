@@ -28,7 +28,7 @@ from numbers import Integral
 import re
 from .fsm import (FSM, RetryThread)
 from .util import (
-    AsciiBytesEnum, astr, bglobals_g, DerivedProperty, Enum, Singleton,
+    abytes, AsciiBytesEnum, astr, bglobals_g, DerivedProperty, Enum, Singleton,
     TwoCompatibleThree, WeakMethod)
 
 
@@ -312,7 +312,8 @@ class Transport(Singleton):
 
         fromName, fromPort = fromAddr[:2]
 
-        if fromName is not None and IPv6address_re.match(fromName):
+        if fromName is not None and IPv6address_re.match(
+                abytes(fromName)):
             if len(fromAddr) == 2:
                 fromAddr = (fromAddr[0], fromAddr[1], 0, 0)
             else:

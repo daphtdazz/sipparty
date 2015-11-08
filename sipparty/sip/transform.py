@@ -93,4 +93,7 @@ def _FindTypeDict(dicts, typ):
                 "Transform dictionary %r does not contain type %r" % (
                     dicts, typ))
 
+    if typ not in dicts:
+        raise KeyError(
+            '%r transform type not in transforms %r' % (typ, dicts))
     return dicts[typ]

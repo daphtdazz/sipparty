@@ -238,7 +238,7 @@ m_parameter = b"%(token)s=(?:%(quoted_string)s|%(token)s)" % bglobals()
 
 RequestTypes = AsciiBytesEnum((
     b"ACK", b"BYE", b"CANCEL", b"INVITE", b"OPTIONS", b"REGISTER"),
-    normalize=lambda x: x.upper())
+    normalize=lambda x: x.upper() if hasattr(x, 'upper') else x)
 
 RequestTypesStr = str_enumify(RequestTypes)
 
