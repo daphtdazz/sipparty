@@ -55,15 +55,15 @@ class TestProtocol(SIPPartyTestCase):
             "".format(stra, strb))
 
     def testGeneral(self):
-        aliceAOR = components.AOR("alice", "atlanta.com")
-        self.assertEqual(bytes(aliceAOR), "alice@atlanta.com")
-        bobAOR = components.AOR("bob", "baltimore.com")
+        aliceAOR = components.AOR(b"alice", b"atlanta.com")
+        self.assertEqual(bytes(aliceAOR), b"alice@atlanta.com")
+        bobAOR = components.AOR(b"bob", b"baltimore.com")
 
         self.assertRaises(AttributeError, lambda: Request.notareq)
 
         inviteRequest = Request.invite(uri_aor=bobAOR)
         self.assertEqual(
-            bytes(inviteRequest), "INVITE sip:bob@baltimore.com SIP/2.0")
+            bytes(inviteRequest), b"INVITE sip:bob@baltimore.com SIP/2.0")
 
         self.assertRaises(AttributeError, lambda: Message.notareg)
 
@@ -82,21 +82,22 @@ class TestProtocol(SIPPartyTestCase):
         invite.startline = sline
         new_branch = bytes(invite.viaheader.parameters.branch)
         self.assertNotEqual(old_branch, new_branch)
-        invite.fromheader.field.value.uri.aor.username = "alice"
-        invite.fromheader.field.value.uri.aor.host = "atlanta.com"
-        invite.viaheader.field.host.address = "127.0.0.1"
+        invite.fromheader.field.value.uri.aor.username = b"alice"
+        invite.fromheader.field.value.uri.aor.host = b"atlanta.com"
+        invite.viaheader.field.host.address = b"127.0.0.1"
+        inv_bytes = bytes(invite)
         self.assertTrue(re.match(
-            b"INVITE sip:bob@baltimore.com SIP/2.0\r\n"
-            b"From: <sip:alice@atlanta.com>;%(tag_pattern)s\r\n"
-            b"To: <sip:bob@baltimore.com>\r\n"
-            b"Via: SIP/2.0/UDP 127.0.0.1;%(branch_pattern)s\r\n"
-            # 6 random hex digits followed by a date/timestamp
-            b"Call-ID: %(call_id_pattern)s\r\n"
-            b"CSeq: %(cseq_num_pattern)s INVITE\r\n"
-            b"Max-Forwards: 70\r\n" % self.message_patterns,
-            repr(bytes(invite))), bytes(invite))
+                b"INVITE sip:bob@baltimore.com SIP/2.0\r\n"
+                b"From: <sip:alice@atlanta.com>;%(tag_pattern)s\r\n"
+                b"To: <sip:bob@baltimore.com>\r\n"
+                b"Via: SIP/2.0/UDP 127.0.0.1;%(branch_pattern)s\r\n"
+                # 6 random hex digits followed by a date/timestamp
+                b"Call-ID: %(call_id_pattern)s\r\n"
+                b"CSeq: %(cseq_num_pattern)s INVITE\r\n"
+                b"Max-Forwards: 70\r\n" % self.message_patterns, inv_bytes),
+            inv_bytes)
 
-        self.assertEqual(bytes(invite.toheader), "To: <sip:bob@baltimore.com>")
+        self.assertEqual(bytes(invite.toheader), b"To: <sip:bob@baltimore.com>")
         self.assertEqual(
             bytes(invite.call_idheader),
             bytes(getattr(invite, "Call_IdHeader")))
@@ -130,7 +131,7 @@ class TestProtocol(SIPPartyTestCase):
         if not PY2:
             self.assertRaises(
                 ValueError,
-                lambda: setattr(invite.startline, 'username', 'bob'))
+                lambda: setattr(invite.startline, 'username', b'bob'))
         invite.startline.username = b"bob"
         self.assertEqual(invite.startline.username, invite.toheader.username)
         invite.startline.uri.aor.host = b"biloxi.com"
@@ -165,6 +166,7 @@ class TestProtocol(SIPPartyTestCase):
         new_inv.addBody(
             Body(type=sdpsyntax.SIPBodyType, content=b"This is a message"))
 
+        new_inv_bytes = bytes(new_inv)
         self.assertTrue(re.match(
             b"INVITE sip:bill@biloxi.com SIP/2.0\r\n"
             b"From: <sip:alice@atlanta.com>;%(tag_pattern)s\r\n"
@@ -184,7 +186,7 @@ class TestProtocol(SIPPartyTestCase):
             b"\r\n"
             b"This is a message$"
             b"" % self.message_patterns,
-            bytes(new_inv)), repr(bytes(new_inv)))
+            new_inv_bytes), repr(new_inv_bytes))
 
     def testCumulativeProperties(self):
 
