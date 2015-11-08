@@ -131,7 +131,7 @@ class TestProtocol(SIPPartyTestCase):
         if not PY2:
             self.assertRaises(
                 ValueError,
-                lambda: setattr(invite.startline, 'username', b'bob'))
+                lambda: setattr(invite.startline, 'username', 'bob'))
         invite.startline.username = b"bob"
         self.assertEqual(invite.startline.username, invite.toheader.username)
         invite.startline.uri.aor.host = b"biloxi.com"
@@ -187,52 +187,6 @@ class TestProtocol(SIPPartyTestCase):
             b"This is a message$"
             b"" % self.message_patterns,
             new_inv_bytes), repr(new_inv_bytes))
-
-    def testCumulativeProperties(self):
-
-        @add_metaclass(util.CCPropsFor(("CPs", "CPList", "CPDict")))
-        class CCPTestA(object):
-            CPs = util.Enum((1, 2))
-            CPList = [1, 2]
-            CPDict = {1: 1, 2: 2}
-
-        class CCPTestB(CCPTestA):
-            CPs = util.Enum((4, 5))
-            CPList = [4, 5]
-            CPDict = {4: 4, 3: 3}
-
-        class CCPTest1(CCPTestB):
-            CPs = util.Enum((3, 2))
-            CPList = [3, 2]
-            CPDict = {2: 2, 3: 5}
-
-        self.assertEqual(CCPTestA.CPs, util.Enum((1, 2)))
-        self.assertEqual(CCPTestB.CPs, util.Enum((1, 2, 4, 5)))
-        self.assertEqual(CCPTest1.CPs, util.Enum((1, 2, 3, 4, 5)))
-
-        self.assertEqual(CCPTestA.CPDict, {1: 1, 2: 2})
-        self.assertEqual(CCPTestB.CPDict, {1: 1, 2: 2, 3: 3, 4: 4})
-        self.assertEqual(CCPTest1.CPDict, {1: 1, 2: 2, 3: 5, 4: 4})
-
-        # Expect the order of the update to start with the most nested, then
-        # gradually get higher and higher.
-        self.assertEqual(CCPTest1.CPList, [1, 2, 4, 5, 3])
-
-    def testClassOrInstance(self):
-
-        class MyClass(object):
-
-            @util.class_or_instance_method
-            def AddProperty(cls_or_self, prop, val):
-                setattr(cls_or_self, prop, val)
-
-        inst = MyClass()
-        MyClass.AddProperty("a", 1)
-        inst.AddProperty("b", 2)
-        MyClass.a == 1
-        self.assertRaises(AttributeError, lambda: MyClass.b)
-        self.assertEqual(inst.a, 1)
-        self.assertEqual(inst.b, 2)
 
     def testProt(self):
         for name, obj in iteritems(prot.__dict__):

@@ -17,7 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-from six import (PY2, next)
+from six import (add_metaclass, next, PY2)
 import unittest
 from .. import util
 from .setup import SIPPartyTestCase
@@ -91,3 +91,48 @@ class TestUtil(SIPPartyTestCase):
         self.assertTrue(s3 is s4)
         self.assertFalse(s3 is s1)
 
+    def testCumulativeProperties(self):
+
+        @add_metaclass(util.CCPropsFor(("CPs", "CPList", "CPDict")))
+        class CCPTestA(object):
+            CPs = util.Enum((1, 2))
+            CPList = [1, 2]
+            CPDict = {1: 1, 2: 2}
+
+        class CCPTestB(CCPTestA):
+            CPs = util.Enum((4, 5))
+            CPList = [4, 5]
+            CPDict = {4: 4, 3: 3}
+
+        class CCPTest1(CCPTestB):
+            CPs = util.Enum((3, 2))
+            CPList = [3, 2]
+            CPDict = {2: 2, 3: 5}
+
+        self.assertEqual(CCPTestA.CPs, util.Enum((1, 2)))
+        self.assertEqual(CCPTestB.CPs, util.Enum((1, 2, 4, 5)))
+        self.assertEqual(CCPTest1.CPs, util.Enum((1, 2, 3, 4, 5)))
+
+        self.assertEqual(CCPTestA.CPDict, {1: 1, 2: 2})
+        self.assertEqual(CCPTestB.CPDict, {1: 1, 2: 2, 3: 3, 4: 4})
+        self.assertEqual(CCPTest1.CPDict, {1: 1, 2: 2, 3: 5, 4: 4})
+
+        # Expect the order of the update to start with the most nested, then
+        # gradually get higher and higher.
+        self.assertEqual(CCPTest1.CPList, [1, 2, 4, 5, 3])
+
+    def testClassOrInstance(self):
+
+        class MyClass(object):
+
+            @util.class_or_instance_method
+            def AddProperty(cls_or_self, prop, val):
+                setattr(cls_or_self, prop, val)
+
+        inst = MyClass()
+        MyClass.AddProperty("a", 1)
+        inst.AddProperty("b", 2)
+        MyClass.a == 1
+        self.assertRaises(AttributeError, lambda: MyClass.b)
+        self.assertEqual(inst.a, 1)
+        self.assertEqual(inst.b, 2)
