@@ -16,32 +16,32 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import six
-import re
 import logging
-
-from sipparty import (parse, util, vb, ParsedPropertyOfClass)
-from sipparty.util import (ClassType,)
-from sipparty.deepclass import (DeepClass, dck)
-import prot
-import defaults
-from components import (URI)
+import re
+from six import (add_metaclass, binary_type as bytes)
+from ..deepclass import (DeepClass, dck)
+from ..parse import (ParsedPropertyOfClass, Parser)
+from ..util import (
+    abytes, astr, attributesubclassgen, ClassType, TwoCompatibleThree)
+from ..vb import ValueBinder
+from . import defaults
+from .components import (URI)
+from .prot import (bdict, protocols, RequestTypes)
 
 log = logging.getLogger(__name__)
-bytes = six.binary_type
 
 
-@six.add_metaclass(util.attributesubclassgen)
-@util.TwoCompatibleThree
+@add_metaclass(attributesubclassgen)
+@TwoCompatibleThree
 class Request(
         DeepClass("_rq_", {
             "uri": {dck.descriptor: ParsedPropertyOfClass(URI), dck.gen: URI},
             "protocol": {
-                dck.check: lambda pcl: pcl in prot.protocols,
+                dck.check: lambda pcl: pcl in protocols,
                 dck.gen: lambda: defaults.sipprotocol
             }
         }),
-        parse.Parser, vb.ValueBinder):
+        Parser, ValueBinder):
     """Encapsulates a SIP method request line.
 
     Request-Line  =  Method SP Request-URI SP SIP-Version CRLF
@@ -51,16 +51,16 @@ class Request(
         ("uri", ("aor", "username", "host", "address", "port")),
     )
 
-    types = prot.RequestTypes
+    types = RequestTypes.enum()
 
     # Parse description.
     parseinfo = {
-        parse.Parser.Pattern: (
-            b"({Method}){SP}({Request_URI}){SP}({SIP_Version})"
-            "".format(**prot.__dict__)),
-        parse.Parser.Constructor:
-            (1, lambda a: getattr(Request, a)()),
-        parse.Parser.Mappings:
+        Parser.Pattern: (
+            b'(%(Method)s)%(SP)s(%(Request_URI)s)%(SP)s(%(SIP_Version)s)'
+            b'' % bdict),
+        Parser.Constructor:
+            (1, lambda a: getattr(Request, astr(a))()),
+        Parser.Mappings:
             [None,  # First group is for the constructor.
              ("uri", URI),
              ("protocol",)],
@@ -69,7 +69,7 @@ class Request(
     type = ClassType("Request")
 
     def __bytes__(self):
-        return "{self.type} {self.uri} {self.protocol}".format(self=self)
+        return b'%s %s %s' % (abytes(self.type), self.uri, self.protocol)
 
     def __repr__(self):
         return (

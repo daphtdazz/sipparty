@@ -16,22 +16,17 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import six
-import sys
+import logging
 import os
 import re
-import logging
+import six
+import sys
 import unittest
-from setup import SIPPartyTestCase
-from sipparty import vb
-from sipparty.util import DerivedProperty
+from .. import vb
+from ..util import DerivedProperty
+from .setup import SIPPartyTestCase
 
-# If main get the root logger.
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
-    log = logging.getLogger()
-else:
-    log = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class TestVB(SIPPartyTestCase):
@@ -283,6 +278,3 @@ class TestVB(SIPPartyTestCase):
         a.b = "not"
         self.assertEqual(a.b, "not")
         self.assertEqual(a.c, 2)
-
-if __name__ == "__main__":
-    sys.exit(unittest.main())

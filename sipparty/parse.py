@@ -19,7 +19,8 @@ limitations under the License.
 """
 import re
 import logging
-from six import binary_type as bytes, iteritems
+from six import (binary_type as bytes, iteritems, PY2)
+from .util import abytes
 
 log = logging.getLogger(__name__)
 
@@ -52,15 +53,17 @@ class ParsedProperty(object):
                 obj.__class__.__name__, atr)
             return setattr(obj, atr, val)
 
+        if not PY2 and isinstance(val, str):
+            val = abytes(val)
+
         cls = self._pp_class
         if isinstance(val, bytes):
             val = cls.Parse(val)
         else:
             if not isinstance(val, cls):
-                raise ValueError(
+                raise TypeError(
                     "Cannot set unparseable %r instance for attribute %r of "
-                    "%r instance." % (
-                        val.__class__.__name__, atr, cls))
+                    "%r instance." % (val.__class__.__name__, atr, cls))
         setattr(obj, atr, val)
 
 
@@ -90,7 +93,7 @@ class Parser(object):
         class KeyValue(Parser):
             parseinfo = {
                 Parser.Pattern:
-                    "(.+):(.+)",
+                    b"(.+):(.+)",
                 Parser.Mappings:
                     [("key",),
                      ("value",)]
@@ -130,20 +133,6 @@ class Parser(object):
     If 'Key' had had a Parse method, then that would have been called to
     generate the instance. Otherwise 'Key' itself would have been called.
 
-    ### Pre-attribute data transformation
-
-    Further, a third entry may be added to the mapping tuple to transform the
-    data before passing it to the constructor. For example:
-
-    class KeyValue(Parser):
-        ...
-            Parser.Mappings:
-                [("key", Key, lambda x: x.lower()),
-        ...
-
-    Here we are specifying that the key should be made lower case before the
-    constructor is called.
-
     ## Constructor customization
 
     Instead of looking for a Parse method in the class, or calling the class
@@ -157,6 +146,9 @@ class Parser(object):
 
     Here the first item in the tuple indicates the text group from the pattern
     that should be passed to the constructor as the single argument.
+
+    This is useful for example when you want to create subclass B of the Parser
+    subclass A instead of an instance of A directly.
 
     Once the object is constructed, any further attributes from the mapping
     list will be set on that object.
@@ -246,6 +238,11 @@ class Parser(object):
 
         log.debug("%r Parse.", cls.__name__)
 
+        if not isinstance(string, bytes):
+            raise TypeError(
+                'String to parse of type %r is not a bytes-like type.' %
+                type(string))
+
         if Parser.Repeats in pi and pi[Parser.Repeats]:
             log.debug("  repeats")
             result = []
@@ -292,6 +289,7 @@ class Parser(object):
         return result
 
     def parse(self, string, mo=None):
+
         log.debug("%r parse:", self.__class__.__name__)
         log.debug("  %r", string)
 
@@ -324,32 +322,26 @@ class Parser(object):
             def gen(x):
                 return x
             attr = mapping[0]
-            cls = bytes
             log.debug("  attribute %r", attr)
 
-            if len(mapping) > 1:
-                new_cls = mapping[1]
-                if new_cls is not None:
-                    cls = new_cls
-            log.debug("  has class %r", cls.__name__)
-            if len(mapping) > 2:
-                log.debug("  use a generator")
-                gen = mapping[2]
+            mapping_len = len(mapping)
+            if mapping_len > 1:
+                max_mapping_len = 2
+                if mapping_len > max_mapping_len:
+                    raise ValueError(
+                        'Parser mapping %r has unexpected entries (expected '
+                        'length was %d)' % (mapping, max_mapping_len))
 
-            log.debug("  text %r", data)
+                new_gen = mapping[1]
+                if new_gen is not None:
+                    log.detail('Use generator %r of type %r', gen, type(gen))
+                    gen = new_gen
+
+            if hasattr(gen, 'Parse'):
+                log.detail('Generator is actually a Parser.')
+                gen = gen.Parse
+
+            log.debug("  raw text %r", data)
             tdata = gen(data)
-            log.debug("  result %r", tdata)
-            try:
-                if hasattr(cls, "Parse"):
-                    obj = cls.Parse(tdata)
-                else:
-                    obj = cls(tdata)
-            except TypeError:
-                log.error(
-                    "Error generating %r instance for attribute "
-                    "%r. Perhaps it does not take at least one "
-                    "argument in its constructor / initializer or "
-                    "implement 'Parse'?", cls.__name__, attr)
-                raise
-            log.debug("  object %r", obj)
-            setattr(self, attr, obj)
+            log.debug("  generated data %r", tdata)
+            setattr(self, attr, tdata)

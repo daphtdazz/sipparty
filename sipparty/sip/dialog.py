@@ -16,31 +16,32 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from six import binary_type as bytes
-import re
-import logging
 import abc
+import logging
 import numbers
-from sipparty import (splogging, vb, util, fsm, ParsedPropertyOfClass)
-from sipparty.fsm import (FSM, UnexpectedInput)
-from sipparty.deepclass import DeepClass, dck
-from sipparty.sdp import (sdpsyntax, SDPIncomplete)
-from transform import (Transform, TransformKeys)
-from components import (AOR, URI)
-from header import Call_IdHeader
-from request import Request
-from message import Message, MessageResponse
-from param import TagParam
-from body import Body
-import prot
+import re
+from six import binary_type as bytes
+from .. import (vb, fsm)
+from ..fsm import (FSM, UnexpectedInput)
+from ..deepclass import DeepClass, dck
+from ..parse import ParsedPropertyOfClass
+from ..sdp import (sdpsyntax, SDPIncomplete)
+from ..util import (abytes, Enum, WeakMethod)
+from .transform import (Transform, TransformKeys)
+from .components import (AOR, URI)
+from .header import Call_IdHeader
+from .request import Request
+from .message import Message, MessageResponse
+from .param import TagParam
+from .body import Body
+from . import prot
 
 log = logging.getLogger(__name__)
 
-States = util.Enum((
+States = Enum((
     fsm.InitialStateKey, "InitiatingDialog", "InDialog", "TerminatingDialog",
     "SuccessCompletion", "ErrorCompletion"))
-Inputs = util.Enum((
-    "initiate", "receiveRequest", "terminate"))
+Inputs = Enum(("initiate", "receiveRequest", "terminate"))
 
 for tk in TransformKeys:
     locals()[tk] = tk
@@ -48,7 +49,7 @@ del tk
 
 AckTransforms = {
     200: {
-        "ACK": (
+        b"ACK": (
             (CopyFrom, "request", "FromHeader"),
             (CopyFrom, "request", "Call_IDHeader"),
             (CopyFrom, "request", "startline.uri"),
@@ -177,7 +178,7 @@ class Dialog(
             RaiseBadInput()
 
         while mtype >= 1:
-            attr = b"receiveResponse%d" % mtype
+            attr = "receiveResponse%d" % mtype
             if attr in self.Inputs:
                 log.debug("Response input found: %d", mtype)
                 return self.hit(attr, msg)
@@ -190,8 +191,11 @@ class Dialog(
         ack = Message.ACK(autofillheaders=False)
         assert len(self._dlg_requests)
 
+        mtype = msg.type
+        if isinstance(mtype, str):
+            mtype = abytes(mtype)
         Transform(
-            AckTransforms, msg, msg.type, ack, ack.type,
+            AckTransforms, msg, mtype, ack, abytes(ack.type),
             request=self._dlg_requests[-1])
 
         self.transport.sendMessage(
@@ -301,7 +305,8 @@ class Dialog(
     # =================== MAGIC METHODS =======================================
     #
     sendRequestRE = re.compile(
-        "^sendRequest(%s)$" % "|".join(Request.types), re.IGNORECASE)
+        "^sendRequest(%s)$" % "|".join(Request.types),
+        re.IGNORECASE)
     sendResponseRE = re.compile("^sendResponse([0-9]+)$", re.IGNORECASE)
 
     def __getattr__(self, attr):
@@ -310,16 +315,14 @@ class Dialog(
         if mo:
             method = getattr(Request.types, mo.group(1))
             log.debug("Method is type %r", method)
-            return util.WeakMethod(
-                self, "sendRequest", static_args=(method,))
+            return WeakMethod(self, "sendRequest", static_args=(method,))
 
         mo = Dialog.sendResponseRE.match(attr)
         if mo:
             code = int(mo.group(1))
             while code < 100:
                 code *= 100
-            return util.WeakMethod(
-                self, "sendResponse", static_args=(code,))
+            return WeakMethod(self, "sendResponse", static_args=(code,))
 
         try:
             log.detail("Attr %r matches nothing so far.", attr)

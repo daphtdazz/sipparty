@@ -16,21 +16,15 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import sys
-import os
-import re
-import timeit
-import time
 import logging
-import weakref
-import unittest
 from socket import SOCK_STREAM, SOCK_DGRAM
-from setup import SIPPartyTestCase
-from sipparty import (fsm, sip, util, vb, deepclass, parse, Party)
-from sipparty.util import WaitFor
-from sipparty.sip import components, dialog
-from sipparty.sip.dialogs import SimpleCall
-from sipparty.media.sessions import SingleRTPSession
+import unittest
+import weakref
+from ..media.sessions import SingleRTPSession
+from ..party import (Party)
+from ..sip.dialogs import SimpleCall
+from ..util import WaitFor
+from .setup import SIPPartyTestCase
 
 log = logging.getLogger()
 
@@ -55,12 +49,16 @@ class TestParty(SIPPartyTestCase):
 
     def testBasicPartyUDP(self):
         # self.pushLogLevel("party", logging.DEBUG)
-        self.subTestBasicParty(SOCK_DGRAM, "127.0.0.1")
+        self.subTestBasicParty(SOCK_DGRAM, b'127.0.0.1')
 
     def testBasicPartyUDPIPv6(self):
-        self.subTestBasicParty(SOCK_DGRAM, "::1")
+        self.subTestBasicParty(SOCK_DGRAM, b'::1')
 
     def subTestBasicParty(self, socketType, contactAddress):
+
+        # self.pushLogLevel('transport', logging.DEBUG)
+        # self.pushLogLevel('party', logging.DEBUG)
+        # self.pushLogLevel('dialog', logging.DEBUG)
 
         assert socketType == SOCK_DGRAM
 
@@ -69,13 +67,19 @@ class TestParty(SIPPartyTestCase):
             {"InviteDialog": SimpleCall,
              "MediaSession": SingleRTPSession})
 
+        log.info('Start p1')
         p1 = BasicParty(
-            aor="alice@atlanta.com", contactURI_address=contactAddress)
+            aor=b"alice@atlanta.com", contactURI_address=contactAddress)
+        log.info('p2')
         p2 = BasicParty(
-            aor="bob@biloxi.com", contactURI_address=contactAddress)
+            aor=b"bob@biloxi.com", contactURI_address=contactAddress)
+        log.info('Listen p1')
         p1.listen()
+        log.info('Listen p2')
         p2.listen()
         self.assertTrue(p1.transport is p2.transport)
+
+        log.info('p1 invites p2')
         invD = p1.invite(p2)
 
         WaitFor(lambda: invD.state == invD.States.InDialog, 1)
@@ -83,12 +87,13 @@ class TestParty(SIPPartyTestCase):
         self.assertEqual(len(p1.inCallDialogs), 1)
         self.assertEqual(len(p2.inCallDialogs), 1)
 
+        log.info('p1 terminates')
         invD.terminate()
         WaitFor(lambda: invD.state == invD.States.Terminated, 1)
 
         # Try another call.
         p3 = BasicParty(
-            aor="charlie@charlesville.com", contactURI_address=contactAddress)
+            aor=b"charlie@charlesville.com", contactURI_address=contactAddress)
         p3.listen()
         self.assertTrue(p3.transport is p1.transport)
         self.assertTrue(p3.transport is p2.transport)
@@ -108,6 +113,3 @@ class TestParty(SIPPartyTestCase):
         self.assertEqual(len(p1.inCallDialogs), 0)
 
         return
-
-if __name__ == "__main__":
-    unittest.main()

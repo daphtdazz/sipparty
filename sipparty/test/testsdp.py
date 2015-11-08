@@ -17,20 +17,29 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-import unittest
-from six import binary_type as bytes
-from sipparty import (sip, util)
-from sipparty.sdp import (
-    AddrTypes, MediaTypes, SessionDescription, SDPIncomplete)
+from six import (binary_type as bytes)
+from ..sdp import (
+    AddrTypes, LineTypes, MediaTypes, SessionDescription, SDPIncomplete)
+from ..util import (TestCaseREMixin)
+from .setup import SIPPartyTestCase
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    log = logging.getLogger()
-else:
-    log = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
-class TestSDP(util.TestCaseREMixin, unittest.TestCase):
+class TestSDP(TestCaseREMixin, SIPPartyTestCase):
+
+    def setUp(self):
+        # self.pushLogLevel('sdp.sdp', logging.DEBUG)
+        # self.pushLogLevel('testsdp', logging.DEBUG)
+        pass
+
+    def testSDPLine(self):
+        for args, byte_res in (
+                    ((LineTypes.v, 0), b'v=0'),
+                    ((LineTypes.s, b'asdf'), b's=asdf')
+                ):
+            log.info('Check Line%r == %r', args, byte_res)
+            self.assertEqual(SessionDescription.Line(*args), byte_res)
 
     def testSDP(self):
 
@@ -45,23 +54,22 @@ class TestSDP(util.TestCaseREMixin, unittest.TestCase):
         sd.mediaDescriptions[0].address = b"media.atlanta.com"
         sd.mediaDescriptions[0].addressType = AddrTypes.IP4
 
+        log.info('Check bytes of sd')
+        log.debug('SD is %r', sd)
         data = bytes(sd)
         self.assertMatchesPattern(
             data,
             b"v=0\r\n"
-            "o=alice \d+ \d+ IN IP4 atlanta.com\r\n"
-            "s= \r\n"
-            "t=0 0\r\n"
-            "m=audio 1815 RTP/AVP 0\r\n"
-            "c=IN IP4 media.atlanta.com\r\n$"
+            b"o=alice \d+ \d+ IN IP4 atlanta.com\r\n"
+            b"s= \r\n"
+            b"t=0 0\r\n"
+            b"m=audio 1815 RTP/AVP 0\r\n"
+            b"c=IN IP4 media.atlanta.com\r\n$"
         )
 
         # Parse.
+        log.info('Check Parse of data')
+        log.debug('Data to parse: %r', data)
         newDesc = SessionDescription.Parse(data)
         newData = bytes(newDesc)
         self.assertEqual(data, newData)
-        # self.assertEqual(sd, newDesc)
-
-
-if __name__ == "__main__":
-    unittest.main()

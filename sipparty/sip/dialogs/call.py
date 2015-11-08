@@ -16,12 +16,12 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from sipparty import util, fsm
-from sipparty.util import Enum
-from sipparty.fsm import InitialStateKey as InitialState
-from sipparty.sip.dialog import Dialog
-from sipparty.sip.transform import TransformKeys
-from sipparty.sip.param import Param
+from ...util import Enum
+from ...fsm import (InitialStateKey as InitialState, TransitionKeys)
+from ..dialog import Dialog
+from ..param import Param
+from ..transform import TransformKeys
+
 
 # States, Actions and Inputs.
 S = Enum((
@@ -34,7 +34,7 @@ I = Enum((
     "initiate", "receiveRequestINVITE", "receiveResponse18",
     "receiveResponse2", "receiveResponse4", "terminate", "receiveRequestBYE"))
 
-for transitionKey in fsm.TransitionKeys:
+for transitionKey in TransitionKeys:
     locals()[transitionKey] = transitionKey
 for transformKey in TransformKeys:
     locals()[transformKey] = transformKey

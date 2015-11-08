@@ -16,8 +16,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from sipparty.sdp.sdpsyntax import (MediaTypes, MediaProtocols)
-from sipparty.media import (Session, MediaSession)
+from ..sdp.sdpsyntax import (MediaTypes, MediaProtocols)
+from ..media import (Session, MediaSession)
 
 
 class SingleRTPSession(Session):

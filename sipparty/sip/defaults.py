@@ -1,4 +1,4 @@
-"""default.py
+"""defaults.py
 
 Defaults for SIP
 
@@ -16,11 +16,12 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from prot import protocols
-from sipparty.transport import SOCK_TYPE_IP_NAMES
+from ..transport import SOCK_TYPE_IP_NAMES
+from .prot import protocols
 
 port = 5060
-sipprotocol = getattr(protocols, "SIP/2.0")
+sipprotocol = getattr(protocols, 'SIP/2.0')
+
 transport = SOCK_TYPE_IP_NAMES.UDP
-scheme = "sip"
+scheme = b'sip'
 max_forwards = 70

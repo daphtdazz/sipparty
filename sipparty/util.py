@@ -20,7 +20,6 @@ from abc import (ABCMeta, abstractmethod)
 from collections import Callable
 import logging
 import re
-from sipparty import vb
 from six import (
     add_metaclass, binary_type as bytes, iteritems, itervalues, PY2)
 import threading
@@ -69,7 +68,7 @@ class attributesubclassgen(type):
         superName = cls._supername
         for name, obj in iteritems(SCDict):
             subClassType, sep, empty = name.partition(superName)
-            if sep != superName or empty != b"":
+            if sep != superName or empty != '':
                 continue
 
             log.debug("Found subclass type %r.", subClassType)
@@ -77,14 +76,14 @@ class attributesubclassgen(type):
 
     def __getattr__(cls, name):
 
-        if name == b"types":
+        if name == 'types':
             sp = super(attributesubclassgen, cls)
             if hasattr(sp, "__getattr__"):
                 return sp.__getattr__(name)
             raise AttributeError(
-                b"%r class has no attribute 'types'.", cls.__name__)
+                '%r class has no attribute \'types\'.', cls.__name__)
 
-        if hasattr(cls, "types"):
+        if hasattr(cls, 'types'):
             tps = cls.types
             try:
                 name = getattr(tps, name)
@@ -132,16 +131,26 @@ class attributesubclassgen(type):
 
 def sipheader(key):
     """Normalizer for SIP headers, which is almost title but not quite."""
+    global sipheaderreplacements
+    if 'sipheaderreplacements' not in globals():
+        sipheaderreplacements = {
+            b'Call-Id': b'Call-ID',
+            b'Www-Authenticate': b'WWW-Authenticate',
+            b'Cseq': b'CSeq',
+            b'Mime-Version': b'MIME-Version'
+        }
+        if not PY2:
+            for wrong, right in iteritems(dict(sipheaderreplacements)):
+                sipheaderreplacements[astr(wrong)] = astr(right)
+
     nk = key.title()
-    nk = nk.replace("_", "-")
-    if nk == "Call-Id":
-        nk = "Call-ID"
-    elif nk == "Www-Authenticate":
-        nk = "WWW-Authenticate"
-    elif nk == "Cseq":
-        nk = "CSeq"
-    elif nk == "Mime-Version":
-        nk = "MIME-Version"
+    if isinstance(key, str):
+        nk = nk.replace("_", "-")
+    else:
+        nk = nk.replace(b'_', b'-')
+
+    if nk in sipheaderreplacements:
+        nk = sipheaderreplacements[nk]
 
     return nk
 
@@ -155,11 +164,14 @@ class Enum(set):
     def __init__(self, vals=None, normalize=None, aliases=None):
         self._en_normalize = normalize
         self._en_aliases = aliases
-        vlist = list(vals) if vals is not None else []
+
+        vlist = [] if not vals else list(vals)
+
         if aliases:
             for v in itervalues(aliases):
                 if v not in vlist:
                     vlist.append(v)
+
         super(Enum, self).__init__(vlist)
         self._en_list = vlist
 
@@ -168,6 +180,7 @@ class Enum(set):
         return super(Enum, self).__contains__(nn)
 
     def __getattr__(self, attr):
+        log.detail('%s instance getattr %r', self.__class__.__name__, attr)
         nn = self._en_fixAttr(attr)
         if nn in self:
             return nn
@@ -183,6 +196,7 @@ class Enum(set):
         return self._en_list.index(item)
 
     def add(self, item):
+
         super(Enum, self).add(item)
         ll = self._en_list
         if item not in ll:
@@ -195,15 +209,68 @@ class Enum(set):
     def REPattern(self):
         return "(?:%s)" % "|".join(self)
 
+    def enum(self):
+        return self
+
     def _en_fixAttr(self, name):
         if self._en_aliases:
+            log.detail('Is %r is an alias', name)
             if name in self._en_aliases:
-                return self._en_aliases[name]
+                val = self._en_aliases[name]
+                log.debug('%r is an alias to %r', name, val)
+                return val
 
         if self._en_normalize:
             return self._en_normalize(name)
 
         return name
+
+
+class AsciiBytesEnum(Enum):
+
+    def __init__(self, vals=None, normalize=None, aliases=None):
+        def bad_val_type(val):
+            raise TypeError(
+                '%r instance %r cannot be used in %r instance as it is not a '
+                'bytes-like type.' % (
+                    val.__class__.__name__, val, self.__class__.__name__))
+
+        if vals:
+            for vv in [
+                    _vv
+                    for _vl in (vals, aliases) if _vl is not None
+                    for _vv in _vl]:
+                if not isinstance(vv, bytes):
+                    bad_val_type(vv)
+        super(AsciiBytesEnum, self).__init__(
+            vals=vals, normalize=normalize, aliases=aliases)
+
+    def add(self, item):
+        if not isinstance(item, bytes):
+            raise TypeError(
+                'New %r instance is inconsistent with enum %r containing '
+                'only instances of %r' % (
+                    item.__class__.__name__, self, self._en_type.__name__))
+        super(AsciiBytesEnum, self).add(item)
+
+    def REPattern(self):
+        return b"(?:%s)" % b"|".join(self)
+
+    def enum(self):
+        return Enum(
+            [astr(val) for val in self._en_list],
+            aliases=self._en_aliases, normalize=self._en_normalize)
+
+    def _en_fixAttr(self, name):
+        if isinstance(name, str):
+            log.detail('Convert %r to ascii bytes', name)
+            name = abytes(name)
+
+        fixedStrAttr = super(AsciiBytesEnum, self)._en_fixAttr(name)
+        return fixedStrAttr
+
+if PY2:
+    AsciiBytesEnum = Enum
 
 
 class ClassType(object):
@@ -214,7 +281,7 @@ class ClassType(object):
     def __get__(self, instance, owner):
         class_name = owner.__name__
         capp = self.class_append
-        log.debug("Class is %r, append is %r", class_name, capp)
+        log.detail("Class is %r, append is %r", class_name, capp)
         class_short_name = class_name.replace(capp, "")
         try:
             return getattr(owner.types, class_short_name)
@@ -527,10 +594,10 @@ class DerivedProperty(object):
         # log.debug("Get derived prop for obj %r class %r.", obj, cls)
         target = obj if obj is not None else cls
 
-        log.debug("Get the underlying value (if any).")
+        log.detail("Get the underlying value (if any).")
         pname = self._rp_propName
         val = getattr(target, pname)
-        log.debug("Underlying value %r.", val)
+        log.detail("Underlying value %r.", val)
 
         gt = self._rp_get
         if gt is None:
@@ -538,7 +605,7 @@ class DerivedProperty(object):
             return getattr(target, pname)
 
         # Get might be a method name...
-        if isinstance(gt, bytes) and hasattr(target, gt):
+        if isinstance(gt, str) and hasattr(target, gt):
             meth = getattr(target, gt)
             if not isinstance(meth, Callable):
                 raise ValueError(
@@ -570,7 +637,7 @@ class DerivedProperty(object):
             log.debug("Set %r to %r.", pname, value)
             log.debug("Self: %r.", self)
             setattr(obj, pname, value)
-        elif isinstance(st, bytes) and hasattr(obj, st):
+        elif isinstance(st, str) and hasattr(obj, st):
             meth = getattr(obj, st)
             if not isinstance(meth, Callable):
                 raise ValueError(
@@ -636,7 +703,7 @@ class Timeout(Exception):
     pass
 
 
-def WaitFor(condition, timeout_s, action_on_timeout=None, resolution=0.0001):
+def WaitFor(condition, timeout_s=1, action_on_timeout=None, resolution=0.0001):
     now = Clock()
     next_log = now + 1
     until = now + timeout_s
@@ -661,14 +728,16 @@ class Singleton(object):
     """Classes inheriting from this will only have one instance."""
 
     _St_SharedInstances = WeakValueDictionary()
+    _St_SingletonNameKey = 'singleton'
 
     def __new__(cls, *args, **kwargs):
         log.detail("Singleton.__new__(%r, %r)", args, kwargs)
-        if "singleton" in kwargs:
-            name = kwargs["singleton"]
-            del kwargs["singleton"]
+        skey = cls._St_SingletonNameKey
+        if skey in kwargs:
+            name = kwargs[skey]
+            del kwargs[skey]
         else:
-            name = ""
+            name = ''
 
         log.debug("New with class %r, name %r", cls, name)
         existing_inst = (
@@ -681,7 +750,7 @@ class Singleton(object):
             log.detail("  %r", existing_inst)
             return existing_inst
 
-        log.debug("  New instance required.")
+        log.debug("  New instance required args:%r, kwargs:%r", args, kwargs)
         ns = super(Singleton, cls).__new__(cls, *args, **kwargs)
         cls._St_SharedInstances[name] = ns
 
@@ -696,7 +765,10 @@ class Singleton(object):
             return
         self.__dict__["_st_inited"] = True
 
-        log.debug("Init Singleton")
+        if self._St_SingletonNameKey in kwargs:
+            del kwargs[self._St_SingletonNameKey]
+
+        log.debug("Init Singleton args:%r, kwargs:%r", args, kwargs)
         super(Singleton, self).__init__(*args, **kwargs)
 
 
@@ -734,8 +806,20 @@ class BytesGenner(object):
             "%r class has not overridden 'bytesGen' which is required to "
             "inherit from BytesGenner" % (self.__class__.__name__,))
 
+    def safeBytesGen(self):
+        for bb in self.bytesGen():
+            log.detail('Next bytes %r', bb)
+            if not isinstance(bb, bytes):
+                raise TypeError(
+                    '%r instance generated un-bytes-like object %r' % (
+                        self.__class__.__name__, bb))
+            yield bb
+
     def __bytes__(self):
-        return b''.join(self.bytesGen())
+        log.detail(
+            'Generating bytes for BytesGenner subclass %r',
+            type(self).__name__)
+        return b''.join(self.safeBytesGen())
 
 
 class TestCaseREMixin(object):
@@ -751,3 +835,39 @@ class TestCaseREMixin(object):
 
     def _tcrem_prettyFormat(self, string):
         return repr(string).replace("\\n", "\\n'\n'")
+
+
+def bglobals_g(gbls):
+    bglobals = {}
+
+    for key, val in iteritems(gbls):
+        if key.startswith('_'):
+            continue
+
+        if isinstance(val, bytes):
+            bglobals[abytes(key)] = val
+
+        elif isinstance(val, AsciiBytesEnum):
+            for enum_val in val:
+                bglobals[b'%s.%s' % (abytes(key), enum_val)] = enum_val
+
+        elif isinstance(val, Enum):
+            for enum_val in val:
+                bglobals['%s.%s' % (key, enum_val)] = enum_val
+
+        else:
+            bglobals[key] = val
+
+    return bglobals
+
+
+if PY2:
+    def abytes(x):
+        return x
+    astr = abytes
+else:
+    def abytes(x):
+        return bytes(x, encoding='ascii')
+
+    def astr(x):
+        return str(x, encoding='ascii')

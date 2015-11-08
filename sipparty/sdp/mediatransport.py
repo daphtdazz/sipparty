@@ -16,10 +16,10 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from six import (binary_type as bytes, itervalues)
 import logging
-from sipparty.transport import Transport
-from sipparty.util import WeakMethod
+from six import (binary_type as bytes, itervalues)
+from ..transport import Transport
+from ..util import WeakMethod
 
 log = logging.getLogger(__name__)
 

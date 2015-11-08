@@ -16,7 +16,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import mediasession
-from mediasession import (Session, MediaSession)
-import sessions
-from sessions import (SingleRTPSession, RTPPCMUMediaSession)
+from . import mediasession
+from .mediasession import (Session, MediaSession)
+from . import sessions
+from .sessions import (SingleRTPSession, RTPPCMUMediaSession)

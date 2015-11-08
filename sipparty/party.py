@@ -16,29 +16,23 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import six
-import socket
 import logging
-import copy
-import re
-import time
 import socket
-from six import itervalues
-
-from sipparty import (splogging, util, vb, parse, fsm, ParsedPropertyOfClass)
-from sipparty.util import (DerivedProperty, WeakMethod)
-from sipparty.deepclass import (DeepClass, dck)
-from sipparty.sip import (
+from six import (binary_type as bytes, itervalues)
+from .deepclass import (DeepClass, dck)
+from .media import (Session, MediaSession)
+from .parse import (ParsedPropertyOfClass)
+from .sdp import sdpsyntax
+from .sip import (
     SIPTransport, Incomplete, DNameURI, AOR, URI, Host, Request, Message,
     Body, defaults)
-from sipparty.transport import (SockTypeName, IPaddress_re)
-from sipparty.sdp import sdpsyntax
-from sipparty.media import (Session, MediaSession)
+from .transport import (SockTypeName, IPaddress_re)
+from .util import (abytes, DerivedProperty, WeakMethod)
+from .vb import ValueBinder
 
 __all__ = ('Party', 'PartySubclass')
 
 log = logging.getLogger(__name__)
-bytes = six.binary_type
 
 
 class PartyException(Exception):
@@ -80,7 +74,7 @@ class Party(
             },
             "transport": {dck.gen: lambda: None}
         }),
-        vb.ValueBinder):
+        ValueBinder):
     """A party in a sip call, aka an endpoint, caller or callee etc.
     """
 
@@ -169,7 +163,7 @@ class Party(
         assert lAddr[1] != 0
         log.info("Party listening on %r", lAddr)
         self._pt_listenAddress = lAddr
-        uriHost.address = lAddr[0]
+        uriHost.address = abytes(lAddr[0])
         uriHost.port = lAddr[1]
 
         tp.addDialogHandlerForAOR(
@@ -227,7 +221,7 @@ class Party(
             return None
 
         ma = self.mediaAddress
-        ms = self.__class__.MediaSession(username="-", address=ma)
+        ms = self.__class__.MediaSession(username=b'-', address=ma)
         return ms
 
     #
@@ -266,8 +260,7 @@ class Party(
             log.debug("Attempt to parse a URI from the target.")
             return URI.Parse(target)
 
-        raise ValueError("Can't resolve URI from target %r" % (
-            target))
+        raise ValueError("Can't resolve URI from target %r" % (target))
 
     def _pt_resolveProxyAddress(self, target):
         if hasattr(target, "listenAddress"):
@@ -283,8 +276,8 @@ class Party(
 
         try:
             turi = self._pt_resolveTargetURI(target)
-        except ValueError:
-            raise ValueError("Can't resolve proxy from target %r" % (
+        except (TypeError, ValueError) as exc:
+            raise type(exc)("Can't resolve proxy from target %r" % (
                 target,))
         return (turi.address, turi.port)
 

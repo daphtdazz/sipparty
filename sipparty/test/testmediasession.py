@@ -18,16 +18,16 @@ limitations under the License.
 """
 import logging
 from six import (binary_type as bytes)
-from setup import SIPPartyTestCase
-from sipparty import (util, vb, sip)
-from sipparty.sdp import SDPIncomplete
-from sipparty.sdp.sdpsyntax import (MediaTypes, AddrTypes, NetTypes)
-from sipparty.media import Session
+from ..media import Session
+from ..sdp import SDPIncomplete
+from ..sdp.sdpsyntax import (MediaTypes, AddrTypes, NetTypes)
+from ..util import TestCaseREMixin
+from .setup import SIPPartyTestCase
 
 log = logging.getLogger(__name__)
 
 
-class TestSession(util.TestCaseREMixin, SIPPartyTestCase):
+class TestSession(TestCaseREMixin, SIPPartyTestCase):
 
     def testBasicSession(self):
 
@@ -38,9 +38,9 @@ class TestSession(util.TestCaseREMixin, SIPPartyTestCase):
         self.assertMatchesPattern(
             ms.sdp(),
             b'v=0\r\n'
-            'o=alice \d+ \d+ IN IP4 127.0.0.1\r\n'
-            's= \r\n'
-            't=0 0\r\n$')
+            b'o=alice \d+ \d+ IN IP4 127.0.0.1\r\n'
+            b's= \r\n'
+            b't=0 0\r\n$')
 
         ms.addMediaSession(mediaType=MediaTypes.audio)
         self.assertRaises(SDPIncomplete, lambda: ms.sdp())
@@ -52,10 +52,7 @@ class TestSession(util.TestCaseREMixin, SIPPartyTestCase):
         self.assertMatchesPattern(
             ms.sdp(),
             b'v=0\r\n'
-            'o=alice \d+ \d+ IN IP4 127.0.0.1\r\n'
-            's= \r\n'
-            't=0 0\r\n'
-            'm=audio 11000 RTP/AVP 123\r\n$')
-
-if __name__ == "__main__":
-    unittest.main()
+            b'o=alice \d+ \d+ IN IP4 127.0.0.1\r\n'
+            b's= \r\n'
+            b't=0 0\r\n'
+            b'm=audio 11000 RTP/AVP 123\r\n$')

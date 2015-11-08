@@ -18,10 +18,15 @@ limitations under the License.
 """
 import logging
 import unittest
-from six import iteritems
-import sipparty
+from six import (iteritems, PY2)
+import sys
+if PY2:
+    from mock import (MagicMock, patch)
+else:
+    from unittest.mock import (MagicMock, patch)
 
 log = logging.getLogger(__name__)
+sipparty = sys.modules['sipparty']
 
 
 class SIPPartyTestCase(unittest.TestCase):

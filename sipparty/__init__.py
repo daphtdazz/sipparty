@@ -14,17 +14,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import splogging
-import util
-import vb
-from deepclass import DeepClass
-import fsm
-from fsm import (FSM, FSMTimeout, RetryThread)
-from transport import Transport
-import parse
-from parse import (Parser, ParsedProperty, ParsedPropertyOfClass, ParseError)
-import sdp
-import sip
-from sip.request import (Request,)
-import party
-from party import Party
+# The import order does matter. Definitely need splogging first. Then the
+# stand-alone modules that should be brought out into separate projects. Then
+# everything else.
+from . import splogging

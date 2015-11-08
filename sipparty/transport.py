@@ -16,7 +16,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import six
+from six import (binary_type as bytes, iteritems, PY2)
 import socket
 import threading
 import time
@@ -26,39 +26,47 @@ import select
 from socket import (SOCK_STREAM, SOCK_DGRAM, AF_INET, AF_INET6)
 from numbers import Integral
 import re
-from sipparty import (fsm, FSM, RetryThread)
-from sipparty.util import (
-    DerivedProperty, WeakMethod, Singleton, TwoCompatibleThree, Enum)
+from .fsm import (FSM, RetryThread)
+from .util import (
+    abytes, AsciiBytesEnum, astr, bglobals_g, DerivedProperty, Enum, Singleton,
+    TwoCompatibleThree, WeakMethod)
+
+
+def bglobals():
+    return bglobals_g(globals())
 
 SOCK_TYPES = Enum((SOCK_STREAM, SOCK_DGRAM))
-SOCK_TYPES_NAMES = Enum(("SOCK_STREAM", "SOCK_DGRAM"))
-SOCK_TYPE_IP_NAMES = Enum(("TCP", "UDP"))
+SOCK_TYPES_NAMES = AsciiBytesEnum((b"SOCK_STREAM", b"SOCK_DGRAM"))
+SOCK_TYPE_IP_NAMES = AsciiBytesEnum((b"TCP", b"UDP"))
 SOCK_FAMILIES = Enum((AF_INET, AF_INET6))
-SOCK_FAMILY_NAMES = Enum(("IPv4", "IPv6"))
+SOCK_FAMILY_NAMES = AsciiBytesEnum((b"IPv4", b"IPv6"))
 log = logging.getLogger(__name__)
 prot_log = logging.getLogger("messages")
-bytes = six.binary_type
-itervalues = six.itervalues
 
 # RFC 2373 IPv6 address format definitions.
 digitrange = b"0-9"
-DIGIT = b"[{digitrange}]".format(**locals())
-hexrange = b"{digitrange}a-fA-F".format(**locals())
-HEXDIG = b"[{hexrange}]".format(**locals())
-hex4 = b"{HEXDIG}{{1,4}}".format(**locals())
+DIGIT = b"[%(digitrange)s]" % bglobals()
+hexrange = b"%(digitrange)sa-fA-F" % bglobals()
+HEXDIG = b"[%(hexrange)s]" % bglobals()
+hex4 = b"%(HEXDIG)s{1,4}" % bglobals()
 # Surely IPv6 address length is limited?
-hexseq = b"{hex4}(?::{hex4})*".format(**locals())
-hexpart = b"(?:{hexseq}|{hexseq}::(?:{hexseq})?|::(?:{hexseq})?)".format(
-    **locals())
-IPv4address = b"{DIGIT}{{1,3}}(?:[.]{DIGIT}{{1,3}}){{3}}".format(**locals())
-IPv6address = b"{hexpart}(?::{IPv4address})?".format(**locals())
-IPaddress = "(?:{IPv4address}|{IPv6address})".format(**locals())
-port = b"{DIGIT}+".format(**locals())
+hexseq = b"%(hex4)s(?::%(hex4)s)*" % bglobals()
+hexpart = (
+    b"(?:%(hexseq)s|%(hexseq)s::(?:%(hexseq)s)?|::(?:%(hexseq)s)?)" %
+    bglobals())
+IPv4address = b"%(DIGIT)s{1,3}(?:[.]%(DIGIT)s{1,3}){3}" % bglobals()
+IPv6address = b"%(hexpart)s(?::%(IPv4address)s)?" % bglobals()
+IPaddress = b"(?:%(IPv4address)s|%(IPv6address)s)" % bglobals()
+port = b"%(DIGIT)s+" % bglobals()
 
 # Some pre-compiled regular expression versions.
-IPv4address_re = re.compile(IPv4address + '$')
-IPv6address_re = re.compile(IPv6address + '$')
-IPaddress_re = re.compile(IPaddress + '$')
+IPv4address_re = re.compile(IPv4address + b'$')
+IPv6address_re = re.compile(IPv6address + b'$')
+IPaddress_re = re.compile(IPaddress + b'$')
+
+
+def default_hostname():
+    return socket.gethostname()
 
 
 class TransportException(Exception):
@@ -125,12 +133,14 @@ def GetBoundSocket(family, socktype, address, port_filter=None):
         family = 0
     if socktype is None:
         socktype = 0
-    assert family in (0, socket.AF_INET, socket.AF_INET6)
+    if family != 0 and family not in SOCK_FAMILIES:
+        raise ValueError('Invalid family %d: not 0 or one of %r' % (
+            SOCK_FAMILY_NAMES,))
     assert socktype in (0, socket.SOCK_STREAM, socket.SOCK_DGRAM)
 
     address = list(address)
     if address[0] is None:
-        address[0] = socket.gethostname()
+        address[0] = default_hostname()
 
     # family e.g. AF_INET / AF_INET6
     # socktype e.g. SOCK_STREAM
@@ -157,10 +167,11 @@ def GetBoundSocket(family, socktype, address, port_filter=None):
             return
 
         # Guess a port from the unregistered range.
-        for ii in range(49152, 0x10000):
+        for ii in range(49152, 0xffff):
             if port_filter is None or port_filter(ii):
                 yield ii
 
+    socketError = None
     for port in port_generator():
         try:
             # TODO: catch specific errors (e.g. address in use) to bail
@@ -169,17 +180,17 @@ def GetBoundSocket(family, socktype, address, port_filter=None):
             ssocket.bind((address[0], port))
             socketError = None
             break
-        except socket.error as socketError:
+        except socket.error as _se:
             log.debug("Socket error on (%r, %d)", address[0], port)
-            pass
-        except socket.gaierror as socketError:
+            socketError = _se
+        except socket.gaierror as _se:
             log.debug("GAI error on (%r, %d)", address[0], port)
+            socketError = _se
             break
 
     if socketError is not None:
         raise BadNetwork(
-            "Couldn't bind to address {address}".format(
-                **locals()),
+            "Couldn't bind to address %s" % address[0],
             socketError)
 
     log.debug("Socket bound to %r type %r", ssocket.getsockname(), _family)
@@ -197,8 +208,8 @@ class Transport(Singleton):
 
     @classmethod
     def FormatBytesForLogging(cls, mbytes):
-        return "\\n\n".join(
-            [repr(bs)[1:-1] for bs in mbytes.split("\n")]).rstrip("\n")
+        return '\\n\n'.join(
+            [repr(astr(bs))[1:-1] for bs in mbytes.split(b'\n')]).rstrip('\n')
 
     #
     # =================== INSTANCE INTERFACE ==================================
@@ -226,8 +237,10 @@ class Transport(Singleton):
         """
         if port is None:
             port = self.DefaultPort
-        if not isinstance(port, Integral) or 0 > port > 0xffff:
-            raise ValueError("Invalid port: %r", port)
+        if not isinstance(port, Integral):
+            raise TypeError('Port is not an Integer: %r' % port)
+        if 0 > port > 0xffff:
+            raise ValueError('Invalid port number: %r' % port)
         if family not in (None, AF_INET, AF_INET6):
             raise ValueError("Invalid socket family %r" % family)
 
@@ -275,10 +288,10 @@ class Transport(Singleton):
                 if len(toAddr) != len(sname):
                     log.debug("Different socket family type skipped.")
                     continue
-                sck.sendto(mbytes, toAddr)
+                sck.sendto(msg, toAddr)
                 prot_log.info(
                     "Sent %r -> %r\n>>>>>\n%s\n>>>>>", sname,
-                    toAddr, self.FormatBytesForLogging(mbytes))
+                    toAddr, self.FormatBytesForLogging(msg))
                 return
             except socket.error as exc:
                 log.debug(
@@ -288,18 +301,28 @@ class Transport(Singleton):
             raise exc
 
     def sendDgramMessageFrom(self, msg, toAddr, fromAddr):
-        assert fromAddr is not None
+        """:param msg: The message (a bytes-able) to send.
+        :param toAddr: The place to send to. This should be *post* address
+        resolution, so this must be either a 2 (IPv4) or a 4 (IPv6) tuple.
+        """
         log.debug("Send %r -> %r", fromAddr, toAddr)
 
+        assert isinstance(toAddr, tuple)
+        assert len(toAddr) in (2, 4)
+
+        family = AF_INET if len(toAddr) == 2 else AF_INET6
+
         fromName, fromPort = fromAddr[:2]
-        if fromName is not None and IPv6address_re.match(fromName):
+
+        if fromName is not None and IPv6address_re.match(
+                abytes(fromName)):
             if len(fromAddr) == 2:
                 fromAddr = (fromAddr[0], fromAddr[1], 0, 0)
             else:
                 assert len(fromAddr) == 4
 
         if fromAddr not in self._tp_dGramSockets:
-            sck = GetBoundSocket(None, SOCK_DGRAM, fromAddr)
+            sck = GetBoundSocket(family, SOCK_DGRAM, fromAddr)
             self.addDgramSocket(sck)
         else:
             sck = self._tp_dGramSockets[fromAddr]

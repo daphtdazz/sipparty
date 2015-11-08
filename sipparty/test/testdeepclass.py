@@ -16,29 +16,27 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import sys
-import os
-import re
 import logging
-import unittest
-import setup
-from setup import SIPPartyTestCase
-from six import binary_type as bytes, iteritems, add_metaclass
-from sipparty import (util, sip, vb, ParseError, Request)
-from sipparty.deepclass import (DeepClass, dck)
-from sipparty.sip import (prot, components)
-from sipparty.sip.components import URI
+from six import (binary_type as bytes, iteritems, add_metaclass)
+from ..deepclass import (DeepClass, dck)
+from ..parse import ParseError
+from ..sip import (prot, components)
+from ..sip.components import URI
+from ..sip.request import Request
+from ..vb import ValueBinder
+from .setup import SIPPartyTestCase
 
 log = logging.getLogger(__name__)
-# log.setLevel(logging.DETAIL)
 
 
 class TestDeepClass(SIPPartyTestCase):
 
-    def testVBInteraction(self):
+    def setUp(self):
+        # self.pushLogLevel("deepclass", logging.DETAIL)
+        # self.pushLogLevel("vb", logging.DETAIL)
+        pass
 
-        # self.pushLogLevel("vb", logging.DEBUG)
-        # self.pushLogLevel("deepclass", logging.DEBUG)
+    def testVBInteraction(self):
 
         class TDObj(object):
             pass
@@ -68,10 +66,16 @@ class TestDeepClass(SIPPartyTestCase):
                         dck.gen: TDObj
                     },
                 }),
-                vb.ValueBinder):
+                ValueBinder):
             vb_bindings = (
                 ("attrA", "attrB"),)
 
+        log.info('Make a TVDBC')
+        testVbdc = TVBDC()
+        log.info('Delete the TVDBC')
+        del testVbdc
+
+        log.info('Make a TVDBC again')
         testVbdc = TVBDC()
         self.assertIsNotNone(testVbdc.attrA)
         self.assertTrue(testVbdc.attrA is testVbdc.attrB)

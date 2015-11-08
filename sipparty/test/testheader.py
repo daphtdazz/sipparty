@@ -16,14 +16,12 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import six
 import logging
-import unittest
-from setup import SIPPartyTestCase
-import sipparty
-from sipparty import sip
-from sipparty.vb import ValueBinder
-from sipparty.sip import (prot, Header)
+from six import (binary_type as bytes)
+from ..sip import (prot, Header)
+from ..sip.components import (Host)
+from ..vb import ValueBinder
+from .setup import SIPPartyTestCase
 
 log = logging.getLogger(__name__)
 
@@ -34,7 +32,7 @@ class TestHeaders(SIPPartyTestCase):
 
         # self.pushLogLevel("header", logging.DEBUG)
 
-        ch = sip.Header.contact()
+        ch = Header.contact()
 
         for nonbool in (1, 2, "string", 0):
             self.assertRaises(ValueError,
@@ -42,23 +40,23 @@ class TestHeaders(SIPPartyTestCase):
 
         ch.isStar = True
 
-        self.assertEqual(six.binary_type(ch), b"Contact: *")
+        self.assertEqual(bytes(ch), b"Contact: *")
 
         ch.isStar = False
-        self.assertRaises(prot.Incomplete, lambda: six.binary_type(ch))
+        self.assertRaises(prot.Incomplete, lambda: bytes(ch))
         ch.field.username = b"bill"
         ch.field.host = b"billland.com"
 
         self.assertEqual(
-            six.binary_type(ch),
+            bytes(ch),
             b"Contact: <sip:bill@billland.com>")
 
-        nh = sip.Header.Parse(six.binary_type(ch))
+        nh = Header.Parse(bytes(ch))
         self.assertEqual(
-            six.binary_type(ch),
+            bytes(ch),
             b"Contact: <sip:bill@billland.com>")
         self.assertEqual(
-            ch.field.value.uri.aor.host, sip.components.Host("billland.com"))
+            ch.field.value.uri.aor.host, Host(address=b"billland.com"))
 
     def testBindingContactHeaders(self):
 
@@ -68,16 +66,12 @@ class TestHeaders(SIPPartyTestCase):
         pvb.bind("ch.address", "hostaddr2")
 
         pvb.ch = Header.contact()
-        pvb.hostaddr = "atlanta.com"
-        self.assertEqual(pvb.ch.address,
-                         "atlanta.com")
+        pvb.hostaddr = b'atlanta.com'
+        self.assertEqual(pvb.ch.address, b'atlanta.com')
         self.assertEqual(pvb.ch.field.value.uri.aor.host.address,
-                         "atlanta.com")
-        self.assertEqual(pvb.hostaddr2, "atlanta.com")
+                         b'atlanta.com')
+        self.assertEqual(pvb.hostaddr2, b'atlanta.com')
 
     def testNumHeader(self):
-        cont_len_hdr = sip.Header.content_length()
+        cont_len_hdr = Header.content_length()
         self.assertEqual(bytes(cont_len_hdr), b"Content-Length: 0")
-
-if __name__ == "__main__":
-    unittest.main()

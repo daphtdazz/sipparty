@@ -17,12 +17,12 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import logging
-import inspect
 from collections import Callable
+import inspect
+import logging
 from six import (iteritems, iterkeys)
-from sipparty.util import Enum, DerivedProperty
-from sipparty.vb import ValueBinder
+from .util import (Enum, DerivedProperty)
+from .vb import ValueBinder
 
 log = logging.getLogger(__name__)
 DeepClassKeys = Enum(("check", "get", "set", "gen", "descriptor",))
@@ -70,7 +70,7 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
         def __init__(self, **kwargs):
 
             clname = self.__class__.__name__
-            log.detail("DeepClass %r init with %r", clname,
+            log.detail("DeepClass %r init with kwargs: %r", clname,
                        kwargs)
 
             # Preload the top level attributes dictionary and our instance
@@ -120,6 +120,7 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
                     tlaa[0] = kwVal
 
             # See if we have any delegates to pass to.
+            log.debug('Check VB dependencies')
             dele_attrs = {}
             if hasattr(self, "vb_dependencies"):
                 if not isinstance(self, ValueBinder):
@@ -141,52 +142,60 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
             log.detail("super init dict: %r", superKwargs)
             super(DeepClass, self).__init__(**superKwargs)
 
-            # Loop through the entries for the top level attributes, and
-            # generate values for anything that's missing.
-            log.detail(
-                "Recurse to %r top level attributes: %r",
-                clname, topLevelAttrArgs)
-            for tlattr, (tlval, tlsvals) in iteritems(topLevelAttrArgs):
-                if tlval is None:
-                    if (
-                            hasattr(self, tlattr) and
-                            getattr(self, tlattr) is not None):
-                        log.debug(
-                            "No need to generate %r for %r: already set "
-                            "(probably by bindings) to %r.", tlattr,
-                            clname, getattr(self, tlattr))
-                        continue
-
-                    tlad = topLevelAttributeDescs[tlattr]
-                    if dck.gen not in tlad:
-                        log.debug(
-                            "%r attribute not set and doesn't have generator",
-                            tlattr)
-                        # Need to set the internal representation, to allow
-                        # check functions not to have to check for None.
-                        setattr(self, "%s%s" % (topLevelPrepend, tlattr), None)
-                        continue
-
-                    log.debug(
-                        "Generating attribute %r of %r instance", tlattr,
-                        clname)
-                    gen = tlad[dck.gen]
-                    if isinstance(gen, bytes):
-                        genAttr = getattr(self.__class__, gen)
-                        if isinstance(genAttr, Callable):
-                            log.debug(
-                                "Calling callable generator attribute %r",
-                                genAttr)
-                            tlval = genAttr()
-                        else:
-                            tlval = genAttr
-                    else:
-                        tlval = gen(**tlsvals)
-
+            # Do descriptor properties after other properties, as they may
+            # depend on them.
+            for do_descriptors in (False, True):
+                # Loop through the entries for the top level attributes, and
+                # generate values for anything that's missing.
                 log.detail(
-                    "Set %r attribute %r to %r", clname,
-                    tlattr, tlval)
-                setattr(self, tlattr, tlval)
+                    "Recurse %s to %r top level attributes: %r",
+                    'doing descriptors' if do_descriptors else
+                    'not doing descriptors', clname, topLevelAttrArgs)
+
+                for tlattr, (tlval, tlsvals) in iteritems(topLevelAttrArgs):
+                    tlad = topLevelAttributeDescs[tlattr]
+                    desc = (
+                        None if dck.descriptor not in tlad else
+                        tlad[dck.descriptor])
+
+                    # Don't do descriptor-based properties if not told to.
+                    if not do_descriptors and desc is not None:
+                        continue
+
+                    # Don't do non-descriptor-based properties if not told to.
+                    if do_descriptors and desc is None:
+                        continue
+
+                    if tlval is None:
+                        if (hasattr(self, tlattr)):
+                            if getattr(self, tlattr) is not None:
+                                log.debug(
+                                    "No need to generate %r for %r: already "
+                                    "set (probably by bindings) to %r.",
+                                    tlattr, clname, getattr(self, tlattr))
+                                continue
+
+                        if dck.gen not in tlad:
+                            log.debug(
+                                "%r attribute not set and doesn't have "
+                                "generator",
+                                tlattr)
+                            # Need to set the internal representation, to allow
+                            # check functions not to have to check for None.
+                            setattr(
+                                self, "%s%s" % (topLevelPrepend, tlattr), None)
+                            continue
+
+                        log.debug(
+                            "Generating attribute %r of %r instance", tlattr,
+                            clname)
+                        tlval = self._dck_genTopLevelValueFromTLDict(
+                            tlad, tlsvals)
+
+                    log.detail(
+                        "Set %r attribute %r to %r", clname,
+                        tlattr, tlval)
+                    setattr(self, tlattr, tlval)
 
             log.detail("Dict before dele attributes: %r", sd)
             for deleAttr, deleVal in iteritems(dele_attrs):
@@ -197,15 +206,31 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
 
         def _dc_kvReprGen(self):
             for attr in iterkeys(topLevelAttributeDescs):
-                yield b"%s=%r" % (attr, getattr(self, attr))
+                yield "%s=%r" % (attr, getattr(self, attr))
             return
             sp = super(DeepClass, self)
             if hasattr(sp, "_dc_kvReprGen"):
                 for kvp in sp._dc_kvReprGen():
                     yield kvp
 
+        def _dck_genTopLevelValueFromTLDict(self, tlad, tlsvals):
+            """:param tlad: The Top-Level-Attribute Dictionary, which describes
+            the attribute.
+            """
+            gen = tlad[dck.gen]
+            if isinstance(gen, str):
+                genAttr = getattr(self.__class__, gen)
+                if isinstance(genAttr, Callable):
+                    log.debug(
+                        "Calling callable generator attribute %r", genAttr)
+                    return genAttr()
+
+                return genAttr
+
+            return gen(**tlsvals)
+
         def __repr__(self):
-            return(b"%s(%s)" % (
-                self.__class__.__name__, b", ".join(self._dc_kvReprGen())))
+            return("%s(%s)" % (
+                self.__class__.__name__, ", ".join(self._dc_kvReprGen())))
 
     return DeepClass

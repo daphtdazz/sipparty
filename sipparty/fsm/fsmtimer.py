@@ -16,11 +16,10 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import six
 import collections
 import logging
-
-from sipparty import util
+from six import next
+from ..util import Clock
 
 log = logging.getLogger(__name__)
 
@@ -82,7 +81,7 @@ class Timer(object):
     def start(self):
         "Start the timer."
         log.debug("Start timer %r.", self._tmr_name)
-        self._tmr_startTime = util.Clock()
+        self._tmr_startTime = Clock()
         self._tmr_currentPauseIter = self._tmr_retryer()
         self._tmr_setNextPopTime()
 
@@ -99,7 +98,7 @@ class Timer(object):
                 "%r instance named %r not running." % (
                     self.__class__.__name__, self._tmr_name))
 
-        now = util.Clock()
+        now = Clock()
 
         log.debug("Check at %r", now)
 
@@ -120,7 +119,7 @@ class Timer(object):
             return
 
         try:
-            wait_time = self._tmr_currentPauseIter.next()
+            wait_time = next(self._tmr_currentPauseIter)
         except StopIteration:
             self.stop()
             return

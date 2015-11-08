@@ -15,10 +15,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-import six
-from six import binary_type as bytes, iteritems
-import re
-import weakref
+from six import (binary_type as bytes, iteritems)
+from weakref import (ref as wref)
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.WARNING)  # vb is verbose at lower levels.
@@ -77,6 +75,9 @@ class ValueBinder(object):
     # =================== INSTANCE INTERFACE =================================
     #
     def __init__(self, **kwargs):
+        log.detail(
+            'Initialize new VaueBinder properties for %r instance',
+            self.__class__.__name__)
         for reqdattr in (
                 ("_vb_forwardbindings", {}), ("_vb_backwardbindings", {}),
                 ("_vb_weakBindingParent", None),
@@ -176,6 +177,7 @@ class ValueBinder(object):
                     self._vb_push_value_to_target(val, topath, cdict)
 
     def unbindAll(self):
+        log.debug('Unbind All from %r instance', self.__class__.__name__)
         self._vb_unbindAllCondition()
 
     @property
@@ -191,7 +193,7 @@ class ValueBinder(object):
             self._vb_weakBindingParent = None
             return
 
-        weakp = weakref.ref(newParent)
+        weakp = wref(newParent)
         self._vb_weakBindingParent = weakp
 
     def attributeAtPath(self, path):
@@ -279,16 +281,13 @@ class ValueBinder(object):
                         self.__class__.__name__, attr))
             return self.__dict__[attr]
 
-        # Avoid recursion if some subclass has not called init.
-        assert "_vb_delegate_attributes" in sd, (
-            "ValueBinder subclass %r has not called super.__init__()" % (
-                self.__class__.__name__))
-
         # Check for delegate attributes.
-        das = sd["_vb_delegate_attributes"]
-        if attr in das:
-            log.detail("Delegate attribute %r", attr)
-            return getattr(getattr(self, das[attr]), attr)
+        if '_vb_delegate_attributes' in sd:
+            log.detail('Looking for a delegate attribute')
+            das = sd["_vb_delegate_attributes"]
+            if attr in das:
+                log.detail("Delegate attribute %r", attr)
+                return getattr(getattr(self, das[attr]), attr)
 
         if hasattr(super(ValueBinder, self), "__getattr__"):
             return super(ValueBinder, self).__getattr__(attr)
@@ -398,7 +397,12 @@ class ValueBinder(object):
 
     def __del__(self):
         """We need to remove all our bindings."""
-        self._vb_unbindAllCondition()
+        # The weird thing about deleting an object graph like `A->B` in python
+        # is that `del(B)` may be called before `delattr(A, 'B')`, so `A` may
+        # still have a reference to `B` after `B` has had del(B) called.
+        # Therefore we have to tolerate bindings having already been cleared up
+        # in our children.
+        self._vb_unbindAllCondition(tolerate_no_such_binding=True)
         sp = super(ValueBinder, self)
         if hasattr(sp, "__del__"):
             sp.__del__()
@@ -406,7 +410,8 @@ class ValueBinder(object):
     #
     # =================== INTERNAL METHODS ===================================
     #
-    def _vb_unbindAllCondition(self, condition=None):
+    def _vb_unbindAllCondition(self, condition=None,
+                               tolerate_no_such_binding=False):
         for direction in self.VB_Directions:
             attr_bd = self._vb_bindingsForDirection(direction)
             for attr in dict(attr_bd):
@@ -421,7 +426,16 @@ class ValueBinder(object):
                         if condition is None or condition(attr, toattr):
                             log.debug("  unbind.")
                             path = self.VB_JoinPath((attr, subpath))
-                            self._vb_unbinddirection(path, topath, direction)
+                            if not tolerate_no_such_binding:
+                                self._vb_unbinddirection(
+                                    path, topath, direction)
+                            else:
+                                try:
+                                    self._vb_unbinddirection(
+                                        path, topath, direction)
+                                except NoSuchBinding as exc:
+                                    log.debug(
+                                        'NoSuchBinding %s tolerated.', exc)
 
     def _vb_unbindAllParent(self):
         log.debug(
@@ -452,7 +466,7 @@ class ValueBinder(object):
             return getattr(self, "_vb_%sbindings" % direction)
         except AttributeError as exc:
             raise AttributeError(
-                bytes(exc) +
+                str(exc) +
                 " Are you sure you called super().__init__() for this class?")
 
     def _vb_bindingdicts(self, path, direction, create=False, all=False):
@@ -484,7 +498,7 @@ class ValueBinder(object):
             if not create:
                 if all:
                     return bindings, attr, attrattrs, {}, None
-                raise(NoSuchBinding(path))
+                raise NoSuchBinding(path)
 
             attrdict = {}
             bindings[attr] = attrdict
@@ -641,8 +655,8 @@ class ValueBinder(object):
         would undo this, and recurse to do:
         b.c._vb_unbinddirection("d", "..e.f", VB_Forward)
         """
-        log.debug("%r %r bindings before unbind %r",
-                  self.__class__.__name__, direction,
+        log.debug("%r(%r) %r bindings before unbind %r",
+                  self.__class__.__name__, id(self), direction,
                   self._vb_bindingsForDirection(direction))
 
         resolvedfrompath = self._vb_resolveFromPath(frompath)
@@ -669,8 +683,9 @@ class ValueBinder(object):
                     child._vb_unbinddirection(
                         fromattrattrs, attrtopath, direction)
                 except NoSuchBinding as exc:
-                    exc.args += ("%r instance attribute %r" % (
-                        self.__class__.__name__, frompath),)
+                    exc.args += (
+                        "Attempted unbind on %r attribute of %r instance" % (
+                            fromattr_resolved, self.__class__.__name__),)
                     raise
 
         frompathbds = attrbindings[fromattrattrs]
@@ -763,7 +778,7 @@ class ValueBinder(object):
         self.bindBindings(self.vb_bindings)
 
     def _vb_attributeIsPrivate(self, attr):
-        return attr.startswith(b"_vb_")
+        return attr.startswith("_vb_")
 
     def _vb_delegateForAttribute(self, attr):
         das = self._vb_delegate_attributes

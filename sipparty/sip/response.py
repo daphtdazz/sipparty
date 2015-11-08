@@ -16,20 +16,20 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import re
 import logging
-
-from sipparty import (util, vb, Parser)
-import prot
-import defaults
-import components
-from header import Header
+import re
+from ..parse import Parser
+from ..util import (DerivedProperty, TwoCompatibleThree)
+from ..vb import ValueBinder
+from . import defaults
+from . import prot
+from .prot import (bdict, ProtocolError, ResponseCodeMessages)
 
 log = logging.getLogger(__name__)
 
 
-@util.TwoCompatibleThree
-class Response(Parser, vb.ValueBinder):
+@TwoCompatibleThree
+class Response(Parser, ValueBinder):
     """Response line class, such as
     200 INVITE
     """
@@ -37,27 +37,27 @@ class Response(Parser, vb.ValueBinder):
     # Parse description.
     parseinfo = {
         Parser.Pattern:
-            "({SIP_Version}){SP}({Status_Code}){SP}({Reason_Phrase})"
-            "".format(**prot.__dict__),
+            b'(%(SIP_Version)s)%(SP)s(%(Status_Code)s)%(SP)s'
+            b'(%(Reason_Phrase)s)' % bdict,
         Parser.Mappings:
-            [("protocol",),
-             ("code", int),  # The code should be an int.
-             ("codeMessage",)],
+            [('protocol',),
+             ('code', int),
+             ('codeMessage',)],
     }
 
     @classmethod
     def MessageForCode(cls, code):
-        if code in prot.ResponseCodeMessages:
-            return prot.ResponseCodeMessages[code]
+        if code in ResponseCodeMessages:
+            return ResponseCodeMessages[code]
 
         category_code = code / 100
-        if category_code in prot.ResponseCodeMessages:
-            return prot.ResponseCodeMessages
+        if category_code in ResponseCodeMessages:
+            return ResponseCodeMessages
 
-        raise prot.ProtocolError("Unknown response code %d" % code)
+        raise ProtocolError('Unknown response code %d' % code)
 
-    codeMessage = util.DerivedProperty(
-        b"_rsp_codeMessage", get=b"getCodeMessage")
+    codeMessage = DerivedProperty(
+        '_rsp_codeMessage', get='getCodeMessage')
 
     def getCodeMessage(self, underlyingValue):
         if underlyingValue is not None:
@@ -76,17 +76,17 @@ class Response(Parser, vb.ValueBinder):
             try:
                 code = int(code)
             except ValueError:
-                raise ValueError("Response code %r not an integer" % code)
+                raise ValueError('Response code %r not an integer' % code)
 
         self.code = code
         self.protocol = protocol
         self.codeMessage = codeMessage
 
     def __bytes__(self):
-        return b"{0.protocol} {0.code} {0.codeMessage}".format(self)
+        return b'%s %d %s' % (self.protocol, self.code, self.codeMessage)
 
     def __repr__(self):
         return (
-            b"{0.__class__.__name__}(code={0.code!r}, "
-            "codeMessage={0.codeMessage!r}, protocol={0.protocol!r})"
-            "".format(self))
+            '{0.__class__.__name__}(code={0.code!r}, '
+            'codeMessage={0.codeMessage!r}, protocol={0.protocol!r})'
+            ''.format(self))

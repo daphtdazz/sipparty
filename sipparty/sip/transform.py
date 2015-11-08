@@ -16,9 +16,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from numbers import Integral
 import logging
-from sipparty.util import Enum
+from numbers import Integral
+from ..util import Enum
 
 log = logging.getLogger(__name__)
 
@@ -93,4 +93,7 @@ def _FindTypeDict(dicts, typ):
                 "Transform dictionary %r does not contain type %r" % (
                     dicts, typ))
 
+    if typ not in dicts:
+        raise KeyError(
+            '%r transform type not in transforms %r' % (typ, dicts))
     return dicts[typ]

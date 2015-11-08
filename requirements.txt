@@ -1,3 +1,4 @@
 # Python requirements file for sipparty.
-six
 argparse
+mock
+six

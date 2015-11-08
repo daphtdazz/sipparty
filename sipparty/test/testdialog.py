@@ -25,8 +25,8 @@ import logging
 import weakref
 import unittest
 import socket
-from sipparty import (fsm, sip, util)
-from sipparty.sip import Dialog
+from .. import (fsm, sip, util)
+from ..sip import Dialog
 
 log = logging.getLogger(__name__)
 

@@ -16,25 +16,24 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from six import (binary_type as bytes, add_metaclass, iteritems)
+from six import (add_metaclass, binary_type as bytes, iteritems, next)
+from six.moves import reduce
 import re
 import logging
 from numbers import (Integral)
-from sipparty import (util, parse)
-from sipparty.util import BytesGenner
-from sipparty.vb import (KeyTransformer, ValueBinder)
-from sipparty.deepclass import (DeepClass, dck)
-from sipparty.transport import SOCK_TYPE_IP_NAMES
-from sipparty.sdp import sdpsyntax
-from body import Body
-import prot
-from prot import Incomplete
-import components
-import param
-from param import Param
-from request import Request
-from response import Response
-from header import Header
+from .. import (util,)
+from ..deepclass import (DeepClass, dck)
+from ..parse import (ParseError,)
+from ..sdp import sdpsyntax
+from ..transport import SOCK_TYPE_IP_NAMES
+from ..util import (astr, BytesGenner)
+from ..vb import (KeyTransformer, ValueBinder)
+from .body import Body
+from .header import Header
+from .param import Param
+from .prot import (bdict, Incomplete)
+from .request import Request
+from .response import Response
 
 log = logging.getLogger(__name__)
 ContentLengthBinding = (
@@ -42,8 +41,11 @@ ContentLengthBinding = (
         KeyTransformer: lambda bodies: reduce(
             lambda x, y: x + y, [
                 summand
-                for lst in [0], [
-                    len(bd.content) for bd in bodies]
+                for lst in (
+                    [0], [
+                        len(bd.content) for bd in bodies
+                    ]
+                )
                 for summand in lst
             ]
         )
@@ -106,10 +108,10 @@ class Message(
             "-", "[-_]"), flags=re.IGNORECASE)
     type = util.ClassType("Message")
 
-    MethodRE = re.compile("{Method}".format(**prot.__dict__))
-    ResponseRE = re.compile("{SIP_Version}".format(**prot.__dict__))
+    MethodRE = re.compile(b"%(Method)s" % bdict)
+    ResponseRE = re.compile(b"%(SIP_Version)s" % bdict)
     HeaderSeparatorRE = re.compile(
-        "({CRLF}(?:({token}){COLON}|{CRLF}))".format(**prot.__dict__))
+        b"(%(CRLF)s(?:(%(token)s)%(COLON)s|%(CRLF)s))" % bdict)
 
     body = util.FirstListItemProxy("bodies")
 
@@ -124,7 +126,7 @@ class Message(
         lines = cls.HeaderSeparatorRE.split(string)
         log.detail("Header split: %r", lines)
         line_iter = iter(lines)
-        startline = line_iter.next()
+        startline = next(line_iter)
         used_bytes = len(startline)
 
         if cls.ResponseRE.match(startline):
@@ -143,17 +145,17 @@ class Message(
                 configure_bindings=False)
             log.debug("Message is of type %r", message.type)
         else:
-            raise parse.ParseError(
+            raise ParseError(
                 "Startline is not a SIP startline: %r." % (startline,))
 
         def HNameContentsGen(hcit):
             try:
                 while True:
-                    hnamebytes = len(hcit.next())
-                    hname = hcit.next()
+                    hnamebytes = len(next(hcit))
+                    hname = next(hcit)
                     if hname is None:
                         return
-                    hcontents = hcit.next()
+                    hcontents = next(hcit)
                     nbytes = hnamebytes + len(hcontents)
                     yield (hname, hcontents, nbytes)
             except StopIteration:
@@ -162,7 +164,7 @@ class Message(
         for hname, hcontents, bytes_used in HNameContentsGen(line_iter):
             log.debug("Add header %r", hname)
             log.detail("Contents: %r", hcontents)
-            newh = getattr(Header, hname).Parse(hcontents)
+            newh = getattr(Header, astr(hname)).Parse(hcontents)
             log.detail("Header parsed as: %r", newh)
             message.addHeader(newh)
             used_bytes += bytes_used
@@ -205,8 +207,8 @@ class Message(
     def requestname(cls):
         if not cls.isrequest():
             raise AttributeError(
-                "{cls.__name__!r} is not a request so has no request name."
-                .format(**locals()))
+                "{cls.__name__!r} is not a request so has no request "
+                "name.".format(**locals()))
 
         return cls.__name__.replace("Message", "")
 
@@ -221,8 +223,9 @@ class Message(
 
     @classmethod
     def HeaderAttrNameFromType(cls, htype):
-        return "%s%s" % (getattr(
-            Header.types, htype).replace("-", "_"), "Header")
+        log.detail('Get header attribute name from type %r', htype)
+        htype = getattr(Header.types, htype)
+        return "%s%s" % (htype.replace("-", "_"), "Header")
 
     @classmethod
     def MakeStartline(cls):
@@ -349,7 +352,7 @@ class Message(
         eol = b'\r\n'
         yield eol
         for hdr in self.headers:
-            for bs in hdr.bytesGen():
+            for bs in hdr.safeBytesGen():
                 yield bs
             yield eol
         yield eol
@@ -358,7 +361,7 @@ class Message(
         assert len(bds) <= 1, "Only support one body currently."
 
         for body in bds:
-            for bs in body.bytesGen():
+            for bs in body.safeBytesGen():
                 yield bs
 
     def __getattr__(self, attr):
@@ -374,9 +377,11 @@ class Message(
         hmo = self.headerattrre.match(attr)
         if hmo is not None:
             canonicalheadername = util.sipheader(hmo.group(1))
-            for header in self.headers:
-                if header.type == canonicalheadername:
-                    return header
+            hdrs = self.headers
+            if hdrs:
+                for header in hdrs:
+                    if header.type == canonicalheadername:
+                        return header
 
         try:
             return getattr(super(Message, self), attr)

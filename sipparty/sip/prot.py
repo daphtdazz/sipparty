@@ -20,288 +20,317 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from sipparty.util import Enum
-from sipparty.transport import (
+from six import PY2
+from ..transport import (
     digitrange, DIGIT, hexrange, HEXDIG, hex4, hexseq, hexpart, IPv4address,
     IPv6address, port)
+from ..util import (AsciiBytesEnum, astr, bglobals_g, Enum, sipheader)
 
-protocols = Enum(("SIP/2.0",), normalize=lambda p: p.upper())
+
+def bglobals():
+    return bglobals_g(globals())
+
+
+def str_enumify(bytes_enum):
+    if PY2:
+        return bytes_enum
+    return Enum(
+        [astr(rtype) for rtype in bytes_enum],
+        normalize=bytes_enum._en_normalize, aliases=bytes_enum._en_aliases)
+
+protocols = AsciiBytesEnum((b"SIP/2.0",), normalize=lambda p: p.upper())
 
 # Refer to https://tools.ietf.org/html/rfc3261#section-25.1 for the ABNF.
-CRLF = "\r\n"
-SP = " "
-HTAB = "\t"
-WS = "[ \t]".format(**locals())
-LWS = "(?:{WS}*{CRLF})?{WS}+".format(**locals())  # Linear whitespace.
-SWS = "(?:{LWS})?".format(**locals())  # Separator whitespace.
-HCOLON = "{WS}*:{SWS}".format(**locals())
-SEMI = "{SWS};{SWS}".format(**locals())
-SLASH = "{SWS}/{SWS}".format(**locals())
-COLON = "{SWS}:{SWS}".format(**locals())
-upper_alpharange = "A-Z"
-upper_alpha = "[{upper_alpharange}]".format(**locals())
-alpharange = "a-z{upper_alpharange}".format(**locals())
-ALPHA = "[{alpharange}]".format(**locals())
-EQUAL = "{SWS}={SWS}".format(**locals())
-DQUOTE = "\""
-LAQUOT = "<"
-RAQUOT = ">"
-CHARrange = "\x01-\x7F"  # As per RFC 2326.
-CHAR = "[{CHARrange}]".format(**locals())
-UTF8_CONT = "[\x80-\xbf]"
+CRLF = b"\r\n"
+SP = b" "
+HTAB = b"\t"
+WS = b"[ \t]" % bglobals()
+LWS = b"(?:%(WS)s*%(CRLF)s)?%(WS)s+" % bglobals()  # Linear whitespace.
+SWS = b"(?:%(LWS)s)?" % bglobals()  # Separator whitespace.
+HCOLON = b"%(WS)s*:%(SWS)s" % bglobals()
+SEMI = b"%(SWS)s;%(SWS)s" % bglobals()
+SLASH = b"%(SWS)s/%(SWS)s" % bglobals()
+COLON = b"%(SWS)s:%(SWS)s" % bglobals()
+upper_alpharange = b"A-Z"
+upper_alpha = b"[%(upper_alpharange)s]" % bglobals()
+alpharange = b"a-z%(upper_alpharange)s" % bglobals()
+ALPHA = b"[%(alpharange)s]" % bglobals()
+EQUAL = b"%(SWS)s=%(SWS)s" % bglobals()
+DQUOTE = b"\""
+LAQUOT = b"<"
+RAQUOT = b">"
+CHARrange = b"\x01-\x7F"  # As per RFC 2326.
+CHAR = b"[%(CHARrange)s]" % bglobals()
+UTF8_CONT = b"[\x80-\xbf]"
 UTF8_NONASCIIopts = (
-    "[\xc0-\xdf]{UTF8_CONT}|"
-    "[\xe0-\xef]{UTF8_CONT}{{2}}|"
-    "[\xf0-\xf7]{UTF8_CONT}{{3}}|"
-    "[\xf8-\xfb]{UTF8_CONT}{{4}}|"
-    "[\xfc-\xfd]{UTF8_CONT}{{5}}"
-    "".format(**locals()))
-UTF8_NONASCII = "(?:{UTF8_NONASCIIopts})".format(**locals())
+    b"[\xc0-\xdf]%(UTF8_CONT)s|"
+    b"[\xe0-\xef]%(UTF8_CONT)s{2}|"
+    b"[\xf0-\xf7]%(UTF8_CONT)s{3}|"
+    b"[\xf8-\xfb]%(UTF8_CONT)s{4}|"
+    b"[\xfc-\xfd]%(UTF8_CONT)s{5}"
+    b"" % bglobals())
+UTF8_NONASCII = b"(?:%(UTF8_NONASCIIopts)s)" % bglobals()
 TEXT_UTF8charopts = (
-    "[\x21-\x7e]|{UTF8_NONASCIIopts}"
-    "".format(**locals()))
-TEXT_UTF8char = "(?:{TEXT_UTF8charopts})".format(**locals())
+    b"[\x21-\x7e]|%(UTF8_NONASCIIopts)s"
+    b"" % bglobals())
+TEXT_UTF8char = b"(?:%(TEXT_UTF8charopts)s)" % bglobals()
 TEXT_UTF8charsopts = (
-    "[\x21-\x7e]+|{UTF8_NONASCIIopts}"
-    "".format(**locals()))
-TEXT_UTF8chars = "(?:{TEXT_UTF8charopts})".format(**locals())
-alphanumrange = "{alpharange}{digitrange}".format(**locals())
-alphanum = "[{alphanumrange}]".format(**locals())
-markrange = "_.!~*'()-"
-mark = "[{markrange}]".format(**locals())
-unreservedrange = "{alphanumrange}{markrange}".format(**locals())
-unreserved = "[{unreservedrange}]".format(**locals())
-reservedrange = ";/?:@&=+$,"
-reserved = "[{reservedrange}]".format(**locals())
-escaped = "%{HEXDIG}{HEXDIG}".format(**locals())
-user_unreservedrange = "&=+$,;?/"
-user_unreserved = "[{user_unreservedrange}]".format(**locals())
+    b"[\x21-\x7e]+|%(UTF8_NONASCIIopts)s"
+    b"" % bglobals())
+TEXT_UTF8chars = b"(?:%(TEXT_UTF8charopts)s)" % bglobals()
+alphanumrange = b"%(alpharange)s%(digitrange)s" % bglobals()
+alphanum = b"[%(alphanumrange)s]" % bglobals()
+markrange = b"_.!~*'()-"
+mark = b"[%(markrange)s]" % bglobals()
+unreservedrange = b"%(alphanumrange)s%(markrange)s" % bglobals()
+unreserved = b"[%(unreservedrange)s]" % bglobals()
+reservedrange = b";/?:@&=+$,"
+reserved = b"[%(reservedrange)s]" % bglobals()
+escaped = b"%%%(HEXDIG)s%(HEXDIG)s" % bglobals()
+user_unreservedrange = b"&=+$,;?/"
+user_unreserved = b"[%(user_unreservedrange)s]" % bglobals()
 
 # The following come from RFC 2806.
 token_charrange = (
-    "!\x23-\x27*\x2b-\x2d{alphanumrange}^_`|~".format(**locals()))
-token_char = "[{token_charrange}]".format(**locals())
+    b"!\x23-\x27*\x2b-\x2d%(alphanumrange)s^_`|~" % bglobals())
+token_char = b"[%(token_charrange)s]" % bglobals()
 quoted_string = (
-    "\"(?:[\x20-\x21\x23-\x7E\x80-\xFF]+|\\{CHAR})*\"".format(**locals()))
-visual_separatorrange = ".()-"
-visual_separator = "[{visual_separatorrange}]".format(**locals())
-phonedigitrange = "{digitrange}{visual_separatorrange}".format(**locals())
-phonedigit = "[{phonedigitrange}]".format(**locals())
-dtmf_digitrange = "*#ABCD"
-dtmf_digit = "[{dtmf_digitrange}]".format(**locals())
-one_second_pause = "p"
-wait_for_dial_tone = "w"
+    b"\"(?:[\x20-\x21\x23-\x7E\x80-\xFF]+|\\%(CHAR)s)*\"" % bglobals())
+visual_separatorrange = b".()-"
+visual_separator = b"[%(visual_separatorrange)s]" % bglobals()
+phonedigitrange = b"%(digitrange)s%(visual_separatorrange)s" % bglobals()
+phonedigit = b"[%(phonedigitrange)s]" % bglobals()
+dtmf_digitrange = b"*#ABCD"
+dtmf_digit = b"[%(dtmf_digitrange)s]" % bglobals()
+one_second_pause = b"p"
+wait_for_dial_tone = b"w"
 pause_characterrange = (
-    "{one_second_pause}{wait_for_dial_tone}".format(**locals()))
-pause_character = "[{pause_characterrange}]".format(**locals())
-base_phone_number = "{phonedigit}+".format(**locals())
+    b"%(one_second_pause)s%(wait_for_dial_tone)s" % bglobals())
+pause_character = b"[%(pause_characterrange)s]" % bglobals()
+base_phone_number = b"%(phonedigit)s+" % bglobals()
 # The following are special cases of extensions that aren't needed yet.
-# isdn-subaddress       = ";isub=" 1*phonedigit
-# post-dial             = ";postd=" 1*(phonedigit /
+# isdn-subaddress       = b";isub=" 1*phonedigit
+# post-dial             = b";postd=" 1*(phonedigit /
 #                         dtmf-digit / pause-character)
-# area-specifier        = ";" phone-context-tag "=" phone-context-ident
+# area-specifier        = b";" phone-context-tag b"=" phone-context-ident
 # service_provider      = provider-tag "=" provider-hostname
 future_extension = (
-    ";{token_char}+"
-    "(?:=(?:{token_char}+(?:[?]{token_char}+)|{quoted_string}))?"
-    "".format(**locals()))
+    b";%(token_char)s+"
+    b"(?:=(?:%(token_char)s+(?:[?]%(token_char)s+)|%(quoted_string)s))?"
+    b"" % bglobals())
 global_phone_number = (
-    "[+]{base_phone_number}(?:{future_extension})*"
-    "".format(**locals()))
+    b"[+]%(base_phone_number)s(?:%(future_extension)s)*"
+    b"" % bglobals())
 local_phone_number = (
-    "[{dtmf_digitrange}{pause_characterrange}{phonedigitrange}]+"
-    "(?:{future_extension})*"
-    "".format(**locals()))
+    b"[%(dtmf_digitrange)s%(pause_characterrange)s%(phonedigitrange)s]+"
+    b"(?:%(future_extension)s)*"
+    b"" % bglobals())
 telephone_subscriber = (
-    "(?:{global_phone_number}|{local_phone_number})".format(**locals()))
+    b"(?:%(global_phone_number)s|%(local_phone_number)s)" % bglobals())
 
-token = "[{alphanumrange}\x23-\x5F.!%*+`'~]+".format(**locals())
-STAR = "[*]"
+token = b"[%(alphanumrange)s\x23-\x5F.!%%*+`'~]+" % bglobals()
+STAR = b"[*]"
 
 # The end of line string used in SIP messages.
 EOL = CRLF
 
 # Magic cookie used in branch parameters.
-BranchMagicCookie = "z9hG4bK"
+BranchMagicCookie = b"z9hG4bK"
 
 
-toplabel = "{ALPHA}(?:[{alphanumrange}-]*{alphanum})?".format(
-    **locals())
-domainlabel = "(?:{alphanum}|{alphanum}[{alphanumrange}-]*{alphanum})".format(
-    **locals())
-hostname = "(?:{domainlabel}[.])*{toplabel}[.]?".format(**locals())
-IPv6reference = "[[]{IPv6address}[]]".format(**locals())
-host = "(?:{hostname}|{IPv4address}|{IPv6reference})".format(**locals())
-hostport = "{host}(?::{port})?".format(**locals())
+toplabel = b"%(ALPHA)s(?:[%(alphanumrange)s-]*%(alphanum)s)?" % bglobals()
+domainlabel = (
+    b"(?:%(alphanum)s|%(alphanum)s[%(alphanumrange)s-]*%(alphanum)s)" %
+    bglobals())
+hostname = b"(?:%(domainlabel)s[.])*%(toplabel)s[.]?" % bglobals()
+IPv6reference = b"[[]%(IPv6address)s[]]" % bglobals()
+host = b"(?:%(hostname)s|%(IPv4address)s|%(IPv6reference)s)" % bglobals()
+hostport = b"%(host)s(?::%(port)s)?" % bglobals()
 # Should be SIP or token, but just use token.
 protocol_name = token
 protocol_version = token
-sent_protocol = "{protocol_name}{SLASH}{protocol_version}".format(**locals())
+sent_protocol = b"%(protocol_name)s%(SLASH)s%(protocol_version)s" % bglobals()
 # TODO qdtext should include UTF8-NONASCII.
-qdtext = "(?:{LWS}|[\x21\x23-\x5B\x5D-\x7E])".format(**locals())
-quoted_pair = "\\[\x00-\x09\x0B-\x0C\x0E-\x7F]"
-quoted_string = "{SWS}{DQUOTE}(?:{qdtext}|{quoted_pair})*{DQUOTE}".format(
-    **locals())
-gen_value = "(?:{token}|{host}|{quoted_string})".format(**locals())
-generic_param = "{token}(?:{EQUAL}{gen_value})?".format(**locals())
-sent_by = "{host}(?:{COLON}{port})?".format(**locals())
-via_parm = "{sent_protocol}{LWS}{sent_by}".format(**locals())
+qdtext = b"(?:%(LWS)s|[\x21\x23-\x5B\x5D-\x7E])" % bglobals()
+quoted_pair = b"\\[\x00-\x09\x0B-\x0C\x0E-\x7F]"
+quoted_string = (
+    b"%(SWS)s%(DQUOTE)s(?:%(qdtext)s|%(quoted_pair)s)*%(DQUOTE)s" % bglobals())
+gen_value = b"(?:%(token)s|%(host)s|%(quoted_string)s)" % bglobals()
+generic_param = b"%(token)s(?:%(EQUAL)s%(gen_value)s)?" % bglobals()
+sent_by = b"%(host)s(?:%(COLON)s%(port)s)?" % bglobals()
+via_parm = b"%(sent_protocol)s%(LWS)s%(sent_by)s" % bglobals()
 # transport actually includes specific sets of token as well in the spec.
 transport = token
 
 user = (
-    "(?:[{user_unreservedrange}{unreservedrange}]+|{escaped})+"
-    "".format(**locals()))
+    b"(?:[%(user_unreservedrange)s%(unreservedrange)s]+|%(escaped)s)+"
+    b"" % bglobals())
 password = (
-    "(?:[&=+$,{unreservedrange}]+|{escaped})*"
-    "".format(**locals()))
+    b"(?:[&=+$,%(unreservedrange)s]+|%(escaped)s)*"
+    b"" % bglobals())
 userinfo = (
-    "(?:{user}|{telephone_subscriber})(?::{password})?@".format(**locals()))
-scheme = "{ALPHA}[{alphanumrange}\x2b-\x2e]*".format(**locals())
-srvr = "(?:(?:{userinfo}@)?{hostport})?".format(**locals())
-reg_name = "(?:[$,;:@&=+{unreservedrange}]|{escaped})+".format(**locals())
-authority = "(?:{srvr}|{reg_name})".format(**locals())
-pchar = "(?:[:@&=+$,{unreservedrange}]|{escaped})".format(**locals())
-param = "(?:{pchar})*".format(**locals())
-segment = "{pchar}(?:;{param})*".format(**locals())
-path_segments = "{segment}(?:/{segment})*".format(**locals())
-abs_path = "/{path_segments}".format(**locals())
-net_path = "//{authority}(?:{abs_path})?".format(**locals())
-uric = "(?:[{reservedrange}{unreservedrange}]+|{escaped})".format(**locals())
+    b"(?:%(user)s|%(telephone_subscriber)s)(?::%(password)s)?@" % bglobals())
+scheme = b"%(ALPHA)s[%(alphanumrange)s\x2b-\x2e]*" % bglobals()
+srvr = b"(?:(?:%(userinfo)s@)?%(hostport)s)?" % bglobals()
+reg_name = b"(?:[$,;:@&=+%(unreservedrange)s]|%(escaped)s)+" % bglobals()
+authority = b"(?:%(srvr)s|%(reg_name)s)" % bglobals()
+pchar = b"(?:[:@&=+$,%(unreservedrange)s]|%(escaped)s)" % bglobals()
+param = b"(?:%(pchar)s)*" % bglobals()
+segment = b"%(pchar)s(?:;%(param)s)*" % bglobals()
+path_segments = b"%(segment)s(?:/%(segment)s)*" % bglobals()
+abs_path = b"/%(path_segments)s" % bglobals()
+net_path = b"//%(authority)s(?:%(abs_path)s)?" % bglobals()
+uric = b"(?:[%(reservedrange)s%(unreservedrange)s]+|%(escaped)s)" % bglobals()
 uric_no_slash = (
-    "(?:[;?:@&=+$,{unreservedrange}]+|{escaped})".format(**locals()))
-query = "{uric}*".format(**locals())
-hier_part = "(?:{net_path}|{abs_path})(?:[?]{query})?".format(**locals())
-opaque_part = "{uric_no_slash}{uric}*".format(**locals())
-absoluteURI = "{scheme}:(?:{hier_part}|{opaque_part})".format(**locals())
-display_name = "(?:(?:{token}{LWS})*|{quoted_string})".format(**locals())
-param_unreservedrange = "][/:&+$"
-param_unreserved = "[{param_unreservedrange}]".format(**locals())
+    b"(?:[;?:@&=+$,%(unreservedrange)s]+|%(escaped)s)" % bglobals())
+query = b"%(uric)s*" % bglobals()
+hier_part = b"(?:%(net_path)s|%(abs_path)s)(?:[?]%(query)s)?" % bglobals()
+opaque_part = b"%(uric_no_slash)s%(uric)s*" % bglobals()
+absoluteURI = b"%(scheme)s:(?:%(hier_part)s|%(opaque_part)s)" % bglobals()
+display_name = b"(?:(?:%(token)s%(LWS)s)*|%(quoted_string)s)" % bglobals()
+param_unreservedrange = b"][/:&+$"
+param_unreserved = b"[%(param_unreservedrange)s]" % bglobals()
 # paramchars is paramchar but with an optimization to match several characters
 # in a row.
 paramchars = (
-    "(?:[{param_unreservedrange}{unreservedrange}]+|{escaped})+"
-    "".format(**locals()))
-uri_parameter = "{paramchars}(?:={paramchars})?".format(**locals())
-uri_parameters = "(?:;{uri_parameter})*".format(**locals())
-hnv_unreservedrange = "][/?:+$"
-hnv_unreserved = "[{hnv_unreservedrange}]".format(**locals())
+    b"(?:[%(param_unreservedrange)s%(unreservedrange)s]+|%(escaped)s)+"
+    b"" % bglobals())
+uri_parameter = b"%(paramchars)s(?:=%(paramchars)s)?" % bglobals()
+uri_parameters = b"(?:;%(uri_parameter)s)*" % bglobals()
+hnv_unreservedrange = b"][/?:+$"
+hnv_unreserved = b"[%(hnv_unreservedrange)s]" % bglobals()
 hname = (
-    "(?:[{hnv_unreservedrange}{unreservedrange}]+|{escaped})+"
-    "".format(**locals()))
+    b"(?:[%(hnv_unreservedrange)s%(unreservedrange)s]+|%(escaped)s)+"
+    b"" % bglobals())
 hvalue = (
-    "(?:[{hnv_unreservedrange}{unreservedrange}]+|{escaped})*"
-    "".format(**locals()))
-header = "{hname}={hvalue}".format(**locals())
-headers = "[?]{header}(?:[&]{header})*".format(**locals())
+    b"(?:[%(hnv_unreservedrange)s%(unreservedrange)s]+|%(escaped)s)*"
+    b"" % bglobals())
+header = b"%(hname)s=%(hvalue)s" % bglobals()
+headers = b"[?]%(header)s(?:[&]%(header)s)*" % bglobals()
 sip_sips_body = (
-    "(?:{userinfo})?{hostport}{uri_parameters}(?:{headers})?"
-    "".format(**locals()))
-SIP_URI = "sip:{sip_sips_body}".format(**locals())
-SIPS_URI = "sips:{sip_sips_body}".format(**locals())
-addr_spec = "(?:{SIP_URI}|{SIPS_URI}|{absoluteURI})".format(**locals())
+    b"(?:%(userinfo)s)?%(hostport)s%(uri_parameters)s(?:%(headers)s)?"
+    b"" % bglobals())
+SIP_URI = b"sip:%(sip_sips_body)s" % bglobals()
+SIPS_URI = b"sips:%(sip_sips_body)s" % bglobals()
+addr_spec = b"(?:%(SIP_URI)s|%(SIPS_URI)s|%(absoluteURI)s)" % bglobals()
 name_addr = (
-    "(?:{display_name})?{LAQUOT}{addr_spec}{RAQUOT}".format(**locals()))
+    b"(?:%(display_name)s)?%(LAQUOT)s%(addr_spec)s%(RAQUOT)s" % bglobals())
 
-Method = "[{upper_alpharange}]+".format(**locals())
-Request_URI = "(?:sips?{sip_sips_body}|{absoluteURI})".format(**locals())
-SIP_Version = "SIP/{DIGIT}+[.]{DIGIT}+".format(**locals())
+Method = b"[%(upper_alpharange)s]+" % bglobals()
+Request_URI = b"(?:sips?%(sip_sips_body)s|%(absoluteURI)s)" % bglobals()
+SIP_Version = b"SIP/%(DIGIT)s+[.]%(DIGIT)s+" % bglobals()
 
-Status_Code = "{DIGIT}{{3}}".format(**locals())
+Status_Code = b"%(DIGIT)s{3}" % bglobals()
 # Reason phrase should be a bit more complicated:
 # Reason-Phrase   =  *(reserved / unreserved / escaped
 #                    / UTF8-NONASCII / UTF8-CONT / SP / HTAB)
 Reason_Phrase = (
-    "(?:[{reservedrange}{SP}{HTAB}{unreservedrange}]+|"
-    "{escaped})*".format(**locals()))
+    b"(?:[%(reservedrange)s%(SP)s%(HTAB)s%(unreservedrange)s]+|"
+    b"%(escaped)s)*" % bglobals())
 
 header_name = token
 header_value = (
-    "(?:{TEXT_UTF8charsopts}|{LWS}|{UTF8_CONT})*".format(**locals()))
-extension_header = "{header_name}{HCOLON}{header_value}".format(**locals())
+    b"(?:%(TEXT_UTF8charsopts)s|%(LWS)s|%(UTF8_CONT)s)*" % bglobals())
+extension_header = b"%(header_name)s%(HCOLON)s%(header_value)s" % bglobals()
 
 # Message types. There are specific types defined but token represents them
 # all.
-m_type = "{token}".format(**locals())
-m_subtype = "{token}".format(**locals())
-m_parameter = "{token}=(?:{quoted_string}|{token})".format(**locals())
+m_type = b"%(token)s" % bglobals()
+m_subtype = b"%(token)s" % bglobals()
+m_parameter = b"%(token)s=(?:%(quoted_string)s|%(token)s)" % bglobals()
 
-RequestTypes = Enum((
-    "ACK", "BYE", "CANCEL", "INVITE", "OPTIONS", "REGISTER"),
-    normalize=lambda x: bytes(x).upper())
+RequestTypes = AsciiBytesEnum((
+    b"ACK", b"BYE", b"CANCEL", b"INVITE", b"OPTIONS", b"REGISTER"),
+    normalize=lambda x: x.upper() if hasattr(x, 'upper') else x)
+
+RequestTypesStr = str_enumify(RequestTypes)
+
+HeaderTypes = AsciiBytesEnum(
+    (b"Accept", b"Accept-Encoding", b"Accept-Language", b"Alert-Info",
+     b"Allow", b"Authentication-Info", b"Authorization", b"Call-ID",
+     b"Call-Info", b"Contact", b"Content-Disposition", b"Content-Encoding",
+     b"Content-Language", b"Content-Length", b"Content-Type", b"CSeq",
+     b"Date", b"Error-Info", b"Expires", b"From", b"In-Reply-To",
+     b"Max-Forwards", b"Min-Expires", b"MIME-Version", b"Organization",
+     b"Priority", b"Proxy-Authenticate", b"Proxy-Authorization",
+     b"Proxy-Require", b"Record-Route", b"Reply-To", b"Require",
+     b"Retry-To", b"Route", b"Server", b"Subject", b"Supported",
+     b"Timestamp", b"To", b"Unsupported", b"User-Agent", b"Via",
+     b"Warning", b"WWW-Authenticate"),
+    normalize=sipheader)
 
 ResponseCodeMessages = {
-    1: "Unknown Trying Response",
-    2: "Unknown Successful Response",
-    200: "OK",
-    202: "Accepted",
-    204: "No Notification",
-    3: "Unknown redirect response",
-    300: "Multiple Choices",
-    301: "Moved Permanently",
-    302: "Moved Temporarily",
-    305: "Use Proxy",
-    380: "Alternative Service",
-    4: "Unknown Client Error Response",
-    400: "Bad Request",
-    401: "Unauthorized",
-    402: "Payment Required",
-    403: "Forbidden",
-    404: "Not Found",
-    405: "Method Not Allowed",
-    406: "Not Acceptable",
-    407: "Proxy Authentication Required",
-    408: "Request Timeout",
-    409: "Conflict",
-    410: "Gone",
-    411: "Length Required",
-    412: "Conditional Request Failed",
-    413: "Request Entity Too Large",
-    414: "Request-URI Too Long",
-    415: "Unsupported Media Type",
-    416: "Unsupported URI Scheme",
-    417: "Unknown Resource-Priority",
-    420: "Bad Extension",
-    421: "Extension Required",
-    422: "Session Interval Too Small",
-    423: "Interval Too Brief",
-    424: "Bad Location Information",
-    428: "Use Identity Header",
-    429: "Provide Referrer Identity",
-    430: "Flow Failed",
-    433: "Anonymity Disallowed",
-    436: "Bad Identity-Info",
-    437: "Unsupported Certificate",
-    438: "Invalid Identity Header",
-    439: "First Hop Lacks Outbound Support",
-    470: "Consent Needed",
-    480: "Temporarily Unavailable",
-    481: "Call/Transaction Does Not Exist",
-    482: "Loop Detected.",
-    483: "Too Many Hops",
-    484: "Address Incomplete",
-    485: "Ambiguous",
-    486: "Busy Here",
-    487: "Request Terminated",
-    488: "Not Acceptable Here",
-    489: "Bad Event",
-    491: "Request Pending",
-    493: "Undecipherable",
-    494: "Security Agreement Required",
-    5: "Unknown Server Error Response",
-    500: "Server Internal Error",
-    501: "Not Implemented",
-    502: "Bad Gateway",
-    503: "Service Unavailable",
-    504: "Server Time-out",
-    505: "Version Not Supported",
-    513: "Message Too Large",
-    580: "Precondition Failure",
-    6: "Unknown Global Failure Response",
-    600: "Busy Everywhere",
-    603: "Decline",
-    604: "Does Not Exist Anywhere",
-    606: "Not Acceptable",
+    1: b"Unknown Trying Response",
+    2: b"Unknown Successful Response",
+    200: b"OK",
+    202: b"Accepted",
+    204: b"No Notification",
+    3: b"Unknown redirect response",
+    300: b"Multiple Choices",
+    301: b"Moved Permanently",
+    302: b"Moved Temporarily",
+    305: b"Use Proxy",
+    380: b"Alternative Service",
+    4: b"Unknown Client Error Response",
+    400: b"Bad Request",
+    401: b"Unauthorized",
+    402: b"Payment Required",
+    403: b"Forbidden",
+    404: b"Not Found",
+    405: b"Method Not Allowed",
+    406: b"Not Acceptable",
+    407: b"Proxy Authentication Required",
+    408: b"Request Timeout",
+    409: b"Conflict",
+    410: b"Gone",
+    411: b"Length Required",
+    412: b"Conditional Request Failed",
+    413: b"Request Entity Too Large",
+    414: b"Request-URI Too Long",
+    415: b"Unsupported Media Type",
+    416: b"Unsupported URI Scheme",
+    417: b"Unknown Resource-Priority",
+    420: b"Bad Extension",
+    421: b"Extension Required",
+    422: b"Session Interval Too Small",
+    423: b"Interval Too Brief",
+    424: b"Bad Location Information",
+    428: b"Use Identity Header",
+    429: b"Provide Referrer Identity",
+    430: b"Flow Failed",
+    433: b"Anonymity Disallowed",
+    436: b"Bad Identity-Info",
+    437: b"Unsupported Certificate",
+    438: b"Invalid Identity Header",
+    439: b"First Hop Lacks Outbound Support",
+    470: b"Consent Needed",
+    480: b"Temporarily Unavailable",
+    481: b"Call/Transaction Does Not Exist",
+    482: b"Loop Detected.",
+    483: b"Too Many Hops",
+    484: b"Address Incomplete",
+    485: b"Ambiguous",
+    486: b"Busy Here",
+    487: b"Request Terminated",
+    488: b"Not Acceptable Here",
+    489: b"Bad Event",
+    491: b"Request Pending",
+    493: b"Undecipherable",
+    494: b"Security Agreement Required",
+    5: b"Unknown Server Error Response",
+    500: b"Server Internal Error",
+    501: b"Not Implemented",
+    502: b"Bad Gateway",
+    503: b"Service Unavailable",
+    504: b"Server Time-out",
+    505: b"Version Not Supported",
+    513: b"Message Too Large",
+    580: b"Precondition Failure",
+    6: b"Unknown Global Failure Response",
+    600: b"Busy Everywhere",
+    603: b"Decline",
+    604: b"Does Not Exist Anywhere",
+    606: b"Not Acceptable",
 }
 
 
@@ -332,3 +361,5 @@ def EstablishedDialogID(CallIDText, localTagText, remoteTagText):
 
 def ProvisionalDialogIDFromEstablishedID(estDID):
     return estDID[:2]
+
+bdict = bglobals()
