@@ -16,6 +16,6 @@ install:
 
 # command to run tests
 script:
-  - find . -type f -name \*.py | xargs pep8
+  - find scripts sipparty -type f -name \*.py | xargs pep8
   - ./run-uts.bash
   - sphinx-build -b html source build
