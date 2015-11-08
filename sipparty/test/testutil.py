@@ -79,3 +79,15 @@ class TestUtil(SIPPartyTestCase):
         self.assertTrue(b'a_normal_bytes_var' in gdict, gdict)
         self.assertTrue('a_normal_string_var' in gdict, gdict)
 
+    def testSingleton(self):
+
+        # self.pushLogLevel('util', logging.DETAIL)
+        s1 = util.Singleton(singleton='a')
+        s2 = util.Singleton(singleton='a')
+        self.assertTrue(s1 is s2)
+
+        s3 = util.Singleton()
+        s4 = util.Singleton()
+        self.assertTrue(s3 is s4)
+        self.assertFalse(s3 is s1)
+

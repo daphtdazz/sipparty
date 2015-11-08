@@ -729,14 +729,16 @@ class Singleton(object):
     """Classes inheriting from this will only have one instance."""
 
     _St_SharedInstances = WeakValueDictionary()
+    _St_SingletonNameKey = 'singleton'
 
     def __new__(cls, *args, **kwargs):
         log.detail("Singleton.__new__(%r, %r)", args, kwargs)
-        if "singleton" in kwargs:
-            name = kwargs["singleton"]
-            del kwargs["singleton"]
+        skey = cls._St_SingletonNameKey
+        if skey in kwargs:
+            name = kwargs[skey]
+            del kwargs[skey]
         else:
-            name = ""
+            name = ''
 
         log.debug("New with class %r, name %r", cls, name)
         existing_inst = (
@@ -749,7 +751,7 @@ class Singleton(object):
             log.detail("  %r", existing_inst)
             return existing_inst
 
-        log.debug("  New instance required.")
+        log.debug("  New instance required args:%r, kwargs:%r", args, kwargs)
         ns = super(Singleton, cls).__new__(cls, *args, **kwargs)
         cls._St_SharedInstances[name] = ns
 
@@ -764,7 +766,10 @@ class Singleton(object):
             return
         self.__dict__["_st_inited"] = True
 
-        log.debug("Init Singleton")
+        if self._St_SingletonNameKey in kwargs:
+            del kwargs[self._St_SingletonNameKey]
+
+        log.debug("Init Singleton args:%r, kwargs:%r", args, kwargs)
         super(Singleton, self).__init__(*args, **kwargs)
 
 

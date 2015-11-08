@@ -19,18 +19,19 @@ limitations under the License.
 import logging
 import os
 import re
-from setup import SIPPartyTestCase
 from six import (binary_type as bytes, iteritems, add_metaclass)
 import sys
 import unittest
-from .. import (util, sip, vb, ParseError, Request)
+from .setup import SIPPartyTestCase
+from ..parse import ParseError
 from ..sdp import sdpsyntax
 from ..sip import (prot, components, Message, Header)
 from ..sip.body import Body
 from ..sip.components import URI
 from ..sip.header import ContactHeader
 from ..sip.prot import (Incomplete)
-from ..util import (Singleton, bglobals_r)
+from ..sip.request import Request
+from ..util import (Singleton, bglobals_g)
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DETAIL)
@@ -89,8 +90,8 @@ class TestProtocol(SIPPartyTestCase):
             # 6 random hex digits followed by a date/timestamp
             b"Call-ID: %(call_id_pattern)s\r\n"
             b"CSeq: %(cseq_num_pattern)s INVITE\r\n"
-            b"Max-Forwards: 70\r\n" % bglobals_r(TestProtocol.__dict__),
-            repr(bytes(invite)))
+            b"Max-Forwards: 70\r\n" % bglobals_g(TestProtocol.__dict__),
+            repr(bytes(invite))), bytes(invite))
 
         self.assertEqual(bytes(invite.toheader), "To: <sip:bob@baltimore.com>")
         self.assertEqual(
@@ -125,7 +126,7 @@ class TestProtocol(SIPPartyTestCase):
         invite.startline.uri.aor.host = "biloxi.com"
         invite.fromheader.field.value.uri.aor.username = "alice"
         invite.fromheader.field.value.uri.aor.host = "atlanta.com"
-        invite.contactheader.uri = "sip:localuser@127.0.0.1:5061"
+        invite.contactheader.uri = b"sip:localuser@127.0.0.1:5061"
         invite.max_forwardsheader.number = 55
         self.assertEqual(invite.contactheader.port, 5061)
         log.info("Set via header host.")
@@ -223,12 +224,6 @@ class TestProtocol(SIPPartyTestCase):
         self.assertRaises(AttributeError, lambda: MyClass.b)
         self.assertEqual(inst.a, 1)
         self.assertEqual(inst.b, 2)
-
-    def testSingleton(self):
-
-        s1 = Singleton("a")
-        s2 = Singleton("a")
-        self.assertTrue(s1 is s2)
 
     def testProt(self):
         for name, obj in iteritems(prot.__dict__):
