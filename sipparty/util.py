@@ -649,7 +649,7 @@ class DerivedProperty(object):
 
     def __delete__(self, obj):
         pname = self._rp_propName
-        del obj.pname
+        delattr(obj, pname)
 
     def __repr__(self):
         return (
