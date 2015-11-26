@@ -273,7 +273,7 @@ class ValueBinder(object):
         log.debug("%r get %r", self.__class__.__name__, attr)
         sd = self.__dict__
 
-        if self._vb_attributeIsPrivate(attr):
+        if ValueBinder._vb_attributeIsPrivate(attr):
             if attr not in sd:
                 raise AttributeError(
                     "ValueBinder subclass %r has no attribute %r: perhaps it "
@@ -300,7 +300,7 @@ class ValueBinder(object):
         """
         log.detail("Set %r.", attr)
 
-        if self._vb_attributeIsPrivate(attr):
+        if ValueBinder._vb_attributeIsPrivate(attr):
             log.detail("Directly setting vb private attribute")
             self.__dict__[attr] = val
             return
@@ -371,7 +371,7 @@ class ValueBinder(object):
     def __delattr__(self, attr):
         log.detail("Del %r.", attr)
 
-        if self._vb_attributeIsPrivate(attr):
+        if ValueBinder._vb_attributeIsPrivate(attr):
             log.detail("Directly setting vb private attribute")
             del self.__dict__[attr]
             return
@@ -777,7 +777,8 @@ class ValueBinder(object):
 
         self.bindBindings(self.vb_bindings)
 
-    def _vb_attributeIsPrivate(self, attr):
+    @staticmethod
+    def _vb_attributeIsPrivate(attr):
         return attr.startswith("_vb_")
 
     def _vb_delegateForAttribute(self, attr):
