@@ -182,7 +182,7 @@ class Enum(set):
     def __getattr__(self, attr):
         log.detail('%s instance getattr %r', self.__class__.__name__, attr)
         nn = self._en_fixAttr(attr)
-        if nn in self:
+        if super(Enum, self).__contains__(nn):
             return nn
         raise AttributeError("Attribute %r not one of %r." % (nn, self))
 
