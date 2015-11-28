@@ -279,7 +279,7 @@ class ValueBinder(object):
                     "ValueBinder subclass %r has no attribute %r: perhaps it "
                     "didn't call super().__init__()?" % (
                         self.__class__.__name__, attr))
-            return self.__dict__[attr]
+            return sd[attr]
 
         # Check for delegate attributes.
         if '_vb_delegate_attributes' in sd:
@@ -299,15 +299,16 @@ class ValueBinder(object):
         """
         """
         log.detail("Set %r.", attr)
+        sd = self.__dict__
 
         if ValueBinder._vb_attributeIsPrivate(attr):
             log.detail("Directly setting vb private attribute")
             self.__dict__[attr] = val
+            sd[attr] = val
             return
 
         # Avoid recursion if a subclass has not called init (perhaps failed
         # a part of its own initialization.
-        sd = self.__dict__
         assert "_vb_delegate_attributes" in sd, (
             "ValueBinder subclass %r has not called super.__init__()" % (
                 self.__class__.__name__))
@@ -323,10 +324,7 @@ class ValueBinder(object):
 
             return setattr(dele, attr, val)
 
-        if hasattr(self, attr):
-            existing_val = getattr(self, attr)
-        else:
-            existing_val = None
+        existing_val = getattr(self, attr, None)
 
         try:
             settingAttributes = sd["_vb_settingAttributes"]
@@ -404,8 +402,9 @@ class ValueBinder(object):
         # in our children.
         self._vb_unbindAllCondition(tolerate_no_such_binding=True)
         sp = super(ValueBinder, self)
-        if hasattr(sp, "__del__"):
-            sp.__del__()
+        dm = getattr(sp, '__del__', None)
+        if dm is not None:
+            dm()
 
     #
     # =================== INTERNAL METHODS ===================================
@@ -524,10 +523,8 @@ class ValueBinder(object):
 
         target, toattr = self._vb_resolveboundobjectandattr(topath)
         if target is not None:
-            if hasattr(target, toattr):
-                old_value = getattr(target, toattr)
-            else:
-                old_value = None
+            old_value = getattr(target, toattr, None)
+
             if val is not old_value:
                 log.debug("Pushing %r to %s", val, topath)
 
@@ -557,10 +554,9 @@ class ValueBinder(object):
     def _vb_pullValue(self, topath):
         log.debug("Pull value from %r", topath)
         target, toattr = self._vb_resolveboundobjectandattr(topath)
-        if target is not None and hasattr(target, toattr):
-            val = getattr(target, toattr)
-            return val
-        return None
+        if target is None:
+            return None
+        return getattr(target, toattr, None)
 
     def _vb_binddirection(
             self, frompath, topath, parent, transformer, direction,
@@ -613,15 +609,12 @@ class ValueBinder(object):
             else:
                 fromattr_resolved = fromattr
 
-            if hasattr(self, fromattr_resolved):
-                log.debug("  has child at %r.", fromattr_resolved)
-                subobj = getattr(self, fromattr_resolved)
-                log.debug("  %r", subobj)
-                if isinstance(subobj, ValueBinder):
-                    log.debug("  child is VB compatible.")
-                    subobj._vb_binddirection(
-                        fromattrattrs, ValueBinder.PS + resolvedtopath, self,
-                        transformer, direction, ignore_exceptions)
+            subobj = getattr(self, fromattr_resolved, None)
+            if isinstance(subobj, ValueBinder):
+                log.debug("  child is VB compatible.")
+                subobj._vb_binddirection(
+                    fromattrattrs, ValueBinder.PS + resolvedtopath, self,
+                    transformer, direction, ignore_exceptions)
         else:
             # This is a direct binding. If we already have a value for it, set
             # the target. E.g.
@@ -782,7 +775,8 @@ class ValueBinder(object):
         return attr.startswith("_vb_")
 
     def _vb_delegateForAttribute(self, attr):
-        das = self._vb_delegate_attributes
+        sd = self.__dict__
+        das = sd['_vb_delegate_attributes']
         if attr not in das:
             return None, None
 
