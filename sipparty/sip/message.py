@@ -291,9 +291,12 @@ class Message(
     def autofillheaders(self):
         log.debug("Autofill %r headers", self.__class__.__name__)
         currentHeaderSet = set([_hdr.type for _hdr in self.headers])
+        nhs = list(self.headers)
         for hdr in self.mandatoryheaders:
             if hdr not in currentHeaderSet:
-                self.addHeader(getattr(Header, hdr)())
+                nh = getattr(Header, hdr)()
+                nhs.append(nh)
+        self.headers = nhs
 
         for mheader_name, mparams in iteritems(self.mandatoryparameters):
             mheader = getattr(self, self.HeaderAttrNameFromType(mheader_name))
