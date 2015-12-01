@@ -24,6 +24,9 @@ log.setLevel(logging.WARNING)  # vb is verbose at lower levels.
 KeyTransformer = "transformer"
 KeyIgnoredExceptions = "ignore_exceptions"
 
+# Use to generate extra profile info.
+PROFILE = True
+
 
 class BindingException(Exception):
     """Base class for all binding specific errors."""
@@ -39,6 +42,35 @@ class BindingAlreadyExists(BindingException):
     attribute that is already bound."""
 
 
+class _VBSubClassMonitor(object):
+
+    def __init__(self, subclass_counter_dict):
+        self._vbsclsm_dict_attrname = subclass_counter_dict
+
+    def __get__(self, instance, owner):
+
+        adict = getattr(ValueBinder, self._vbsclsm_dict_attrname, None)
+        if adict is None:
+            adict = {}
+            setattr(ValueBinder, self._vbsclsm_dict_attrname, adict)
+
+        cn = owner.__name__
+        def update_counter_dict(attrname):
+            aname_dict = adict.get(cn, None)
+            if aname_dict is None:
+                aname_dict = {}
+                adict[cn] = aname_dict
+
+            curr_count = aname_dict.get(attrname, 0)
+            aname_dict[attrname] = curr_count + 1
+
+        return update_counter_dict
+
+    def __set__(self, instance, val):
+        raise AttributeError(
+            '\'_VBSubClassMonitor\' is not a writable property.')
+
+
 class ValueBinder(object):
     """This mixin class provides a way to bind values to one another."""
 
@@ -51,6 +83,11 @@ class ValueBinder(object):
     VB_Forward = 'forward'
     VB_Backward = 'backward'
     VB_Directions = (VB_Forward, VB_Backward)
+
+    # Updated when PROFILE is true. Number of setattr calls for each subclass
+    # of ValueBinder (keyed by class name).
+    hit_set_attr = _VBSubClassMonitor('set_attr_calls')
+    hit_init = _VBSubClassMonitor('init_calls')
 
     @classmethod
     def VB_SplitPath(cls, path):
@@ -298,6 +335,11 @@ class ValueBinder(object):
     def __setattr__(self, attr, val):
         """
         """
+        cn = self.__class__.__name__
+
+        if PROFILE:
+            self.hit_set_attr(attr)
+
         log.detail("Set %r.", attr)
         sd = self.__dict__
 
