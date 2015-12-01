@@ -24,7 +24,7 @@ log.setLevel(logging.WARNING)  # vb is verbose at lower levels.
 KeyTransformer = "transformer"
 KeyIgnoredExceptions = "ignore_exceptions"
 
-# Use to generate extra profile info.
+# Use to generate extra profile info.
 PROFILE = True
 
 
@@ -55,14 +55,20 @@ class _VBSubClassMonitor(object):
             setattr(ValueBinder, self._vbsclsm_dict_attrname, adict)
 
         cn = owner.__name__
-        def update_counter_dict(attrname):
+        def update_counter_dict(attrname=None):
             aname_dict = adict.get(cn, None)
             if aname_dict is None:
-                aname_dict = {}
-                adict[cn] = aname_dict
+                if attrname is not None:
+                    aname_dict = {}
+                    adict[cn] = aname_dict
+                else:
+                    adict[cn] = 0
 
-            curr_count = aname_dict.get(attrname, 0)
-            aname_dict[attrname] = curr_count + 1
+            if attrname is not None:
+                curr_count = aname_dict.get(attrname, 0)
+                aname_dict[attrname] = curr_count + 1
+            else:
+                adict[cn] += 1
 
         return update_counter_dict
 
@@ -130,6 +136,8 @@ class ValueBinder(object):
         self._vb_initDependencies()
         self._vb_initBindings()
         super(ValueBinder, self).__init__(**kwargs)
+        if PROFILE:
+            self.hit_init()
 
     def bind(self, frompath, topath, transformer=None, ignore_exceptions=None):
         """When any item on frompath or topath changes, set topath to frompath.
@@ -146,6 +154,11 @@ class ValueBinder(object):
         a.b = g
         >> a.d.e = 5
         """
+        if frompath.startswith('_') or topath.startswith('_'):
+            raise ValueError(
+                'Cannot bind private-looking attributes that start with '
+                '\'_\': %r to %r' % (frompath, topath))
+
         log.info("Bind %r instance attribute %r to %r",
                  self.__class__.__name__, frompath, topath)
         if log.level <= logging.DETAIL and hasattr(self, frompath):
@@ -307,16 +320,19 @@ class ValueBinder(object):
     def __getattr__(self, attr):
         """If the attribute is a delegated attribute, gets the attribute from
         the delegate, else calls super."""
-        log.debug("%r get %r", self.__class__.__name__, attr)
-        sd = self.__dict__
 
-        if ValueBinder._vb_attributeIsPrivate(attr):
-            if attr not in sd:
+        if attr.startswith('_'):
+            # For perf reasons assume anything starting with '_' is not bound.
+            gattr = getattr(super(ValueBinder, self), '__getattr__', None)
+            if gattr is None:
                 raise AttributeError(
                     "ValueBinder subclass %r has no attribute %r: perhaps it "
                     "didn't call super().__init__()?" % (
                         self.__class__.__name__, attr))
-            return sd[attr]
+            return (attr, gattr(attr))
+
+        log.debug("%r get %r", self.__class__.__name__, attr)
+        sd = self.__dict__
 
         # Check for delegate attributes.
         if '_vb_delegate_attributes' in sd:
@@ -335,6 +351,10 @@ class ValueBinder(object):
     def __setattr__(self, attr, val):
         """
         """
+        if attr.startswith('_'):
+            # For perf reasons assume anything starting with '_' is not bound.
+            return super(ValueBinder, self).__setattr__(attr, val)
+
         cn = self.__class__.__name__
 
         if PROFILE:
@@ -342,12 +362,6 @@ class ValueBinder(object):
 
         log.detail("Set %r.", attr)
         sd = self.__dict__
-
-        if ValueBinder._vb_attributeIsPrivate(attr):
-            log.detail("Directly setting vb private attribute")
-            self.__dict__[attr] = val
-            sd[attr] = val
-            return
 
         # Avoid recursion if a subclass has not called init (perhaps failed
         # a part of its own initialization.
@@ -409,10 +423,9 @@ class ValueBinder(object):
     def __delattr__(self, attr):
         log.detail("Del %r.", attr)
 
-        if ValueBinder._vb_attributeIsPrivate(attr):
+        if attr.startswith('_'):
             log.detail("Directly setting vb private attribute")
-            del self.__dict__[attr]
-            return
+            return super(ValueBinder, self).__delattr__(attr)
 
         deleattr, dele = self._vb_delegateForAttribute(attr)
         if deleattr is not None:
@@ -809,10 +822,6 @@ class ValueBinder(object):
             return
 
         self.bindBindings(self.vb_bindings)
-
-    @staticmethod
-    def _vb_attributeIsPrivate(attr):
-        return attr.startswith("_vb_")
 
     def _vb_delegateForAttribute(self, attr):
         sd = self.__dict__

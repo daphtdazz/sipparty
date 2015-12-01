@@ -54,6 +54,7 @@ def DCProperty(tlp, name, attrDesc):
 def DeepClass(topLevelPrepend, topLevelAttributeDescs):
     """Creates a deep class type which
     """
+
     class DeepClass(object):
 
         for name, attrDescGen in iteritems(topLevelAttributeDescs):

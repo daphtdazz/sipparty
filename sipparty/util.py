@@ -582,7 +582,7 @@ class DerivedProperty(object):
         gt = self._rp_get
         if gt is None:
             # No getter, so return now.
-            return getattr(target, pname)
+            return val
 
         # Get might be a method name...
         if isinstance(gt, str) and hasattr(target, gt):
@@ -605,8 +605,8 @@ class DerivedProperty(object):
 
     def __set__(self, obj, value):
         pname = self._rp_propName
-        if (value is not None and
-                self._rp_check is not None and not self._rp_check(value)):
+        checker = self._rp_check
+        if value is not None and checker is not None and not checker(value):
             raise ValueError(
                 "%r is not an allowed value for attribute %r of class %r." %
                 (value, pname, obj.__class__.__name__))
