@@ -310,8 +310,7 @@ class ValueBinder(object):
         # Avoid recursion if a subclass has not called init (perhaps failed
         # a part of its own initialization.
         assert "_vb_delegate_attributes" in sd, (
-            "ValueBinder subclass %r has not called super.__init__()" % (
-                self.__class__.__name__))
+            "ValueBinder subclass %r has not called super.__init__()" % cn)
 
         # If this is a delegated attribute, pass through.
         (deleattr, dele) = self._vb_delegateForAttribute(attr)
@@ -320,7 +319,7 @@ class ValueBinder(object):
                 raise AttributeError(
                     "Cannot set attribute %r on %r instance as it is "
                     "delegated to attribute %r which is None." % (
-                        attr, self.__class__.__name__, deleattr))
+                        attr, cn, deleattr))
 
             return setattr(dele, attr, val)
 
@@ -331,8 +330,7 @@ class ValueBinder(object):
             if attr in settingAttributes:
                 raise RuntimeError(
                     "Recursion attempting to set attribute %r on %r "
-                    "instance." % (
-                        attr, self.__class__.__name__))
+                    "instance." % (attr, cn))
             settingAttributes.add(attr)
             try:
                 super(ValueBinder, self).__setattr__(attr, val)
@@ -347,7 +345,7 @@ class ValueBinder(object):
                 if val is not initialval:
                     log.debug(
                         "%r instance %r attribute val changed after set.",
-                        self.__class__.__name__, attr)
+                        cn, attr)
             finally:
                 settingAttributes.remove(attr)
         except AttributeError as exc:
@@ -358,7 +356,7 @@ class ValueBinder(object):
             log.error(
                 "Runtime error setting attribute %r on %r instance to %r. "
                 "MRO is: %r.",
-                attr, self.__class__.__name__, val, self.__class__.__mro__)
+                attr, cn, val, self.__class__.__mro__)
             raise
 
         if existing_val is not val:
@@ -380,13 +378,13 @@ class ValueBinder(object):
                 raise AttributeError(
                     "Attribute %r of %r instance cannot be deleted as the "
                     "delegate attribute %r is None." % (
-                        attr, self.__class__.__name__, deleattr))
+                        attr, cn, deleattr))
             return delattr(dele, attr)
 
         if not hasattr(self, attr):
             raise AttributeError(
                     "Attribute %r of %r instance cannot be deleted as it does "
-                    "not exist." % (attr, self.__class__.__name__))
+                    "not exist." % (attr, cn))
 
         existing_val = getattr(self, attr)
         self.vb_updateAttributeBindings(attr, existing_val, None)

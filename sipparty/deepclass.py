@@ -138,7 +138,7 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
                         "subclass of 'ValueBinder'" % (
                             self.__class__.__name__,))
                 allDeleAttrs = set([
-                    attr for attrs in vbds for attr in attrs[1]])
+                    attr for _attrs in vbds for attr in _attrs[1]])
                 for kwName, kwVal in iteritems(dict(superKwargs)):
                     if kwName not in allDeleAttrs:
                         continue
@@ -165,9 +165,7 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
 
                 for tlattr, (tlval, tlsvals) in iteritems(topLevelAttrArgs):
                     tlad = topLevelAttributeDescs[tlattr]
-                    desc = (
-                        None if dck.descriptor not in tlad else
-                        tlad[dck.descriptor])
+                    desc = tlad.get(dck.descriptor, None)
 
                     # Don't do descriptor-based properties if not told to.
                     if not do_descriptors and desc is not None:
@@ -178,14 +176,16 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
                         continue
 
                     if tlval is None:
-                        if getattr(self, tlattr, None) is not None:
+                        tlattr_val = getattr(self, tlattr, None)
+                        if tlattr_val is not None:
                             log.debug(
                                 "No need to generate %r for %r: already "
                                 "set (probably by bindings) to %r.",
-                                tlattr, clname, getattr(self, tlattr))
+                                tlattr, clname, tlattr_val)
                             continue
 
-                        if dck.gen not in tlad:
+                        genner = tlad.get(dck.gen, None)
+                        if genner is None:
                             log.debug(
                                 "%r attribute not set and doesn't have "
                                 "generator",
@@ -193,7 +193,7 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
                             # Need to set the internal representation, to allow
                             # check functions not to have to check for None.
                             setattr(
-                                self, "%s%s" % (topLevelPrepend, tlattr), None)
+                                self, str(topLevelPrepend) + str(tlattr), None)
                             continue
 
                         log.debug(

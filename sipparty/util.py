@@ -108,26 +108,6 @@ class attributesubclassgen(type):
         log.debug("Return %r for type %r from %r", ty, name, scs)
         return ty
 
-        subclassguess = (
-            cls.NormalizeGeneratingAttributeName(name) + cls._supername)
-        try:
-            mod = __import__(cls.__module__)
-            log.debug("Class module %r.", cls.__module__)
-            log.debug("%r: %r", mod.__name__, dir(mod))
-            for modname in cls.__module__.split(".")[1:]:
-                log.debug("Get module %r from %r.", modname, mod.__name__)
-                mod = getattr(mod, modname)
-            rclass = getattr(mod, subclassguess)
-            rclass.type = name
-            return rclass
-
-        except AttributeError:
-            log.warning("Failed to find subclass %r, all %r.",
-                        subclassguess, dir(mod))
-            if subclassguess == 'TagParam':
-                raise Exception("TagParam not found!")
-            return type(subclassguess, (cls,), dict(type=name))
-
 
 def sipheader(key):
     """Normalizer for SIP headers, which is almost title but not quite."""
