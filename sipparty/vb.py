@@ -27,6 +27,8 @@ KeyIgnoredExceptions = "ignore_exceptions"
 # Use to generate extra profile info.
 PROFILE = True
 
+sentinel = type('ValueBinderNoAttributeSentinel', (), {})()
+
 
 class BindingException(Exception):
     """Base class for all binding specific errors."""
@@ -55,6 +57,7 @@ class _VBSubClassMonitor(object):
             setattr(ValueBinder, self._vbsclsm_dict_attrname, adict)
 
         cn = owner.__name__
+
         def update_counter_dict(attrname=None):
             aname_dict = adict.get(cn, None)
             if aname_dict is None:
@@ -248,11 +251,12 @@ class ValueBinder(object):
 
     def attributeAtPath(self, path):
         target, attr = self._vb_resolveboundobjectandattr(path)
-        if not hasattr(target, attr):
+        try:
+            return getattr(target, attr)
+        except AttributeError:
             raise AttributeError(
                 "%r instance has no attribute at path %r." % (
                     self.__class__.__name__, path))
-        return getattr(target, attr)
 
     def setAttributePath(self, path, value):
         target, attr = self._vb_resolveboundobjectandattr(path)
@@ -342,11 +346,12 @@ class ValueBinder(object):
                 log.detail("Delegate attribute %r", attr)
                 return getattr(getattr(self, das[attr]), attr)
 
-        if hasattr(super(ValueBinder, self), "__getattr__"):
-            return super(ValueBinder, self).__getattr__(attr)
+        gt = getattr(super(ValueBinder, self), '__getattr__', None)
+        if gt is None:
+            raise AttributeError("%r instance has no attribute %r" % (
+                self.__class__.__name__, attr))
 
-        raise AttributeError("%r instance has no attribute %r" % (
-            self.__class__.__name__, attr))
+        return gt(attr)
 
     def __setattr__(self, attr, val):
         """
@@ -436,12 +441,12 @@ class ValueBinder(object):
                         attr, cn, deleattr))
             return delattr(dele, attr)
 
-        if not hasattr(self, attr):
+        existing_val = getattr(self, attr, sentinel)
+        if existing_val is sentinel:
             raise AttributeError(
                     "Attribute %r of %r instance cannot be deleted as it does "
                     "not exist." % (attr, cn))
 
-        existing_val = getattr(self, attr)
         self.vb_updateAttributeBindings(attr, existing_val, None)
 
         return super(ValueBinder, self).__delattr__(attr)
@@ -505,11 +510,12 @@ class ValueBinder(object):
         >>> "b.c"
         """
         attr, _ = self.VB_PartitionPath(path)
-        if attr not in self._vb_delegate_attributes:
+        vbdas = self._vb_delegate_attributes
+        if attr not in vbdas:
             log.debug("Non-delegated path %r", path)
             return path
 
-        da = self._vb_delegate_attributes[attr]
+        da = vbdas[attr]
         log.debug("Delegated path %r through %r", path, da)
         return self.VB_JoinPath((da, path))
 
@@ -632,10 +638,11 @@ class ValueBinder(object):
                     resolvedtopath))
         ignore_exceptions = (
             tuple() if not ignore_exceptions else ignore_exceptions)
-        bds[resolvedtopath] = {
+        bd = {
             KeyTransformer: transformer,
             KeyIgnoredExceptions: ignore_exceptions
         }
+        bds[resolvedtopath] = bd
 
         currparent = self.vb_parent
         assert (currparent is None or
@@ -676,20 +683,19 @@ class ValueBinder(object):
             log.debug("direct %r binding %r -> %r", direction, frompath,
                       resolvedtopath)
             if direction == self.VB_Forward:
-                if hasattr(self, fromattr):
+                val = getattr(self, fromattr, sentinel)
+                if val is not sentinel:
                     log.debug("  Has child attr %r", fromattr)
-                    val = getattr(self, fromattr)
-                    self._vb_push_value_to_target(
-                        val, resolvedtopath, bds[resolvedtopath])
+                    self._vb_push_value_to_target(val, resolvedtopath, bd)
             else:
                 log.debug("Pull value.")
                 val = self._vb_pullValue(resolvedtopath)
-                self._vb_push_value_to_target(
-                    val, fromattr, bds[resolvedtopath])
+                self._vb_push_value_to_target(val, fromattr, bd)
 
-        log.debug("  %r bindings after bind %r",
-                  direction,
-                  self._vb_bindingsForDirection(direction))
+        if PROFILE and log.getEffectiveLevel() <= logging.DEBUG:
+            log.debug("  %r bindings after bind %r",
+                direction,
+                self._vb_bindingsForDirection(direction))
 
     def _vb_unbinddirection(self, frompath, topath, direction):
         """Unbind a particular path.
@@ -743,9 +749,10 @@ class ValueBinder(object):
 
         self._vb_maybeReleaseParent()
 
-        log.debug("  %r bindings after unbind %r",
-                  direction,
-                  self._vb_bindingsForDirection(direction))
+        if PROFILE and log.getEffectiveLevel() <= logging.DEBUG:
+            log.debug("  %r bindings after unbind %r",
+                      direction,
+                      self._vb_bindingsForDirection(direction))
 
     def _vb_maybeReleaseParent(self):
 
@@ -778,7 +785,8 @@ class ValueBinder(object):
                 nextattr = "vb_parent"
 
             log.debug("  try next attribute %r", nextattr)
-            if not hasattr(nextobj, nextattr):
+            nextobj = getattr(nextobj, nextattr, sentinel)
+            if nextobj is sentinel:
                 # This we're missing an object in the path, so need to return
                 # None.
                 log.debug("  missing")
@@ -786,17 +794,7 @@ class ValueBinder(object):
                 nextattr = None
                 break
 
-            nextobj = getattr(nextobj, nextattr)
             continue
-
-            if nalen == 0:
-                # Parent object.
-                nextobj = nextobj()
-                if nextobj is None:
-                    # Parent has been tidied up.
-                    log.debug("  Parent has been garbage collected.")
-                    nextattr = None
-                    break
 
         else:
             nextattr = splitpath[-1]

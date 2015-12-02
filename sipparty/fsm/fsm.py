@@ -319,8 +319,7 @@ class FSM(object):
         self._fsm_timers = {}
         self.Inputs = copy(self.Inputs)
 
-        self._fsm_state = (
-            self._fsm_state if hasattr(self, "_fsm_state") else None)
+        self._fsm_state = getattr(self, '_fsm_state', None)
         log.debug("Initial state of %r instance is %r.",
                   self.__class__.__name__, self._fsm_state)
 

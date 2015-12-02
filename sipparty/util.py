@@ -78,8 +78,10 @@ class attributesubclassgen(type):
 
         if name == 'types':
             sp = super(attributesubclassgen, cls)
-            if hasattr(sp, "__getattr__"):
-                return sp.__getattr__(name)
+            gt = getattr(sp, '__getattr__', None)
+            if gt is not None:
+                return gt(name)
+
             raise AttributeError(
                 '%r class has no attribute \'types\'.', cls.__name__)
 
@@ -585,8 +587,8 @@ class DerivedProperty(object):
             return val
 
         # Get might be a method name...
-        if isinstance(gt, str) and hasattr(target, gt):
-            meth = getattr(target, gt)
+        if isinstance(gt, str):
+            meth = getattr(target, gt, None)
             if not isinstance(meth, Callable):
                 raise ValueError(
                     "Getter attribute %r of %r object is not callable." % (
@@ -617,8 +619,8 @@ class DerivedProperty(object):
             log.debug("Set %r to %r.", pname, value)
             log.debug("Self: %r.", self)
             setattr(obj, pname, value)
-        elif isinstance(st, str) and hasattr(obj, st):
-            meth = getattr(obj, st)
+        elif isinstance(st, str):
+            meth = getattr(obj, st, None)
             if not isinstance(meth, Callable):
                 raise ValueError(
                     "Setter attribute %r of %r object is not callable." % (
