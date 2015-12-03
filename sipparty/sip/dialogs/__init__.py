@@ -18,9 +18,8 @@ from six import itervalues
 from ..dialog import Dialog
 from .call import (SimpleCall,)
 
-AllDialogs = [
+AllDialogsTypes = [
     dlg for dlg in itervalues(dict(locals()))
-    if isinstance(dlg, Dialog) and not dlg is Dialog]
-del dlg
+    if isinstance(dlg, type) and issubclass(dlg, Dialog) and dlg is not Dialog]
 del Dialog
 del itervalues
