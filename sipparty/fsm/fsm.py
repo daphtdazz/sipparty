@@ -295,8 +295,7 @@ class FSM(object):
         else:
             self._fsm_weakDelegate = weakref.ref(val)
 
-    def __init__(self, name=None, lock=False, asynchronous_timers=False,
-                 delegate=None):
+    def __init__(self, name=None, delegate=None):
         """name: a name for this FSM for debugging purposes.
         """
         super(FSM, self).__init__()
@@ -305,13 +304,9 @@ class FSM(object):
             name = '%s%s' % (self._fsm_name, self.__class__.NextFSMNum)
             self.__class__.NextFSMNum += 1
 
-        if asynchronous_timers:
-            lock = True
-
         self._fsm_name = name
-        self._fsm_use_async_timers = asynchronous_timers
+        # self._fsm_use_async_timers = asynchronous_timers
         self._fsm_weakDelegate = None
-        self._lock = None
         self.delegate = delegate
 
         # Need to learn configuration from the class.
@@ -321,8 +316,7 @@ class FSM(object):
         self._fsm_timers = {}
         self.Inputs = copy(self.Inputs)
 
-        self._fsm_state = (
-            self._fsm_state if hasattr(self, "_fsm_state") else None)
+        self._fsm_state = getattr(self, '_fsm_state', None)
         log.debug("Initial state of %r instance is %r.",
                   self.__class__.__name__, self._fsm_state)
 
@@ -345,13 +339,9 @@ class FSM(object):
         self._fsm_inputQueue = queue.Queue()
         self._fsm_oldThreadQueue = queue.Queue()
 
-        if lock:
-            # We should lock access to this FSM's state as it may be called
-            # from multiple threads.
-            # Initialize support for the util.OnlyWhenLocked decorator.
-            self._lock = threading.RLock()
-            self._lock_holdingThread = None
-            self._fsm_stateChangeCondition = threading.Condition(self._lock)
+        log.detail(
+            "  %r instance after init: %r", self.__class__.__name__, self)
+        return
 
         if asynchronous_timers:
             # If we pass ourselves directly to the RetryThread, then we'll get
@@ -372,16 +362,14 @@ class FSM(object):
                 action=check_weak_self_timers)
             self._fsm_thread.start()
 
-        log.detail(
-            "  %r instance after init: %r", self.__class__.__name__, self)
-
     def hit(self, input, *args, **kwargs):
         """Hit the FSM with input `input`.
 
         args and kwargs are passed through to the action.
         """
         log.debug("Queuing input %r", input)
-        self._fsm_hit(input, *args, **kwargs)
+        return self._fsm_hit(input, *args, **kwargs)
+
         self._fsm_inputQueue.put((input, args, kwargs))
 
         self._fsm_popTimerNow()
@@ -539,14 +527,15 @@ class FSM(object):
 
     def __del__(self):
         log.debug("Deleting FSM")
-        if self._fsm_use_async_timers:
-            self._fsm_thread.cancel()
-            if self._fsm_thread is not threading.currentThread():
-                self._fsm_thread.join()
+        #if self._fsm_use_async_timers:
+        #    self._fsm_thread.cancel()
+        #    if self._fsm_thread is not threading.currentThread():
+        #        self._fsm_thread.join()
 
         sp = super(FSM, self)
-        if hasattr(sp, "__del__"):
-            sp.__del__()
+        dl = getattr(sp, '__del__', None)
+        if dl is not None:
+            dl()
 
     def __str__(self):
         return "\n".join([line for line in self._fsm_strgen()])
@@ -670,15 +659,30 @@ class FSM(object):
     def _fsm_setState(self, newState):
         "Should only be called from methods that have the lock."
         self._fsm_state = newState
-        if not isinstance(self, type) and self._lock:
-            self._fsm_stateChangeCondition.notifyAll()
+        #if not isinstance(self, type) and self._lock:
+        #    self._fsm_stateChangeCondition.notifyAll()
 
 
 class LockedFSM(FSM):
 
     def __init__(self):
         super(LockedFSM, self).__init__()
+        self._lock = None
 
+        # We should lock access to this FSM's state as it may be called
+        # from multiple threads.
+        # Initialize support for the util.OnlyWhenLocked decorator.
+        self._lock = threading.RLock()
+        self._lock_holdingThread = None
+        self._fsm_stateChangeCondition = threading.Condition(self._lock)
+
+        log.detail('LockedFSM after init: %r', self)
+
+    hit = util.OnlyWhenLocked(FSM.hit)
+
+    #
+    # =================== INTERNAL METHODS ====================================
+    #
 
 
 class AsyncFSM(LockedFSM):
@@ -686,9 +690,7 @@ class AsyncFSM(LockedFSM):
     def __init__(self):
         super(AsyncFSM, self).__init__()
 
-    @util.OnlyWhenLocked
-    def hit(self, input, *args, **kwargs):
-        super(AsyncFSM, self).hit(input, *args, **kwargs)
+
 
     def addFDSource(self, fd, action):
         if not self._fsm_use_async_timers:

@@ -90,6 +90,8 @@ class TestFSM(SIPPartyTestCase):
 
     def test_locked_fsm(self):
 
+        self.pushLogLevel('fsm.fsm', logging.DETAIL)
+
         # Create a background thread to prove that we are holding the FSM lock.
         global threadARunning
         global threadBRunning
@@ -118,7 +120,6 @@ class TestFSM(SIPPartyTestCase):
             events.append('action')
             while not threadBRunning:
                 sleep(0.001)
-
             events.append('action ending')
 
         class LFSM(LockedFSM):
@@ -145,7 +146,7 @@ class TestFSM(SIPPartyTestCase):
         bthread = threading.Thread(name='bthread', target=runthreadB, args=(lfsm,))
 
         athread.start()
-        WaitFor(lambda: len(events) > 0)
+        WaitFor(lambda: len(events) > 1)
 
         bthread.start()
 
@@ -156,6 +157,8 @@ class TestFSM(SIPPartyTestCase):
             events, [
                 'A running', 'action', 'B running', 'action ending', 'action',
                 'action ending'])
+
+        self.assertEqual(lfsm.state, 'end')
 
     @patch.object(fsmtimer, 'Clock', new=Clock)
     @patch.object(retrythread, 'Clock', new=Clock)
