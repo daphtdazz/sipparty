@@ -32,8 +32,8 @@ from . import (fsmtimer, retrythread)
 log = logging.getLogger(__name__)
 
 __all__ = [
-    "FSMError", "UnexpectedInput", "FSMTimeout", "FSM", "FSMType",
-    "FSMClassInitializer", "InitialStateKey", "TransitionKeys"]
+    'AsyncFSM', 'FSMError', 'UnexpectedInput', 'FSMTimeout', 'FSM', 'FSMType',
+    'FSMClassInitializer', 'InitialStateKey', 'LockedFSM', 'TransitionKeys']
 
 
 class FSMError(Exception):
@@ -47,19 +47,19 @@ class UnexpectedInput(FSMError):
 class FSMTimeout(FSMError):
     pass
 
-InitialStateKey = "Initial"
+InitialStateKey = 'Initial'
 TransitionKeys = util.Enum((
-    "NewState",
-    "Action",
-    "StartTimers",
-    "StopTimers",
-    "StartThreads"
+    'NewState',
+    'Action',
+    'StartTimers',
+    'StopTimers',
+    'StartThreads'
     ))
 
 
 class FSMClassInitializer(type):
-    def __init__(self, name, bases, dict):
-        super(FSMClassInitializer, self).__init__(name, bases, dict)
+    def __init__(self, name, bases, dict_):
+        super(FSMClassInitializer, self).__init__(name, bases, dict_)
         log.debug("FSMClass states after super init: %r",
                   None if not hasattr(self, "States") else self.States)
 
@@ -122,7 +122,7 @@ class FSM(object):
     NextFSMNum = 1
 
     # These are Cumulative Properties (see the metaclass).
-    States = util.Enum(tuple())
+    States = util.Enum((InitialStateKey,))
     Inputs = util.Enum(tuple())
     Actions = util.Enum(tuple())
 
@@ -277,7 +277,9 @@ class FSM(object):
     def state(self, value):
         assert self._fsm_state is None, (
             "Only allowed to set the state of an FSM once at initialization.")
-        assert value in self.States
+        if value not in self.States:
+            raise ValueError('State %r is not one of %r' % (
+                value, self.States))
         self._fsm_state = value
 
     @property
@@ -373,26 +375,13 @@ class FSM(object):
         log.detail(
             "  %r instance after init: %r", self.__class__.__name__, self)
 
-    def addFDSource(self, fd, action):
-        if not self._fsm_use_async_timers:
-            raise AttributeError(
-                "FD sources only supported with asynchronous FSMs.")
-
-        self._fsm_thread.addInputFD(fd, action)
-
-    def rmFDSource(self, fd):
-        if not self._fsm_use_async_timers:
-            raise AttributeError(
-                "FD sources only supported with asynchronous FSMs.")
-
-        self._fsm_thread.rmInputFD(fd)
-
     def hit(self, input, *args, **kwargs):
         """Hit the FSM with input `input`.
 
         args and kwargs are passed through to the action.
         """
         log.debug("Queuing input %r", input)
+        self._fsm_hit(input, *args, **kwargs)
         self._fsm_inputQueue.put((input, args, kwargs))
 
         self._fsm_popTimerNow()
@@ -574,7 +563,6 @@ class FSM(object):
             yield ""
         yield "Current state: %r" % self._fsm_state
 
-    @util.OnlyWhenLocked
     def _fsm_hit(self, input, *args, **kwargs):
         """When the FSM is hit, the following actions are taken in the
         following order:
@@ -684,3 +672,34 @@ class FSM(object):
         self._fsm_state = newState
         if not isinstance(self, type) and self._lock:
             self._fsm_stateChangeCondition.notifyAll()
+
+
+class LockedFSM(FSM):
+
+    def __init__(self):
+        super(LockedFSM, self).__init__()
+
+
+
+class AsyncFSM(LockedFSM):
+
+    def __init__(self):
+        super(AsyncFSM, self).__init__()
+
+    @util.OnlyWhenLocked
+    def hit(self, input, *args, **kwargs):
+        super(AsyncFSM, self).hit(input, *args, **kwargs)
+
+    def addFDSource(self, fd, action):
+        if not self._fsm_use_async_timers:
+            raise AttributeError(
+                "FD sources only supported with asynchronous FSMs.")
+
+        self._fsm_thread.addInputFD(fd, action)
+
+    def rmFDSource(self, fd):
+        if not self._fsm_use_async_timers:
+            raise AttributeError(
+                "FD sources only supported with asynchronous FSMs.")
+
+        self._fsm_thread.rmInputFD(fd)

@@ -21,10 +21,10 @@ from six import PY2
 import socket
 import sys
 import threading
-import time
+from time import sleep
 import timeit
 from ..fsm import (
-    FSM, FSMTimeout, InitialStateKey, RetryThread, Timer,
+    AsyncFSM, FSM, FSMTimeout, InitialStateKey, LockedFSM, RetryThread, Timer,
     TransitionKeys,
     UnexpectedInput)
 from ..fsm import fsmtimer
@@ -87,6 +87,75 @@ class TestFSM(SIPPartyTestCase):
         nf.hit("start")
         self.assertEqual(nf.state, "starting")
         self.assertRaises(UnexpectedInput, lambda: nf.hit("stop"))
+
+    def test_locked_fsm(self):
+
+        # Create a background thread to prove that we are holding the FSM lock.
+        global threadARunning
+        global threadBRunning
+        global counter
+        global events
+        threadARunning = False
+        threadBRunning = False
+        counter = 0
+        events = []
+
+        def runthreadA(lfsm):
+            global events
+            events.append('A running')
+            lfsm.hit('input')
+
+        def runthreadB(lfsm):
+            global events
+            global threadBRunning
+            events.append('B running')
+            threadBRunning = True
+            lfsm.hit('input')
+
+        def action():
+            global events
+            global threadBRunning
+            events.append('action')
+            while not threadBRunning:
+                sleep(0.001)
+
+            events.append('action ending')
+
+        class LFSM(LockedFSM):
+            FSMDefinitions = {
+                InitialStateKey: {
+                    "input": {
+                        TransitionKeys.NewState: "in progress",
+                        TransitionKeys.Action: action
+                    },
+                },
+                "in progress": {
+                    "input": {
+                        TransitionKeys.NewState: "end",
+                        TransitionKeys.Action: action
+                    }
+                },
+                'end': {}
+            }
+
+        lfsm = LFSM()
+        self.assertEqual(lfsm.state, InitialStateKey)
+
+        athread = threading.Thread(name='athread', target=runthreadA, args=(lfsm,))
+        bthread = threading.Thread(name='bthread', target=runthreadB, args=(lfsm,))
+
+        athread.start()
+        WaitFor(lambda: len(events) > 0)
+
+        bthread.start()
+
+        athread.join()
+        bthread.join()
+
+        self.assertEqual(
+            events, [
+                'A running', 'action', 'B running', 'action ending', 'action',
+                'action ending'])
 
     @patch.object(fsmtimer, 'Clock', new=Clock)
     @patch.object(retrythread, 'Clock', new=Clock)
@@ -230,7 +299,7 @@ class TestFSM(SIPPartyTestCase):
         def actnow(*args, **kwargs):
             actnow_hit[0] += 1
 
-        class FSMTestSubclass(FSM):
+        class FSMTestSubclass(AsyncFSM):
 
             @classmethod
             def AddClassTransitions(cls):
