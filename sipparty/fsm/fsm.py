@@ -228,7 +228,7 @@ class FSM(object):
             if self_is_class:
                 # If we're the class, just store the names. They will be
                 # converted into Timer instances when instances are created.
-                result[key] = timer_names if timer_names is not None else []
+                result[key] = timer_names or []
                 continue
 
             timers = []
@@ -343,25 +343,6 @@ class FSM(object):
             "  %r instance after init: %r", self.__class__.__name__, self)
         return
 
-        if asynchronous_timers:
-            # If we pass ourselves directly to the RetryThread, then we'll get
-            # a retain deadlock so neither us nor the thread can be freed.
-            # Fortunately python 2.7 has a nice weak references module.
-            weak_self = weakref.ref(self)
-
-            def check_weak_self_timers():
-                self = weak_self()
-                if self is None:
-                    log.debug("Weak check timers has been released.")
-                    return
-                log.debug("Weak check timers has not been released.")
-
-                self._fsm_backgroundTimerPop()
-
-            self._fsm_thread = retrythread.RetryThread(
-                action=check_weak_self_timers)
-            self._fsm_thread.start()
-
     def hit(self, input, *args, **kwargs):
         """Hit the FSM with input `input`.
 
@@ -374,24 +355,6 @@ class FSM(object):
 
         self._fsm_popTimerNow()
 
-    def waitForStateCondition(self, condition, timeout=5):
-        assert isinstance(condition, Callable)
-        assert self._lock, (
-            "'waitForStateCondition' may only be called on FSM instances that "
-            "use locking (initialize with lock=True).")
-
-        now = time.time()
-        then = now + (timeout if timeout is not None else 0)
-        with self._fsm_stateChangeCondition:
-            while timeout is None or then > now:
-                state = self._fsm_state
-                if condition(state):
-                    break
-                self._fsm_stateChangeCondition.wait(then - now)
-                now = time.time()
-            else:
-                raise FSMTimeout("Timeout waiting for condition.")
-
     @util.OnlyWhenLocked
     def checkTimers(self):
         "Check all the timers that are running."
@@ -400,8 +363,8 @@ class FSM(object):
             log.debug("Check timer %r (isRunning: %r).", name, isRunning)
             if isRunning:
                 timer.check()
-                if self._fsm_use_async_timers:
-                    self._fsm_thread.addRetryTime(timer.nextPopTime)
+                #if self._fsm_use_async_timers:
+                #    self._fsm_thread.addRetryTime(timer.nextPopTime)
 
     #
     # ======================= INTERNAL METHODS ===============================
@@ -525,18 +488,6 @@ class FSM(object):
         fsmThread.name = str(action)
         return fsmThread
 
-    def __del__(self):
-        log.debug("Deleting FSM")
-        #if self._fsm_use_async_timers:
-        #    self._fsm_thread.cancel()
-        #    if self._fsm_thread is not threading.currentThread():
-        #        self._fsm_thread.join()
-
-        sp = super(FSM, self)
-        dl = getattr(sp, '__del__', None)
-        if dl is not None:
-            dl()
-
     def __str__(self):
         return "\n".join([line for line in self._fsm_strgen()])
 
@@ -607,8 +558,8 @@ class FSM(object):
         for st in res[self.KeyStartTimers]:
             log.debug("Start timer %r", st.name)
             st.start()
-            if self._fsm_use_async_timers:
-                self._fsm_thread.addRetryTime(st.nextPopTime)
+            #if self._fsm_use_async_timers:
+            #    self._fsm_thread.addRetryTime(st.nextPopTime)
 
         for thrAction in res[self.KeyStartThreads]:
             log.info("Starting FSM thread: %r.", thrAction.name)
@@ -665,8 +616,8 @@ class FSM(object):
 
 class LockedFSM(FSM):
 
-    def __init__(self):
-        super(LockedFSM, self).__init__()
+    def __init__(self, *args, **kwargs):
+        super(LockedFSM, self).__init__(*args, **kwargs)
         self._lock = None
 
         # We should lock access to this FSM's state as it may be called
@@ -687,21 +638,52 @@ class LockedFSM(FSM):
 
 class AsyncFSM(LockedFSM):
 
-    def __init__(self):
-        super(AsyncFSM, self).__init__()
+    def __init__(self, *args, **kwargs):
+        super(AsyncFSM, self).__init__(*args, **kwargs)
+        # If we pass ourselves directly to the RetryThread, then we'll get
+        # a retain deadlock so neither us nor the thread can be freed.
+        # Fortunately python 2.7 has a nice weak references module.
+        weak_self = weakref.ref(self)
 
+        def check_weak_self_timers():
+            self = weak_self()
+            if self is None:
+                log.debug("Weak check timers has been released.")
+                return
+            log.debug("Weak check timers has not been released.")
 
+            self._fsm_backgroundTimerPop()
+
+        self._fsm_thread = retrythread.RetryThread(
+            action=check_weak_self_timers)
+        self._fsm_thread.start()
+
+    def waitForStateCondition(self, condition, timeout=5):
+        if not isinstance(condition, Callable):
+            raise TypeError(
+                'condition %r can not be called so can\'t be waited for to '
+                'become True.' % condition)
+
+        now = time.time()
+        then = now + (timeout if timeout is not None else 0)
+        with self._fsm_stateChangeCondition:
+            while timeout is None or then > now:
+                state = self._fsm_state
+                if condition(state):
+                    break
+                self._fsm_stateChangeCondition.wait(then - now)
+                now = time.time()
+            else:
+                raise FSMTimeout("Timeout waiting for condition.")
 
     def addFDSource(self, fd, action):
-        if not self._fsm_use_async_timers:
-            raise AttributeError(
-                "FD sources only supported with asynchronous FSMs.")
-
         self._fsm_thread.addInputFD(fd, action)
 
     def rmFDSource(self, fd):
-        if not self._fsm_use_async_timers:
-            raise AttributeError(
-                "FD sources only supported with asynchronous FSMs.")
-
         self._fsm_thread.rmInputFD(fd)
+
+    def __del__(self):
+        log.debug("Deleting FSM")
+        self._fsm_thread.cancel()
+        if self._fsm_thread is not threading.currentThread():
+            self._fsm_thread.join()

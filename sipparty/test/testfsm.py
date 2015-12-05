@@ -265,8 +265,8 @@ class TestFSM(SIPPartyTestCase):
         log.debug("clock incremented")
         WaitFor(lambda: retry[0] == 1, timeout_s=2)
 
-    def testActions(self):
-        nf = FSM(name="TestActionsFSM", asynchronous_timers=True)
+    def test_async_actions(self):
+        nf = AsyncFSM(name="TestAsyncActionsFSM")
 
         expect_args = 0
         expect_kwargs = 0
@@ -337,8 +337,6 @@ class TestFSM(SIPPartyTestCase):
         nf.hit("start")
         self.assertEqual(actnow_hit[0], 1)
 
-        self.assertRaises(AttributeError, lambda: nf.addFDSource(1, None))
-
         self.assertEqual(nf.retries, 0)
         self.Clock.return_value = 1
         nf.checkTimers()
@@ -385,14 +383,15 @@ class TestFSM(SIPPartyTestCase):
                 cls._fsm_state = "initial"
 
         badFSM = FSMTestBadSubclass()
-        # We get a ValueError when we cause the thread to get started because
-        # the
-        self.assertRaises(ValueError,
-                          lambda: badFSM.hit(FSMTestBadSubclass.Inputs.go))
+        self.pushLogLevel('fsm.fsm', logging.DETAIL)
+        badFSM.hit(badFSM.Inputs.go)
+        # We get a ValueError when we check the timer because the
+        # 'not-a-method' method is not a method!
+        self.assertRaises(ValueError, badFSM.checkTimers)
 
     def testFDSources(self):
 
-        nf = FSM(asynchronous_timers=True)
+        nf = AsyncFSM()
 
         sck1, sck2 = socket.socketpair()
 
@@ -457,15 +456,15 @@ class TestFSM(SIPPartyTestCase):
         WaitFor(lambda: thr_res[0] == 8 * 2)
 
     def testWaitFor(self):
-        fsm = FSM()
+        fsm = AsyncFSM()
         self.assertRaises(
-            AssertionError, lambda: fsm.waitForStateCondition(lambda: True))
+            TypeError, fsm.waitForStateCondition, 'This is not a Callable')
 
         self.subTestWaitFor(async_timers=True)
         self.subTestWaitFor(async_timers=False)
 
     def subTestWaitFor(self, async_timers):
-        class TFSM(FSM):
+        class TFSM(AsyncFSM):
             FSMDefinitions = {
                 InitialStateKey: {
                     "input": {
@@ -492,7 +491,7 @@ class TestFSM(SIPPartyTestCase):
                 "null": {}
             }
 
-        fsm1 = TFSM(lock=True, asynchronous_timers=async_timers)
+        fsm1 = TFSM()
         fsm1.hit("input")
         fsm1.waitForStateCondition(lambda state: state == "in progress")
         self.assertEqual(fsm1.state, "in progress")
