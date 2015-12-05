@@ -42,9 +42,6 @@ class TestFSM(SIPPartyTestCase):
     def setUp(self):
         self.retry = 0
         self.cleanup = 0
-        # self.pushLogLevel('fsm.fsm', logging.DETAIL)
-        # self.pushLogLevel('fsm.fsmtimer', logging.DETAIL)
-        # self.pushLogLevel('fsm.retrythread', logging.DETAIL)
 
         self.Clock.return_value = 0
 
@@ -89,8 +86,6 @@ class TestFSM(SIPPartyTestCase):
         self.assertRaises(UnexpectedInput, lambda: nf.hit("stop"))
 
     def test_locked_fsm(self):
-
-        self.pushLogLevel('fsm.fsm', logging.DETAIL)
 
         # Create a background thread to prove that we are holding the FSM lock.
         global threadARunning
@@ -243,7 +238,7 @@ class TestFSM(SIPPartyTestCase):
         self.assertRaises(RuntimeError, fsm.hit, 'hit')
 
     def testAsyncFSM(self):
-        nf = FSM(name="TestAsyncFSM")
+        nf = AsyncFSM(name="TestAsyncFSM")
 
         retry = [0]
 
@@ -393,7 +388,6 @@ class TestFSM(SIPPartyTestCase):
                 cls._fsm_state = "initial"
 
         badFSM = FSMTestBadSubclass()
-        self.pushLogLevel('fsm.fsm', logging.DETAIL)
         badFSM.hit(badFSM.Inputs.go)
         # We get a ValueError when we check the timer because the
         # 'not-a-method' method is not a method!

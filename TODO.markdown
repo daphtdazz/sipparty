@@ -5,8 +5,6 @@
 4. REGISTER dialogues.
 5. Example scripts.
 6. TCP support. 
-7. Proper python3 support.
-    a. 'bytes' does not support % and .format(), so need to use BytesGenner and str instead where appropriate.
 8. UDP transport retrying. 
 9. Smarter ACK than simply "ACK all 200s" in dialog.py
 9. Continuous Integration.
@@ -26,6 +24,7 @@
 26. Parser only copes with binary types...
 27. Disable checking on deepclass attributes.
 28. Allow the DeepClass attribute dictionary to be a list / tuple of (key, value) tuples to enforce ordering.
+29. OnlyWhenLocked decorator should allow the lock attribute name to be specified in its constructor.
 
 ## Done list. ##
 
@@ -46,6 +45,8 @@
 7. 200s with media sessions. -- done 23/08/2015
 8. SIPP test integration -- done 4/09/2015
 9. Fix slow UT termination time (weak reference needed somewhere?) -- done 05/09/2015
+10. Proper python3 support.
+    a. 'bytes' does not support % and .format(), so need to use BytesGenner and str instead where appropriate.
 
 ## Changelog ##
 
