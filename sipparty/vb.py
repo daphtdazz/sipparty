@@ -693,8 +693,8 @@ class ValueBinder(object):
                 self._vb_push_value_to_target(val, fromattr, bd)
 
         if PROFILE and log.getEffectiveLevel() <= logging.DEBUG:
-            log.debug("  %r bindings after bind %r",
-                direction,
+            log.debug(
+                "  %r bindings after bind %r", direction,
                 self._vb_bindingsForDirection(direction))
 
     def _vb_unbinddirection(self, frompath, topath, direction):
