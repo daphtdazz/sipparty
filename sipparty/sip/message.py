@@ -245,10 +245,10 @@ class Message(
             self.enableBindings()
 
     def enableBindings(self):
-        if hasattr(self, "field_bindings"):
-            log.debug(
-                "Configure %r bindings: %r", self.type, self.field_bindings)
-            self.bindBindings(self.field_bindings)
+        fbs = getattr(self, 'field_bindings', None)
+        if fbs is not None:
+            log.debug("Configure %r bindings: %r", self.type, fbs)
+            self.bindBindings(fbs)
 
     def addHeader(self, hdr):
         """Adds a header at the start of the first set of headers in the
@@ -291,9 +291,12 @@ class Message(
     def autofillheaders(self):
         log.debug("Autofill %r headers", self.__class__.__name__)
         currentHeaderSet = set([_hdr.type for _hdr in self.headers])
+        nhs = list(self.headers)
         for hdr in self.mandatoryheaders:
             if hdr not in currentHeaderSet:
-                self.addHeader(getattr(Header, hdr)())
+                nh = getattr(Header, hdr)()
+                nhs.append(nh)
+        self.headers = nhs
 
         for mheader_name, mparams in iteritems(self.mandatoryparameters):
             mheader = getattr(self, self.HeaderAttrNameFromType(mheader_name))
@@ -371,8 +374,9 @@ class Message(
 
         reqmo = self.reqattrre.match(attr)
         if reqmo is not None:
-            if self.startline.type == mo.group(1):
-                return self.startline
+            sl = self.startline
+            if sl.type == mo.group(1):
+                return sl
 
         hmo = self.headerattrre.match(attr)
         if hmo is not None:

@@ -72,5 +72,8 @@ target/
 # out
 *.out
 
+# backup files
+*.swp
+
 # iPython
 .ipynb*

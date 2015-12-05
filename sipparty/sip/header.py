@@ -99,12 +99,12 @@ class FieldsBasedHeader(
         data = self.header_value
         log.debug("Header fields data: %r", data)
 
-        if not hasattr(self, "FieldClass") or self.FieldClass is None:
+        fdc = getattr(self, 'FieldClass', None)
+        if fdc is None:
             raise AttributeError(
                 "%r instance has no FieldClass defined, so cannot be a field "
                 "based header." % (self.__class__.__name__,))
 
-        fdc = self.FieldClass
         flds = fdc.Parse(data)
 
         if not isinstance(flds, list):

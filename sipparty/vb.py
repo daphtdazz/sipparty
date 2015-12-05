@@ -24,6 +24,11 @@ log.setLevel(logging.WARNING)  # vb is verbose at lower levels.
 KeyTransformer = "transformer"
 KeyIgnoredExceptions = "ignore_exceptions"
 
+# Use to generate extra profile info.
+PROFILE = True
+
+sentinel = type('ValueBinderNoAttributeSentinel', (), {})()
+
 
 class BindingException(Exception):
     """Base class for all binding specific errors."""
@@ -39,6 +44,42 @@ class BindingAlreadyExists(BindingException):
     attribute that is already bound."""
 
 
+class _VBSubClassMonitor(object):
+
+    def __init__(self, subclass_counter_dict):
+        self._vbsclsm_dict_attrname = subclass_counter_dict
+
+    def __get__(self, instance, owner):
+
+        adict = getattr(ValueBinder, self._vbsclsm_dict_attrname, None)
+        if adict is None:
+            adict = {}
+            setattr(ValueBinder, self._vbsclsm_dict_attrname, adict)
+
+        cn = owner.__name__
+
+        def update_counter_dict(attrname=None):
+            aname_dict = adict.get(cn, None)
+            if aname_dict is None:
+                if attrname is not None:
+                    aname_dict = {}
+                    adict[cn] = aname_dict
+                else:
+                    adict[cn] = 0
+
+            if attrname is not None:
+                curr_count = aname_dict.get(attrname, 0)
+                aname_dict[attrname] = curr_count + 1
+            else:
+                adict[cn] += 1
+
+        return update_counter_dict
+
+    def __set__(self, instance, val):
+        raise AttributeError(
+            '\'_VBSubClassMonitor\' is not a writable property.')
+
+
 class ValueBinder(object):
     """This mixin class provides a way to bind values to one another."""
 
@@ -51,6 +92,11 @@ class ValueBinder(object):
     VB_Forward = 'forward'
     VB_Backward = 'backward'
     VB_Directions = (VB_Forward, VB_Backward)
+
+    # Updated when PROFILE is true. Number of setattr calls for each subclass
+    # of ValueBinder (keyed by class name).
+    hit_set_attr = _VBSubClassMonitor('set_attr_calls')
+    hit_init = _VBSubClassMonitor('init_calls')
 
     @classmethod
     def VB_SplitPath(cls, path):
@@ -93,6 +139,8 @@ class ValueBinder(object):
         self._vb_initDependencies()
         self._vb_initBindings()
         super(ValueBinder, self).__init__(**kwargs)
+        if PROFILE:
+            self.hit_init()
 
     def bind(self, frompath, topath, transformer=None, ignore_exceptions=None):
         """When any item on frompath or topath changes, set topath to frompath.
@@ -109,6 +157,11 @@ class ValueBinder(object):
         a.b = g
         >> a.d.e = 5
         """
+        if frompath.startswith('_') or topath.startswith('_'):
+            raise ValueError(
+                'Cannot bind private-looking attributes that start with '
+                '\'_\': %r to %r' % (frompath, topath))
+
         log.info("Bind %r instance attribute %r to %r",
                  self.__class__.__name__, frompath, topath)
         if log.level <= logging.DETAIL and hasattr(self, frompath):
@@ -198,11 +251,12 @@ class ValueBinder(object):
 
     def attributeAtPath(self, path):
         target, attr = self._vb_resolveboundobjectandattr(path)
-        if not hasattr(target, attr):
+        try:
+            return getattr(target, attr)
+        except AttributeError:
             raise AttributeError(
                 "%r instance has no attribute at path %r." % (
                     self.__class__.__name__, path))
-        return getattr(target, attr)
 
     def setAttributePath(self, path, value):
         target, attr = self._vb_resolveboundobjectandattr(path)
@@ -270,16 +324,19 @@ class ValueBinder(object):
     def __getattr__(self, attr):
         """If the attribute is a delegated attribute, gets the attribute from
         the delegate, else calls super."""
-        log.debug("%r get %r", self.__class__.__name__, attr)
-        sd = self.__dict__
 
-        if self._vb_attributeIsPrivate(attr):
-            if attr not in sd:
+        if attr.startswith('_'):
+            # For perf reasons assume anything starting with '_' is not bound.
+            gattr = getattr(super(ValueBinder, self), '__getattr__', None)
+            if gattr is None:
                 raise AttributeError(
                     "ValueBinder subclass %r has no attribute %r: perhaps it "
                     "didn't call super().__init__()?" % (
                         self.__class__.__name__, attr))
-            return self.__dict__[attr]
+            return (attr, gattr(attr))
+
+        log.debug("%r get %r", self.__class__.__name__, attr)
+        sd = self.__dict__
 
         # Check for delegate attributes.
         if '_vb_delegate_attributes' in sd:
@@ -289,28 +346,32 @@ class ValueBinder(object):
                 log.detail("Delegate attribute %r", attr)
                 return getattr(getattr(self, das[attr]), attr)
 
-        if hasattr(super(ValueBinder, self), "__getattr__"):
-            return super(ValueBinder, self).__getattr__(attr)
+        gt = getattr(super(ValueBinder, self), '__getattr__', None)
+        if gt is None:
+            raise AttributeError("%r instance has no attribute %r" % (
+                self.__class__.__name__, attr))
 
-        raise AttributeError("%r instance has no attribute %r" % (
-            self.__class__.__name__, attr))
+        return gt(attr)
 
     def __setattr__(self, attr, val):
         """
         """
-        log.detail("Set %r.", attr)
+        if attr.startswith('_'):
+            # For perf reasons assume anything starting with '_' is not bound.
+            return super(ValueBinder, self).__setattr__(attr, val)
 
-        if self._vb_attributeIsPrivate(attr):
-            log.detail("Directly setting vb private attribute")
-            self.__dict__[attr] = val
-            return
+        cn = self.__class__.__name__
+
+        if PROFILE:
+            self.hit_set_attr(attr)
+
+        log.detail("Set %r.", attr)
+        sd = self.__dict__
 
         # Avoid recursion if a subclass has not called init (perhaps failed
         # a part of its own initialization.
-        sd = self.__dict__
         assert "_vb_delegate_attributes" in sd, (
-            "ValueBinder subclass %r has not called super.__init__()" % (
-                self.__class__.__name__))
+            "ValueBinder subclass %r has not called super.__init__()" % cn)
 
         # If this is a delegated attribute, pass through.
         (deleattr, dele) = self._vb_delegateForAttribute(attr)
@@ -319,22 +380,18 @@ class ValueBinder(object):
                 raise AttributeError(
                     "Cannot set attribute %r on %r instance as it is "
                     "delegated to attribute %r which is None." % (
-                        attr, self.__class__.__name__, deleattr))
+                        attr, cn, deleattr))
 
             return setattr(dele, attr, val)
 
-        if hasattr(self, attr):
-            existing_val = getattr(self, attr)
-        else:
-            existing_val = None
+        existing_val = getattr(self, attr, None)
 
         try:
             settingAttributes = sd["_vb_settingAttributes"]
             if attr in settingAttributes:
                 raise RuntimeError(
                     "Recursion attempting to set attribute %r on %r "
-                    "instance." % (
-                        attr, self.__class__.__name__))
+                    "instance." % (attr, cn))
             settingAttributes.add(attr)
             try:
                 super(ValueBinder, self).__setattr__(attr, val)
@@ -349,7 +406,7 @@ class ValueBinder(object):
                 if val is not initialval:
                     log.debug(
                         "%r instance %r attribute val changed after set.",
-                        self.__class__.__name__, attr)
+                        cn, attr)
             finally:
                 settingAttributes.remove(attr)
         except AttributeError as exc:
@@ -360,7 +417,7 @@ class ValueBinder(object):
             log.error(
                 "Runtime error setting attribute %r on %r instance to %r. "
                 "MRO is: %r.",
-                attr, self.__class__.__name__, val, self.__class__.__mro__)
+                attr, cn, val, self.__class__.__mro__)
             raise
 
         if existing_val is not val:
@@ -371,10 +428,9 @@ class ValueBinder(object):
     def __delattr__(self, attr):
         log.detail("Del %r.", attr)
 
-        if self._vb_attributeIsPrivate(attr):
+        if attr.startswith('_'):
             log.detail("Directly setting vb private attribute")
-            del self.__dict__[attr]
-            return
+            return super(ValueBinder, self).__delattr__(attr)
 
         deleattr, dele = self._vb_delegateForAttribute(attr)
         if deleattr is not None:
@@ -382,15 +438,15 @@ class ValueBinder(object):
                 raise AttributeError(
                     "Attribute %r of %r instance cannot be deleted as the "
                     "delegate attribute %r is None." % (
-                        attr, self.__class__.__name__, deleattr))
+                        attr, cn, deleattr))
             return delattr(dele, attr)
 
-        if not hasattr(self, attr):
+        existing_val = getattr(self, attr, sentinel)
+        if existing_val is sentinel:
             raise AttributeError(
                     "Attribute %r of %r instance cannot be deleted as it does "
-                    "not exist." % (attr, self.__class__.__name__))
+                    "not exist." % (attr, cn))
 
-        existing_val = getattr(self, attr)
         self.vb_updateAttributeBindings(attr, existing_val, None)
 
         return super(ValueBinder, self).__delattr__(attr)
@@ -404,8 +460,9 @@ class ValueBinder(object):
         # in our children.
         self._vb_unbindAllCondition(tolerate_no_such_binding=True)
         sp = super(ValueBinder, self)
-        if hasattr(sp, "__del__"):
-            sp.__del__()
+        dm = getattr(sp, '__del__', None)
+        if dm is not None:
+            dm()
 
     #
     # =================== INTERNAL METHODS ===================================
@@ -453,11 +510,12 @@ class ValueBinder(object):
         >>> "b.c"
         """
         attr, _ = self.VB_PartitionPath(path)
-        if attr not in self._vb_delegate_attributes:
+        vbdas = self._vb_delegate_attributes
+        if attr not in vbdas:
             log.debug("Non-delegated path %r", path)
             return path
 
-        da = self._vb_delegate_attributes[attr]
+        da = vbdas[attr]
         log.debug("Delegated path %r through %r", path, da)
         return self.VB_JoinPath((da, path))
 
@@ -524,10 +582,8 @@ class ValueBinder(object):
 
         target, toattr = self._vb_resolveboundobjectandattr(topath)
         if target is not None:
-            if hasattr(target, toattr):
-                old_value = getattr(target, toattr)
-            else:
-                old_value = None
+            old_value = getattr(target, toattr, None)
+
             if val is not old_value:
                 log.debug("Pushing %r to %s", val, topath)
 
@@ -557,10 +613,9 @@ class ValueBinder(object):
     def _vb_pullValue(self, topath):
         log.debug("Pull value from %r", topath)
         target, toattr = self._vb_resolveboundobjectandattr(topath)
-        if target is not None and hasattr(target, toattr):
-            val = getattr(target, toattr)
-            return val
-        return None
+        if target is None:
+            return None
+        return getattr(target, toattr, None)
 
     def _vb_binddirection(
             self, frompath, topath, parent, transformer, direction,
@@ -583,10 +638,11 @@ class ValueBinder(object):
                     resolvedtopath))
         ignore_exceptions = (
             tuple() if not ignore_exceptions else ignore_exceptions)
-        bds[resolvedtopath] = {
+        bd = {
             KeyTransformer: transformer,
             KeyIgnoredExceptions: ignore_exceptions
         }
+        bds[resolvedtopath] = bd
 
         currparent = self.vb_parent
         assert (currparent is None or
@@ -613,15 +669,12 @@ class ValueBinder(object):
             else:
                 fromattr_resolved = fromattr
 
-            if hasattr(self, fromattr_resolved):
-                log.debug("  has child at %r.", fromattr_resolved)
-                subobj = getattr(self, fromattr_resolved)
-                log.debug("  %r", subobj)
-                if isinstance(subobj, ValueBinder):
-                    log.debug("  child is VB compatible.")
-                    subobj._vb_binddirection(
-                        fromattrattrs, ValueBinder.PS + resolvedtopath, self,
-                        transformer, direction, ignore_exceptions)
+            subobj = getattr(self, fromattr_resolved, None)
+            if isinstance(subobj, ValueBinder):
+                log.debug("  child is VB compatible.")
+                subobj._vb_binddirection(
+                    fromattrattrs, ValueBinder.PS + resolvedtopath, self,
+                    transformer, direction, ignore_exceptions)
         else:
             # This is a direct binding. If we already have a value for it, set
             # the target. E.g.
@@ -630,20 +683,19 @@ class ValueBinder(object):
             log.debug("direct %r binding %r -> %r", direction, frompath,
                       resolvedtopath)
             if direction == self.VB_Forward:
-                if hasattr(self, fromattr):
+                val = getattr(self, fromattr, sentinel)
+                if val is not sentinel:
                     log.debug("  Has child attr %r", fromattr)
-                    val = getattr(self, fromattr)
-                    self._vb_push_value_to_target(
-                        val, resolvedtopath, bds[resolvedtopath])
+                    self._vb_push_value_to_target(val, resolvedtopath, bd)
             else:
                 log.debug("Pull value.")
                 val = self._vb_pullValue(resolvedtopath)
-                self._vb_push_value_to_target(
-                    val, fromattr, bds[resolvedtopath])
+                self._vb_push_value_to_target(val, fromattr, bd)
 
-        log.debug("  %r bindings after bind %r",
-                  direction,
-                  self._vb_bindingsForDirection(direction))
+        if PROFILE and log.getEffectiveLevel() <= logging.DEBUG:
+            log.debug(
+                "  %r bindings after bind %r", direction,
+                self._vb_bindingsForDirection(direction))
 
     def _vb_unbinddirection(self, frompath, topath, direction):
         """Unbind a particular path.
@@ -697,9 +749,10 @@ class ValueBinder(object):
 
         self._vb_maybeReleaseParent()
 
-        log.debug("  %r bindings after unbind %r",
-                  direction,
-                  self._vb_bindingsForDirection(direction))
+        if PROFILE and log.getEffectiveLevel() <= logging.DEBUG:
+            log.debug("  %r bindings after unbind %r",
+                      direction,
+                      self._vb_bindingsForDirection(direction))
 
     def _vb_maybeReleaseParent(self):
 
@@ -732,7 +785,8 @@ class ValueBinder(object):
                 nextattr = "vb_parent"
 
             log.debug("  try next attribute %r", nextattr)
-            if not hasattr(nextobj, nextattr):
+            nextobj = getattr(nextobj, nextattr, sentinel)
+            if nextobj is sentinel:
                 # This we're missing an object in the path, so need to return
                 # None.
                 log.debug("  missing")
@@ -740,17 +794,7 @@ class ValueBinder(object):
                 nextattr = None
                 break
 
-            nextobj = getattr(nextobj, nextattr)
             continue
-
-            if nalen == 0:
-                # Parent object.
-                nextobj = nextobj()
-                if nextobj is None:
-                    # Parent has been tidied up.
-                    log.debug("  Parent has been garbage collected.")
-                    nextattr = None
-                    break
 
         else:
             nextattr = splitpath[-1]
@@ -777,11 +821,9 @@ class ValueBinder(object):
 
         self.bindBindings(self.vb_bindings)
 
-    def _vb_attributeIsPrivate(self, attr):
-        return attr.startswith("_vb_")
-
     def _vb_delegateForAttribute(self, attr):
-        das = self._vb_delegate_attributes
+        sd = self.__dict__
+        das = sd['_vb_delegate_attributes']
         if attr not in das:
             return None, None
 

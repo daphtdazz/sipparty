@@ -95,7 +95,7 @@ class Party(
         lAddr = self._pt_listenAddress
         if lAddr is None:
             raise AttributeError(
-                "%r listenAddress is read-only." % (obj.__class__.__name__,))
+                "%r no listen address." % (self.__class__.__name__,))
         return lAddr
 
     @property
@@ -138,11 +138,14 @@ class Party(
             self.transport = tp
 
         if self.contactURI.address is None:
-            self.contactURI.address = socket.gethostname()
+            self.contactURI.address = abytes(socket.gethostname())
 
         return
 
-    def listen(self):
+    def listen(self, address_name=None):
+
+        if address_name is not None:
+            self.contactURI.address = abytes(address_name)
 
         uriHost = self.contactURI.aor.host
 

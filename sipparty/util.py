@@ -78,8 +78,10 @@ class attributesubclassgen(type):
 
         if name == 'types':
             sp = super(attributesubclassgen, cls)
-            if hasattr(sp, "__getattr__"):
-                return sp.__getattr__(name)
+            gt = getattr(sp, '__getattr__', None)
+            if gt is not None:
+                return gt(name)
+
             raise AttributeError(
                 '%r class has no attribute \'types\'.', cls.__name__)
 
@@ -107,26 +109,6 @@ class attributesubclassgen(type):
         ty = scs[normalizedSCType]
         log.debug("Return %r for type %r from %r", ty, name, scs)
         return ty
-
-        subclassguess = (
-            cls.NormalizeGeneratingAttributeName(name) + cls._supername)
-        try:
-            mod = __import__(cls.__module__)
-            log.debug("Class module %r.", cls.__module__)
-            log.debug("%r: %r", mod.__name__, dir(mod))
-            for modname in cls.__module__.split(".")[1:]:
-                log.debug("Get module %r from %r.", modname, mod.__name__)
-                mod = getattr(mod, modname)
-            rclass = getattr(mod, subclassguess)
-            rclass.type = name
-            return rclass
-
-        except AttributeError:
-            log.warning("Failed to find subclass %r, all %r.",
-                        subclassguess, dir(mod))
-            if subclassguess == 'TagParam':
-                raise Exception("TagParam not found!")
-            return type(subclassguess, (cls,), dict(type=name))
 
 
 def sipheader(key):
@@ -182,7 +164,7 @@ class Enum(set):
     def __getattr__(self, attr):
         log.detail('%s instance getattr %r', self.__class__.__name__, attr)
         nn = self._en_fixAttr(attr)
-        if nn in self:
+        if super(Enum, self).__contains__(nn):
             return nn
         raise AttributeError("Attribute %r not one of %r." % (nn, self))
 
@@ -602,11 +584,11 @@ class DerivedProperty(object):
         gt = self._rp_get
         if gt is None:
             # No getter, so return now.
-            return getattr(target, pname)
+            return val
 
         # Get might be a method name...
-        if isinstance(gt, str) and hasattr(target, gt):
-            meth = getattr(target, gt)
+        if isinstance(gt, str):
+            meth = getattr(target, gt, None)
             if not isinstance(meth, Callable):
                 raise ValueError(
                     "Getter attribute %r of %r object is not callable." % (
@@ -625,8 +607,8 @@ class DerivedProperty(object):
 
     def __set__(self, obj, value):
         pname = self._rp_propName
-        if (value is not None and
-                self._rp_check is not None and not self._rp_check(value)):
+        checker = self._rp_check
+        if value is not None and checker is not None and not checker(value):
             raise ValueError(
                 "%r is not an allowed value for attribute %r of class %r." %
                 (value, pname, obj.__class__.__name__))
@@ -637,8 +619,8 @@ class DerivedProperty(object):
             log.debug("Set %r to %r.", pname, value)
             log.debug("Self: %r.", self)
             setattr(obj, pname, value)
-        elif isinstance(st, str) and hasattr(obj, st):
-            meth = getattr(obj, st)
+        elif isinstance(st, str):
+            meth = getattr(obj, st, None)
             if not isinstance(meth, Callable):
                 raise ValueError(
                     "Setter attribute %r of %r object is not callable." % (
@@ -649,7 +631,7 @@ class DerivedProperty(object):
 
     def __delete__(self, obj):
         pname = self._rp_propName
-        del obj.pname
+        delattr(obj, pname)
 
     def __repr__(self):
         return (

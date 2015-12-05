@@ -54,6 +54,7 @@ def DCProperty(tlp, name, attrDesc):
 def DeepClass(topLevelPrepend, topLevelAttributeDescs):
     """Creates a deep class type which
     """
+
     class DeepClass(object):
 
         for name, attrDescGen in iteritems(topLevelAttributeDescs):
@@ -96,47 +97,58 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
             # }
             # And with superKwargs just the unrecognised args to pass on to
             # super.
-            superKwargs = dict(kwargs)
-            for kwName, kwVal in iteritems(kwargs):
-                topLevelAttrName, _, subAttr = kwName.partition("_")
-                if topLevelAttrName not in topLevelAttributeDescs:
-                    log.detail("Super kwarg %r", kwName)
-                    continue
+            def _dck_filter_super_kwargs(kwargs, topLevelAttrArgs):
+                superKwargs = dict(kwargs)
 
-                log.detail("Deep class kwarg %r %r", kwName, kwVal)
-                del superKwargs[kwName]
+                for kwName, kwVal in iteritems(kwargs):
+                    topLevelAttrName, _, subAttr = kwName.partition("_")
+                    if topLevelAttrName not in topLevelAttributeDescs:
+                        log.detail("Super kwarg %r", kwName)
+                        continue
 
-                tlaa = topLevelAttrArgs[topLevelAttrName]
+                    log.detail("Deep class kwarg %r %r", kwName, kwVal)
+                    del superKwargs[kwName]
 
-                if len(_) != 0:
-                    if len(subAttr) == 0:
-                        raise KeyError(
-                            "Attribute %r of %r instance not a valid "
-                            "subattribute of attribute %r." % (
-                                kwName, clname,
-                                topLevelAttrName))
-                    tlaa[1][subAttr] = kwVal
-                else:
-                    tlaa[0] = kwVal
+                    tlaa = topLevelAttrArgs[topLevelAttrName]
+
+                    if len(_) != 0:
+                        if len(subAttr) == 0:
+                            raise KeyError(
+                                "Attribute %r of %r instance not a valid "
+                                "subattribute of attribute %r." % (
+                                    kwName, clname,
+                                    topLevelAttrName))
+                        tlaa[1][subAttr] = kwVal
+                    else:
+                        tlaa[0] = kwVal
+                return superKwargs
+
+            superKwargs = _dck_filter_super_kwargs(kwargs, topLevelAttrArgs)
 
             # See if we have any delegates to pass to.
-            log.debug('Check VB dependencies')
-            dele_attrs = {}
-            if hasattr(self, "vb_dependencies"):
+            def _dck_filter_vb_dependencies():
+                log.debug('Check VB dependencies')
+                dele_attrs = {}
+                vbds = getattr(self, 'vb_dependencies', None)
+                if vbds is None:
+                    return dele_attrs
+
                 if not isinstance(self, ValueBinder):
                     raise TypeError(
                         "%r instance has 'vb_dependencies' set but is not a "
                         "subclass of 'ValueBinder'" % (
                             self.__class__.__name__,))
-                vbds = self.vb_dependencies
                 allDeleAttrs = set([
-                    attr for attrs in vbds for attr in attrs[1]])
+                    attr for _attrs in vbds for attr in _attrs[1]])
                 for kwName, kwVal in iteritems(dict(superKwargs)):
                     if kwName not in allDeleAttrs:
                         continue
                     log.debug("Delegate attribute saved: %r", kwName)
                     dele_attrs[kwName] = kwVal
                     del superKwargs[kwName]
+                return dele_attrs
+
+            dele_attrs = _dck_filter_vb_dependencies()
 
             # Call super init.
             log.detail("super init dict: %r", superKwargs)
@@ -154,9 +166,7 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
 
                 for tlattr, (tlval, tlsvals) in iteritems(topLevelAttrArgs):
                     tlad = topLevelAttributeDescs[tlattr]
-                    desc = (
-                        None if dck.descriptor not in tlad else
-                        tlad[dck.descriptor])
+                    desc = tlad.get(dck.descriptor, None)
 
                     # Don't do descriptor-based properties if not told to.
                     if not do_descriptors and desc is not None:
@@ -167,15 +177,16 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
                         continue
 
                     if tlval is None:
-                        if (hasattr(self, tlattr)):
-                            if getattr(self, tlattr) is not None:
-                                log.debug(
-                                    "No need to generate %r for %r: already "
-                                    "set (probably by bindings) to %r.",
-                                    tlattr, clname, getattr(self, tlattr))
-                                continue
+                        tlattr_val = getattr(self, tlattr, None)
+                        if tlattr_val is not None:
+                            log.debug(
+                                "No need to generate %r for %r: already "
+                                "set (probably by bindings) to %r.",
+                                tlattr, clname, tlattr_val)
+                            continue
 
-                        if dck.gen not in tlad:
+                        genner = tlad.get(dck.gen, None)
+                        if genner is None:
                             log.debug(
                                 "%r attribute not set and doesn't have "
                                 "generator",
@@ -183,7 +194,7 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
                             # Need to set the internal representation, to allow
                             # check functions not to have to check for None.
                             setattr(
-                                self, "%s%s" % (topLevelPrepend, tlattr), None)
+                                self, str(topLevelPrepend) + str(tlattr), None)
                             continue
 
                         log.debug(

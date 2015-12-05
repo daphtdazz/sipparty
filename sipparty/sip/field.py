@@ -33,6 +33,8 @@ from .request import Request
 
 log = logging.getLogger(__name__)
 
+sentinel = type('FieldNoAttributeSentinel', (), {})()
+
 
 @add_metaclass(CCPropsFor(("delegateattributes", "parseinfo")))
 @TwoCompatibleThree
@@ -74,11 +76,12 @@ class Field(
     def __setattr__(self, attr, val):
         if attr in Param.types:
             return setattr(self.parameters, attr, val)
-        if attr != "value" and hasattr(self, "value"):
-            delval = self.value
-            if (hasattr(delval, "delegateattributes") and
-                    attr in delval.delegateattributes):
-                return setattr(delval, attr, val)
+        if attr != 'value':
+            delval = getattr(self, 'value', sentinel)
+            if delval is not sentinel:
+                delattrs = getattr(delval, 'delegateattributes', sentinel)
+                if delattrs is not sentinel and attr in delattrs:
+                    return setattr(delval, attr, val)
 
         super(Field, self).__setattr__(attr, val)
 
