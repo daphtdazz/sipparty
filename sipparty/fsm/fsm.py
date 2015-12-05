@@ -308,6 +308,7 @@ class FSM(object):
         # self._fsm_use_async_timers = asynchronous_timers
         self._fsm_weakDelegate = None
         self.delegate = delegate
+        self.__processing_hit = False
 
         # Need to learn configuration from the class.
         class_transitions = self._fsm_transitions
@@ -349,11 +350,25 @@ class FSM(object):
         args and kwargs are passed through to the action.
         """
         log.debug("Queuing input %r", input)
-        return self._fsm_hit(input, *args, **kwargs)
+
+        if self.__processing_hit:
+            raise RuntimeError(
+                'Illegal re-hit of %r instance during a hit. Most \'hit\' has '
+                'been called from an action. This is illegal, use '
+                '\'hitAfterCurrentTransition\' to schedule a new hit straight '
+                'from an action.' % self.__class__.__name__)
+        try:
+            self.__processing_hit = True
+            return self._fsm_hit(input, *args, **kwargs)
+        finally:
+            self.__processing_hit = False
 
         self._fsm_inputQueue.put((input, args, kwargs))
 
         self._fsm_popTimerNow()
+
+    def hitAfterCurrentTransition(self, input, *args, **kwargs):
+        raise NotImplemented("'hitAfterCurrentTransition'")
 
     @util.OnlyWhenLocked
     def checkTimers(self):
@@ -552,8 +567,9 @@ class FSM(object):
             try:
                 action(*args, **kwargs)
             except Exception as exc:
-                log.exception("Hit exception processing FSM action %r." %
-                              action)
+                log.error("Hit exception processing FSM action %r: %s" % (
+                    action, exc))
+                raise
 
         for st in res[self.KeyStartTimers]:
             log.debug("Start timer %r", st.name)

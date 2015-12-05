@@ -142,8 +142,10 @@ class TestFSM(SIPPartyTestCase):
         lfsm = LFSM()
         self.assertEqual(lfsm.state, InitialStateKey)
 
-        athread = threading.Thread(name='athread', target=runthreadA, args=(lfsm,))
-        bthread = threading.Thread(name='bthread', target=runthreadB, args=(lfsm,))
+        athread = threading.Thread(
+            name='athread', target=runthreadA, args=(lfsm,))
+        bthread = threading.Thread(
+            name='bthread', target=runthreadB, args=(lfsm,))
 
         athread.start()
         WaitFor(lambda: len(events) > 1)
@@ -232,8 +234,16 @@ class TestFSM(SIPPartyTestCase):
             nf.checkTimers()
             self.assertEqual(self.cleanup, cleanup)
 
+    def test_action_hit_exception(self):
+
+        fsm = type('ActionHitTestFSM', (FSM,), {
+            'bad_action': lambda self: self.hit('hit')})()
+        fsm.addTransition('initial', 'hit', 'end', action='bad_action')
+        fsm.state = 'initial'
+        self.assertRaises(RuntimeError, fsm.hit, 'hit')
+
     def testAsyncFSM(self):
-        nf = FSM(name="TestAsyncFSM", asynchronous_timers=True)
+        nf = FSM(name="TestAsyncFSM")
 
         retry = [0]
 
