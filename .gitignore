@@ -74,3 +74,6 @@ target/
 
 # backup files
 *.swp
+
+# iPython
+.ipynb*

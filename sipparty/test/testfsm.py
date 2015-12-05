@@ -21,10 +21,10 @@ from six import PY2
 import socket
 import sys
 import threading
-import time
+from time import sleep
 import timeit
 from ..fsm import (
-    FSM, FSMTimeout, InitialStateKey, RetryThread, Timer,
+    AsyncFSM, FSM, FSMTimeout, InitialStateKey, LockedFSM, RetryThread, Timer,
     TransitionKeys,
     UnexpectedInput)
 from ..fsm import fsmtimer
@@ -42,9 +42,6 @@ class TestFSM(SIPPartyTestCase):
     def setUp(self):
         self.retry = 0
         self.cleanup = 0
-        # self.pushLogLevel('fsm.fsm', logging.DETAIL)
-        # self.pushLogLevel('fsm.fsmtimer', logging.DETAIL)
-        # self.pushLogLevel('fsm.retrythread', logging.DETAIL)
 
         self.Clock.return_value = 0
 
@@ -87,6 +84,78 @@ class TestFSM(SIPPartyTestCase):
         nf.hit("start")
         self.assertEqual(nf.state, "starting")
         self.assertRaises(UnexpectedInput, lambda: nf.hit("stop"))
+
+    def test_locked_fsm(self):
+
+        # Create a background thread to prove that we are holding the FSM lock.
+        global threadARunning
+        global threadBRunning
+        global counter
+        global events
+        threadARunning = False
+        threadBRunning = False
+        counter = 0
+        events = []
+
+        def runthreadA(lfsm):
+            global events
+            events.append('A running')
+            lfsm.hit('input')
+
+        def runthreadB(lfsm):
+            global events
+            global threadBRunning
+            events.append('B running')
+            threadBRunning = True
+            lfsm.hit('input')
+
+        def action():
+            global events
+            global threadBRunning
+            events.append('action')
+            while not threadBRunning:
+                sleep(0.001)
+            events.append('action ending')
+
+        class LFSM(LockedFSM):
+            FSMDefinitions = {
+                InitialStateKey: {
+                    "input": {
+                        TransitionKeys.NewState: "in progress",
+                        TransitionKeys.Action: action
+                    },
+                },
+                "in progress": {
+                    "input": {
+                        TransitionKeys.NewState: "end",
+                        TransitionKeys.Action: action
+                    }
+                },
+                'end': {}
+            }
+
+        lfsm = LFSM()
+        self.assertEqual(lfsm.state, InitialStateKey)
+
+        athread = threading.Thread(
+            name='athread', target=runthreadA, args=(lfsm,))
+        bthread = threading.Thread(
+            name='bthread', target=runthreadB, args=(lfsm,))
+
+        athread.start()
+        WaitFor(lambda: len(events) > 1)
+
+        bthread.start()
+
+        athread.join()
+        bthread.join()
+
+        self.assertEqual(
+            events, [
+                'A running', 'action', 'B running', 'action ending', 'action',
+                'action ending'])
+
+        self.assertEqual(lfsm.state, 'end')
 
     @patch.object(fsmtimer, 'Clock', new=Clock)
     @patch.object(retrythread, 'Clock', new=Clock)
@@ -160,8 +229,16 @@ class TestFSM(SIPPartyTestCase):
             nf.checkTimers()
             self.assertEqual(self.cleanup, cleanup)
 
+    def test_action_hit_exception(self):
+
+        fsm = type('ActionHitTestFSM', (FSM,), {
+            'bad_action': lambda self: self.hit('hit')})()
+        fsm.addTransition('initial', 'hit', 'end', action='bad_action')
+        fsm.state = 'initial'
+        self.assertRaises(RuntimeError, fsm.hit, 'hit')
+
     def testAsyncFSM(self):
-        nf = FSM(name="TestAsyncFSM", asynchronous_timers=True)
+        nf = AsyncFSM(name="TestAsyncFSM")
 
         retry = [0]
 
@@ -193,8 +270,8 @@ class TestFSM(SIPPartyTestCase):
         log.debug("clock incremented")
         WaitFor(lambda: retry[0] == 1, timeout_s=2)
 
-    def testActions(self):
-        nf = FSM(name="TestActionsFSM", asynchronous_timers=True)
+    def test_async_actions(self):
+        nf = AsyncFSM(name="TestAsyncActionsFSM")
 
         expect_args = 0
         expect_kwargs = 0
@@ -230,7 +307,7 @@ class TestFSM(SIPPartyTestCase):
         def actnow(*args, **kwargs):
             actnow_hit[0] += 1
 
-        class FSMTestSubclass(FSM):
+        class FSMTestSubclass(AsyncFSM):
 
             @classmethod
             def AddClassTransitions(cls):
@@ -264,8 +341,6 @@ class TestFSM(SIPPartyTestCase):
         nf = FSMTestSubclass()
         nf.hit("start")
         self.assertEqual(actnow_hit[0], 1)
-
-        self.assertRaises(AttributeError, lambda: nf.addFDSource(1, None))
 
         self.assertEqual(nf.retries, 0)
         self.Clock.return_value = 1
@@ -313,14 +388,14 @@ class TestFSM(SIPPartyTestCase):
                 cls._fsm_state = "initial"
 
         badFSM = FSMTestBadSubclass()
-        # We get a ValueError when we cause the thread to get started because
-        # the
-        self.assertRaises(ValueError,
-                          lambda: badFSM.hit(FSMTestBadSubclass.Inputs.go))
+        badFSM.hit(badFSM.Inputs.go)
+        # We get a ValueError when we check the timer because the
+        # 'not-a-method' method is not a method!
+        self.assertRaises(ValueError, badFSM.checkTimers)
 
     def testFDSources(self):
 
-        nf = FSM(asynchronous_timers=True)
+        nf = AsyncFSM()
 
         sck1, sck2 = socket.socketpair()
 
@@ -385,15 +460,15 @@ class TestFSM(SIPPartyTestCase):
         WaitFor(lambda: thr_res[0] == 8 * 2)
 
     def testWaitFor(self):
-        fsm = FSM()
+        fsm = AsyncFSM()
         self.assertRaises(
-            AssertionError, lambda: fsm.waitForStateCondition(lambda: True))
+            TypeError, fsm.waitForStateCondition, 'This is not a Callable')
 
         self.subTestWaitFor(async_timers=True)
         self.subTestWaitFor(async_timers=False)
 
     def subTestWaitFor(self, async_timers):
-        class TFSM(FSM):
+        class TFSM(AsyncFSM):
             FSMDefinitions = {
                 InitialStateKey: {
                     "input": {
@@ -420,7 +495,7 @@ class TestFSM(SIPPartyTestCase):
                 "null": {}
             }
 
-        fsm1 = TFSM(lock=True, asynchronous_timers=async_timers)
+        fsm1 = TFSM()
         fsm1.hit("input")
         fsm1.waitForStateCondition(lambda state: state == "in progress")
         self.assertEqual(fsm1.state, "in progress")

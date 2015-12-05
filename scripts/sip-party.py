@@ -180,7 +180,6 @@ class SIPPartyRunLoop(object):
                 log.debug('Returning substr %r', poss_cmd)
                 return sub_dict[sub_dict[poss_cmd]]
 
-
             return self.getCommandFromString(self, string[1:], poss_cmd)
 
         if len(string) == 0:
@@ -197,7 +196,6 @@ class SIPPartyRunLoop(object):
 
         log.debug('Recurse')
         return self.getCommandFromString(string[1:], cmd_poss)
-
 
     def nextCommand(self):
 
@@ -222,8 +220,12 @@ class SIPPartyRunLoop(object):
         while not self.exit:
 
             self.showLoopText()
+            try:
+                command, args = self.nextCommand()
+            except KeyboardInterrupt:
+                self.exit = True
+                continue
 
-            command, args = self.nextCommand()
             try:
                 log.debug('Running command %r', command)
                 command(args)
@@ -234,6 +236,7 @@ class SIPPartyRunLoop(object):
             except Exception as exc:
                 log.exception(
                     'Exception hit running command %r', command.attr_name)
+
 
 #
 # =================== Main script. =======================================

@@ -27,6 +27,7 @@ import unittest
 import socket
 from .. import (fsm, sip, util)
 from ..sip import Dialog
+from ..sip.dialogs import SimpleCall
 
 log = logging.getLogger(__name__)
 
@@ -34,6 +35,8 @@ log = logging.getLogger(__name__)
 class TestDialog(unittest.TestCase):
 
     def testStandardDialog(self):
-        dl = Dialog()
+        dl = SimpleCall()
         self.assertRaises(AttributeError, lambda: dl.asdf)
+        self.assertRaises(ValueError, dl.hit, 'initiate')
+        self.assertEqual(dl.state, dl.States.Initial)
         iv = dl.sendRequestInvite
