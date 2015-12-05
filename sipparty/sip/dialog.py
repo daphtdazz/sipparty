@@ -22,7 +22,7 @@ import numbers
 import re
 from six import binary_type as bytes
 from .. import (vb, fsm)
-from ..fsm import (FSM, UnexpectedInput)
+from ..fsm import (AsyncFSM, InitialStateKey, UnexpectedInput)
 from ..deepclass import DeepClass, dck
 from ..parse import ParsedPropertyOfClass
 from ..sdp import (sdpsyntax, SDPIncomplete)
@@ -39,7 +39,7 @@ from . import prot
 log = logging.getLogger(__name__)
 
 States = Enum((
-    fsm.InitialStateKey, "InitiatingDialog", "InDialog", "TerminatingDialog",
+    InitialStateKey, "InitiatingDialog", "InDialog", "TerminatingDialog",
     "SuccessCompletion", "ErrorCompletion"))
 Inputs = Enum(("initiate", "receiveRequest", "terminate"))
 
@@ -72,7 +72,7 @@ class Dialog(
             "transport": {},
             "localSession": {},
             "remoteSession": {}}),
-        fsm.FSM, vb.ValueBinder):
+        AsyncFSM, vb.ValueBinder):
     """`Dialog` class has a slightly wider scope than a strict SIP dialog, to
     include one-off request response pairs (e.g. OPTIONS) as well as long-lived
     stateful relationships (Calls, Registrations etc.).
@@ -116,8 +116,6 @@ class Dialog(
             self._dlg_callIDHeader.value, self.localTag.value, rt.value)
 
     def __init__(self, **kwargs):
-        if "lock" not in kwargs:
-            kwargs["lock"] = True
         super(Dialog, self).__init__(**kwargs)
 
         self._dlg_callIDHeader = None

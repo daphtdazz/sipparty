@@ -2,8 +2,9 @@
 
 ## List. ##
 
+1. Example scripts.
+2. Resource Warnings under python3.
 4. REGISTER dialogues.
-5. Example scripts.
 6. TCP support. 
 8. UDP transport retrying. 
 9. Smarter ACK than simply "ACK all 200s" in dialog.py

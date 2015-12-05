@@ -38,6 +38,5 @@ class TestDialog(unittest.TestCase):
         dl = SimpleCall()
         self.assertRaises(AttributeError, lambda: dl.asdf)
         self.assertRaises(ValueError, dl.hit, 'initiate')
-        self.assertRaises(ValueError, dl.hit, 'initiate')
-        self.assertEqual(dl.state, dl.States.initial)
+        self.assertEqual(dl.state, dl.States.Initial)
         iv = dl.sendRequestInvite

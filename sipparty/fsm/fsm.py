@@ -26,7 +26,7 @@ import time
 import timeit
 import threading
 import weakref
-from .. import util
+from ..util import (CCPropsFor, class_or_instance_method, Enum, OnlyWhenLocked)
 from . import (fsmtimer, retrythread)
 
 log = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ class FSMTimeout(FSMError):
     pass
 
 InitialStateKey = 'Initial'
-TransitionKeys = util.Enum((
+TransitionKeys = Enum((
     'NewState',
     'Action',
     'StartTimers',
@@ -78,7 +78,7 @@ FSMType = type(
     # The FSM type needs both the FSMClassInitializer and the cumulative
     # properties tool.
     'FSMType',
-    (util.CCPropsFor(("States", "Inputs", "Actions")), FSMClassInitializer),
+    (CCPropsFor(("States", "Inputs", "Actions")), FSMClassInitializer),
     dict())
 
 
@@ -122,9 +122,9 @@ class FSM(object):
     NextFSMNum = 1
 
     # These are Cumulative Properties (see the metaclass).
-    States = util.Enum((InitialStateKey,))
-    Inputs = util.Enum(tuple())
-    Actions = util.Enum(tuple())
+    States = Enum((InitialStateKey,))
+    Inputs = Enum(tuple())
+    Actions = Enum(tuple())
 
     @classmethod
     def PopulateWithDefinition(cls, definition_dict):
@@ -174,7 +174,7 @@ class FSM(object):
     #
     # =================== CLASS OR INSTANCE INTERFACE ========================
     #
-    @util.class_or_instance_method
+    @class_or_instance_method
     def addTransition(self, old_state, input, new_state, action=None,
                       start_timers=None, stop_timers=None,
                       start_threads=None, join_threads=None):
@@ -256,7 +256,7 @@ class FSM(object):
 
         log.detail("%r: %r -> %r", old_state, input, result[self.KeyNewState])
 
-    @util.class_or_instance_method
+    @class_or_instance_method
     def addTimer(self, name, action, retryer):
         """Add a timer with name `name`. Timers must be independent of
         transitions because they may be stopped or started at any transition.
@@ -393,13 +393,11 @@ class FSM(object):
             log.debug("Check timer %r (isRunning: %r).", name, isRunning)
             if isRunning:
                 timer.check()
-                #if self._fsm_use_async_timers:
-                #    self._fsm_thread.addRetryTime(timer.nextPopTime)
 
     #
     # ======================= INTERNAL METHODS ===============================
     #
-    @util.class_or_instance_method
+    @class_or_instance_method
     def _fsm_makeAction(self, action):
         """action is either a callable, which is called directly, or it is a
         method name, in which case we bind it to a method if we can.
@@ -466,7 +464,7 @@ class FSM(object):
         weak_action.__name__ = "weak_action_%s" % action
         return weak_action
 
-    @util.class_or_instance_method
+    @class_or_instance_method
     def _fsm_makeThreadAction(self, action):
 
         weak_method = self._fsm_makeAction(action)
@@ -585,8 +583,6 @@ class FSM(object):
 
         for st in res[self.KeyStartTimers]:
             self.start_timer(st)
-            #if self._fsm_use_async_timers:
-            #    self._fsm_thread.addRetryTime(st.nextPopTime)
 
         for thrAction in res[self.KeyStartThreads]:
             log.info("Starting FSM thread: %r.", thrAction.name)
@@ -599,12 +595,6 @@ class FSM(object):
         self._fsm_setState(new_state)
 
         log.debug("Done hit.")
-
-    #def _fsm_popTimerNow(self):
-    #    if self._fsm_use_async_timers:
-    #        self._fsm_thread.addRetryTime(util.Clock())
-    #    else:
-    #        self.__backgroundTimerPop()
 
     def _fsm_garbageCollect(self):
 
@@ -621,17 +611,17 @@ class FSM(object):
             thr.join()
             log.debug("Joined thread %r", thr.name)
 
-    @util.class_or_instance_method
+    @class_or_instance_method
     def _fsm_setState(self, newState):
         "Should only be called from methods that have the lock."
         self._fsm_state = newState
-        #if not isinstance(self, type) and self._lock:
-        #    self._fsm_stateChangeCondition.notifyAll()
 
 
 class LockedFSM(FSM):
 
     def __init__(self, *args, **kwargs):
+        """Protects
+        """
         super(LockedFSM, self).__init__(*args, **kwargs)
         self._lock = None
 
@@ -644,7 +634,7 @@ class LockedFSM(FSM):
 
         log.detail('LockedFSM after init: %r', self)
 
-    hit = util.OnlyWhenLocked(FSM.hit)
+    hit = OnlyWhenLocked(FSM.hit)
 
 
 class AsyncFSM(LockedFSM):
