@@ -25,18 +25,30 @@ import logging
 import weakref
 import unittest
 import socket
+from .setup import SIPPartyTestCase
 from .. import (fsm, sip, util)
-from ..sip import Dialog
+from ..sip import (Dialog)
+from ..sip.components import (AOR, Host, URI)
 from ..sip.dialogs import SimpleCall
 
 log = logging.getLogger(__name__)
 
 
-class TestDialog(unittest.TestCase):
+class TestDialog(SIPPartyTestCase):
 
     def testStandardDialog(self):
         dl = SimpleCall()
         self.assertRaises(AttributeError, lambda: dl.asdf)
         self.assertRaises(ValueError, dl.hit, 'initiate')
         self.assertEqual(dl.state, dl.States.Initial)
-        iv = dl.sendRequestInvite
+
+        dl.fromURI = 'sip:user1@host'
+        self.assertRaises(ValueError, dl.hit, 'initiate')
+        self.pushLogLevel('testdialog', logging.INFO)
+        log.info('%r', dl.fromURI)
+        self.assertEqual(
+            dl.fromURI,
+            URI(absoluteURIPart=None, headers=b'', aor=AOR(
+                    username=b'user1', host=Host(address=b'host', port=None)),
+                parameters=b'', scheme=b'sip'),
+            dl.fromURI.aor)

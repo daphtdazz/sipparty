@@ -227,6 +227,13 @@ class URI(
         return b'%s:%s%s%s' % (
             self.scheme, self.aor, self.parameters, self.headers)
 
+    def __eq__(self, other):
+
+        return all([
+            getattr(self, component) == getattr(self, component)
+            for component in ('scheme', 'aor', 'parameters', 'headers')
+        ])
+
 
 @TwoCompatibleThree
 class DNameURI(

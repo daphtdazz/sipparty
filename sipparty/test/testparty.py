@@ -22,6 +22,7 @@ import unittest
 import weakref
 from ..media.sessions import SingleRTPSession
 from ..party import (Party)
+from ..parties import (NoMediaSimpleCallsParty)
 from ..sip.dialogs import SimpleCall
 from ..util import WaitFor
 from .setup import SIPPartyTestCase
@@ -113,3 +114,12 @@ class TestParty(SIPPartyTestCase):
         self.assertEqual(len(p1.inCallDialogs), 0)
 
         return
+
+    def test_no_media_party(self):
+
+        log.info("Create two new no-media parties.")
+        p1 = NoMediaSimpleCallsParty()
+        p2 = NoMediaSimpleCallsParty()
+
+        p1.listen()
+        self.assertEqual(p1.listenAddress, ())
