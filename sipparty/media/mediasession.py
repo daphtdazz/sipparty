@@ -90,7 +90,7 @@ class MediaSession(
             lAddr = session_address
 
         lAddrTuple = self.transport.listen(
-            lHostName=lAddr, port_filter=lambda pt: pt % 2 == 0)
+            name=lAddr, port_filter=lambda pt: pt % 2 == 0)
 
         self.address = abytes(lAddrTuple[0])
         self.port = lAddrTuple[1]

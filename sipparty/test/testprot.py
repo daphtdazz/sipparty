@@ -60,7 +60,7 @@ class TestProtocol(SIPPartyTestCase):
 
         self.assertRaises(AttributeError, lambda: Request.notareq)
 
-        inviteRequest = Request.invite(uri_aor=bobAOR)
+        inviteRequest = Request.invite(uri__aor=bobAOR)
         self.assertEqual(
             bytes(inviteRequest), b"INVITE sip:bob@baltimore.com SIP/2.0")
 

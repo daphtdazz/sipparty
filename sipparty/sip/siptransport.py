@@ -22,7 +22,7 @@ import socket
 from weakref import (WeakValueDictionary, ref as weakref)
 from ..parse import ParseError
 from ..transport import (Transport, SockTypeFromName)
-from ..util import (DerivedProperty, WeakMethod)
+from ..util import (DerivedProperty, Singleton, WeakMethod)
 from . import prot
 from .components import Host
 from .message import Message
@@ -33,7 +33,7 @@ prot_log = logging.getLogger("messages")
 prot_log.setLevel(logging.INFO)
 
 
-class SIPTransport(Transport):
+class SIPTransport(Singleton):
     """SIP specific subclass of Transport."""
 
     #
@@ -62,7 +62,13 @@ class SIPTransport(Transport):
         # Dialog handler is keyed by AOR.
         self._sptr_dialogHandlers = {}
 
+        self.__transport = Transport()
+
         self.byteConsumer = WeakMethod(self, "sipByteConsumer")
+
+    def listen(self):
+
+        raise NotImplementedError('%s.listen' % self.__class__.__name__)
 
     def addDialogHandlerForAOR(self, aor, handler):
         """Register a handler to call """

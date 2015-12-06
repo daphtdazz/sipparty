@@ -49,7 +49,7 @@ class TestSIPTransport(SIPPartyTestCase):
         self.hostname_patch.stop()
         super(TestSIPTransport, self).tearDown()
 
-    def testGeneral(self):
+    def test_general_dgram(self):
 
         global rcvd_message
         rcvd_message = None
@@ -61,7 +61,13 @@ class TestSIPTransport(SIPPartyTestCase):
 
         log.info('Make SIPTransport object')
         tp = SIPTransport()
-        laddr = tp.listen(lHostName="127.0.0.1")
+        tp1 = SIPTransport()
+        self.assertIs(tp, tp1)
+
+        tp.listen()
+
+    def test_specific(self):
+        laddr = tp.listen(name="127.0.0.1")
 
         log.info('Make INVITE message')
         msg = sip.Message.invite()

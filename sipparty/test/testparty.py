@@ -70,10 +70,10 @@ class TestParty(SIPPartyTestCase):
 
         log.info('Start p1')
         p1 = BasicParty(
-            aor=b"alice@atlanta.com", contactURI_address=contactAddress)
+            aor=b"alice@atlanta.com", contactURI__address=contactAddress)
         log.info('p2')
         p2 = BasicParty(
-            aor=b"bob@biloxi.com", contactURI_address=contactAddress)
+            aor=b"bob@biloxi.com", contactURI__address=contactAddress)
         log.info('Listen p1')
         p1.listen()
         log.info('Listen p2')
@@ -94,7 +94,8 @@ class TestParty(SIPPartyTestCase):
 
         # Try another call.
         p3 = BasicParty(
-            aor=b"charlie@charlesville.com", contactURI_address=contactAddress)
+            aor=b"charlie@charlesville.com",
+            contactURI__address=contactAddress)
         p3.listen()
         self.assertTrue(p3.transport is p1.transport)
         self.assertTrue(p3.transport is p2.transport)

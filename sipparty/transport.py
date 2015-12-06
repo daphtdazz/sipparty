@@ -16,20 +16,22 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from six import (binary_type as bytes, iteritems, PY2)
-import socket
-import threading
-import time
-import collections
+from collections import Callable
+from six import (binary_type as bytes, iteritems, itervalues, PY2)
+import socket  # TODO: should remove and rely on from socket import ... below.
 import logging
 import select
-from socket import (SOCK_STREAM, SOCK_DGRAM, AF_INET, AF_INET6)
+from socket import (
+    socket as socket_class, SOCK_STREAM, SOCK_DGRAM, AF_INET, AF_INET6,
+    gethostname)
 from numbers import Integral
 import re
+from .deepclass import (dck, DeepClass)
 from .fsm import (FSM, RetryThread)
 from .util import (
-    abytes, AsciiBytesEnum, astr, bglobals_g, DerivedProperty, Enum, Singleton,
-    TwoCompatibleThree, WeakMethod)
+    abytes, AsciiBytesEnum, astr, bglobals_g, DerivedProperty, Enum,
+    Singleton,
+    TupleRepresentable, TwoCompatibleThree, WeakMethod)
 
 
 def bglobals():
@@ -66,7 +68,7 @@ IPaddress_re = re.compile(IPaddress + b'$')
 
 
 def default_hostname():
-    return socket.gethostname()
+    return gethostname()
 
 
 class TransportException(Exception):
@@ -197,6 +199,80 @@ def GetBoundSocket(family, socktype, address, port_filter=None):
     return ssocket
 
 
+def ValidPortNum(port):
+    return 0 < port <= 0xffff
+
+
+class ListenAddress(DeepClass('_laddr_', {
+            'port': {dck.check: ValidPortNum},
+            'sock_family': {dck.check: lambda x: x in SOCK_FAMILIES},
+            'sock_type': {dck.check: lambda x: x in SOCK_TYPES},
+            'name': {},
+            'flowinfo': {dck.check: lambda x: x == 0},
+            'scopeid': {dck.check: lambda x: x == 0}
+        }), TupleRepresentable):
+
+    def __init__(
+            self, name, port, sock_family, sock_type, flowinfo=None,
+            scopeid=None):
+
+        if sock_family == AF_INET6:
+            for ip6_attr in ('flowinfo', 'scopeid'):
+                if locals()[ip6_attr] is None:
+                    raise TypeError('Must specify %r for and IPv6 address.' %
+                        ip6_attr)
+
+        kwargs = {}
+        for attr in (
+                'port', 'name', 'sock_family', 'sock_type', 'flowinfo',
+                'scopeid'):
+            kwargs[attr] = locals()[attr]
+
+        super(ListenAddress, self).__init__(**kwargs)
+
+    def tupleRepr(self):
+        return (
+            self.__class__, self.sock_family, self.sock_type, self.port,
+            self.name)
+
+
+class _ListenSocket(DeepClass('_lsck_', {
+            'listen_address': {dck.check: lambda x: isinstance(
+                x, ListenAddress)},
+            'socket': {dck.check: lambda x: isinstance(x, socket_class)}
+        })):
+
+    def __init__(self, listen_address, socket, **kwargs):
+        for attr in ('listen_address', 'socket'):
+            kwargs[attr] = locals()[attr]
+
+        super(_ListenSocket, self).__init__(**kwargs)
+
+        self.__retain_count = 1
+
+    @property
+    def is_retained(self):
+        return self.__retain_count != 0
+
+    def retain(self):
+        self.__retain_count += 1
+
+    def release(self):
+        self.__retain_count -= 1
+
+    #
+    # =================== MAGIC METHODS =======================================
+    #
+    def __del__(self):
+        sck = self.socket
+        if sck is not None:
+            sck.shutdown()
+
+        dtr = getattr(super(self, _ListenSocket), '__del__', None)
+        if dtr is not None:
+            dtr()
+
+
 class Transport(Singleton):
     """Manages connection state and transport so You don't have to."""
     #
@@ -205,6 +281,20 @@ class Transport(Singleton):
     DefaultTransportType = SOCK_DGRAM
     DefaultPort = 0
     DefaultFamily = AF_INET
+
+    NameAll = type(
+        'ListenNameAllAddresses', (), {
+            '__repr__': lambda self: __name__ + '.Transport.NameAll',
+            '__doc__': (
+                'Use this singleton object in your call to listen_for_me to '
+                'indicate that you wish to listen on all addresses.')})()
+    NameLANHostname = type(
+        'ListenNameLANHostname', (), {
+            '__repr__': lambda self: __name__ + '.Transport.NameLANHostname',
+            '__doc__': (
+                'Use this singleton object in your call to listen_for_me to '
+                'indicate that you wish to listen on an address you have '
+                'exposed on the Local Area Network.')})()
 
     @classmethod
     def FormatBytesForLogging(cls, mbytes):
@@ -224,10 +314,196 @@ class Transport(Singleton):
         self._tp_retryThread = RetryThread()
         self._tp_retryThread.start()
 
+        # Series of dictionaries keyed by (in order):
+        # - socket family (AF_INET etc.)
+        # - socket type (SOCK_STREAM etc.)
+        # - socket name
+        # - socket port
+        self._tp_listen_sockets = {}
+
         # Keyed by (lAddr, rAddr) independent of type.
         self._tp_connBuffers = {}
         # Keyed by local address tuple.
         self._tp_dGramSockets = {}
+
+    def find_or_create_listen_socket(self, *args):
+
+        return (
+            self.find_listen_socket(*args) or self.create_listen_socket(*args))
+
+    def find_listen_socket(self, *args):
+
+        for lsck in self.iterate_dicts_to_sock(self._tp_listen_sockets, *args):
+            pass
+        log.debug('Got back lsck %r', lsck)
+        if isinstance(lsck, _ListenSocket):
+            return lsck
+
+        return None
+
+    def create_listen_socket(self, sock_family, sock_type, name, port,
+            flowinfo, scopeid, port_filter):
+
+        sck_address_tuple = (
+            (name, port) if sock_family == AF_INET else
+            (name, port, scopeid, port_filter))
+        sck = GetBoundSocket(
+            sock_family, sock_type, sck_address_tuple, port_filter)
+
+        if sock_type == SOCK_STREAM:
+            sck.listen()
+
+        sck_name = sck.getsockname()
+        name = sck_name[0]
+        port = sck_name[1]
+        lsck = _ListenSocket(ListenAddress(
+            name, port, sock_family, sock_type, flowinfo,
+            scopeid), sck)
+
+        keys = (sock_family, sock_type, name, port)
+        nd = self._tp_listen_sockets
+        dicts_to_sock_iter = self.iterate_dicts_to_sock(
+            nd, sock_family, sock_type, name, port,
+            flowinfo, scopeid, port_filter)
+        for key, index in zip(keys, range(len(keys))):
+            log.detail('Get item for key %r', key)
+            ld = nd
+            try:
+                nd = next(dicts_to_sock_iter)
+            except StopIteration:
+                break
+
+        log.detail(
+            'After search ld:%r, nd:%r, key:%r, index:%r', ld, nd, keys, index)
+        for rem_key in keys[index:-1]:
+            log.detail('Add key %r', rem_key)
+            nd = {}
+            ld[rem_key] = nd
+            ld = nd
+
+        ld[keys[-1]] = lsck
+
+        log.debug(
+            'Updated listen socket dictionary: %r', self._tp_listen_sockets)
+
+        return lsck
+
+    def iterate_dicts_to_sock(
+            self, family_dict, sock_family, sock_type, name, port,
+            flowinfo, scopeid, port_filter):
+
+        log.debug('Find a listen socket: %r', locals())
+        if sock_family is None:
+            raise NotImplementedError(
+                'Must currently specify a family for a listen socket.')
+
+        type_dict = family_dict.get(sock_family)
+        if type_dict is None:
+            type_dict = {}
+            family_dict[sock_family] = type_dict
+        yield type_dict
+        if not type_dict:
+            log.debug('No entries for the type yet.')
+            return
+
+        if sock_type is None:
+            raise NotImplementedError(
+                'Must currently specify a socket type for a listen socket.')
+
+        name_dict = type_dict.get(sock_type)
+        if name_dict is None:
+            name_dict = {}
+            type_dict[sock_type] = name_dict
+        yield name_dict
+        if not name_dict:
+            log.debug('No entries for the name yet.')
+            return
+
+        port_dict = name_dict.get(name)
+        if port_dict is None:
+            port_dict = {}
+            type_dict[name] = port_dict
+        yield port_dict
+        if not port_dict:
+            log.debug('No port entries for the name %r yet.', name)
+            return
+
+        if port == 0:
+            for port_num, lsck in iteritems(port_dict):
+                if port_filter is None:
+                    log.debug(
+                        'Returning first available listen socket with port %d',
+                        port_num)
+                    yield lsck
+                    break
+
+                if port_filter(port_num):
+                    log.debug(
+                        'Returning first available listen socket with port %d '
+                        'that satisfied the filter.',
+                        port_num)
+                    yield lsck
+                    break
+
+            return
+
+        lsck = port_dict.get(port)
+        if lsck is not None:
+            log.debug('Yielding existing listen socket for port %d', port)
+            yield lsck
+        return
+
+    def listen_for_me(self, callback, sock_type=None, sock_family=None,
+                      name=NameAll, port=0, port_filter=None, flowinfo=0,
+                      scopeid=0):
+
+        if flowinfo != 0 or scopeid != 0:
+            raise NotImplementedError(
+                'flowinfo and scopeid with values other than 0 can\'t be used '
+                'to specify a listen address yet.')
+
+        if not isinstance(callback, Callable):
+            raise TypeError(
+                '\'callback\' parameter %r is not a Callable' % callback)
+        if sock_family is None:
+            raise NotImplementedError(
+                'Currently you must specify an IP family to listen_for_me.')
+        if sock_family not in SOCK_FAMILIES:
+            raise TypeError(
+                'Invalid socket family: %s' % SockFamilyName(sock_family))
+
+        if name is self.NameAll:
+            name = '0.0.0.0' if sock_family == AF_INET else '::'
+        elif name is self.NameLANHostname:
+            name = default_hostname()
+
+        sock_type = self.fixSockType(sock_type)
+
+        lsck = self.find_or_create_listen_socket(
+            sock_family, sock_type, name, port, flowinfo, scopeid, port_filter)
+
+        self._tp_listen_sockets[lsck.listen_address] = lsck
+        return lsck.listen_address
+
+        if sock_type == SOCK_DGRAM:
+            return self.listenDgram(name, port, port_filter)
+
+        return self.listenStream(name, port, port_filter)
+
+    def release_listen(self, listen_address):
+        if not isinstance(listen_address, ListenAddress):
+            raise TypeError(
+                'Cannot release something which is not a ListenAddress: %r' % (
+                    listen_address))
+
+        listen_socket = self._tp_listen_sockets.get(listen_address)
+        if listen_socket is None:
+            raise KeyError(
+                '%r was not a known ListenAddress.' % (listen_address))
+
+        listen_socket.release()
+        if not listen_socket.is_retained:
+            del self._tp_listen_sockets[listen_address]
 
     def resolveHost(self, host, port=None, family=None):
         """Resolve a host.
@@ -261,16 +537,16 @@ class Transport(Singleton):
     def sendMessage(self, msg, toAddr, fromAddr=None, sockType=None):
         sockType = self.fixSockType(sockType)
         if sockType == SOCK_DGRAM:
-            return self.sendDgramMessage(msg, toAddr, fromAddr)
+            return self._sendDgramMessage(msg, toAddr, fromAddr)
 
         return self.sendStreamMessage(msg, toAddr, fromAddr)
 
-    def sendDgramMessage(self, msg, toAddr, fromAddr):
+    def _sendDgramMessage(self, msg, toAddr, fromAddr):
         assert isinstance(msg, bytes)
 
         if fromAddr is not None:
             try:
-                return self.sendDgramMessageFrom(msg, toAddr, fromAddr)
+                return self._sendDgramMessageFrom(msg, toAddr, fromAddr)
             except BadNetwork:
                 log.error(
                     "Bad network, currently have sockets: %r",
@@ -300,7 +576,7 @@ class Transport(Singleton):
         else:
             raise exc
 
-    def sendDgramMessageFrom(self, msg, toAddr, fromAddr):
+    def _sendDgramMessageFrom(self, msg, toAddr, fromAddr):
         """:param msg: The message (a bytes-able) to send.
         :param toAddr: The place to send to. This should be *post* address
         resolution, so this must be either a 2 (IPv4) or a 4 (IPv6) tuple.
@@ -332,18 +608,6 @@ class Transport(Singleton):
         self._tp_dGramSockets[sck.getsockname()] = sck
         log.debug("%r Dgram sockets now: %r", self, self._tp_dGramSockets)
 
-    def listen(self, sockType=None, lHostName=None, port=None,
-               port_filter=None):
-        sockType = self.fixSockType(sockType)
-        if sockType not in SOCK_TYPES:
-            raise ValueError(
-                "Listen socket type must be one of %r" % (SOCK_TYPES_NAMES,))
-
-        if sockType == SOCK_DGRAM:
-            return self.listenDgram(lHostName, port, port_filter)
-
-        return self.listenStream(lHostName, port, port_filter)
-
     #
     # =================== MAGIC METHODS =======================================
     #
@@ -361,10 +625,15 @@ class Transport(Singleton):
     #
     # =================== INTERNAL METHODS ====================================
     #
-    def fixSockType(self, sockType):
-        if sockType is None:
-            sockType = self.DefaultTransportType
-        return sockType
+    def fixSockType(self, sock_type):
+        if sock_type is None:
+            sock_type = self.DefaultTransportType
+
+        if sock_type not in SOCK_TYPES:
+            raise ValueError(
+                "Socket type must be one of %r" % (SOCK_TYPES_NAMES,))
+
+        return sock_type
 
     def listenDgram(self, lAddrName, port, port_filter):
         sock = GetBoundSocket(None, SOCK_DGRAM, (lAddrName, port), port_filter)

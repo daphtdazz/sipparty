@@ -17,12 +17,44 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-import socket
-import sys
-import unittest
+from socket import (SOCK_STREAM, SOCK_DGRAM, AF_INET, AF_INET6)
+from ..transport import (ListenAddress, Transport)
+from .setup import (MagicMock, patch, SIPPartyTestCase)
 
 log = logging.getLogger(__name__)
+log.setLevel(logging.INFO)
 
 
-class TestTransport(unittest.TestCase):
-    pass
+class TestTransport(SIPPartyTestCase):
+
+    def setUp(self):
+        super(TestTransport, self).setUp()
+        self.data_call_back_call_args = []
+
+    def data_callback(self, from_address, to_address, data):
+        self.data_call_back_call_args.append((
+            from_address, to_address, data))
+
+    def test_listen_address(self):
+        log.info('ListenAddress requires a port argument')
+
+        sock_family = AF_INET
+
+        self.assertRaises(TypeError, ListenAddress)
+        ListenAddress('somename', 5060, AF_INET, SOCK_STREAM)
+
+        log.info('Get a standard (IPv4) listen address from the transport.')
+        tp = Transport()
+        self.assertRaises(TypeError, tp.listen_for_me, 'not-a-callable')
+        self.assertRaises(
+            NotImplementedError, tp.listen_for_me, self.data_callback)
+        self.assertRaises(
+            ValueError, tp.listen_for_me, self.data_callback,
+            sock_family=sock_family,
+            sock_type='not-sock-type')
+        self.pushLogLevel('transport', logging.DETAIL)
+        laddr = tp.listen_for_me(self.data_callback, sock_family=sock_family)
+        self.assertTrue(isinstance(laddr, ListenAddress), laddr)
+        laddr2 = tp.listen_for_me(self.data_callback, sock_family=sock_family)
+        self.assertIs(laddr, laddr2, laddr)
+

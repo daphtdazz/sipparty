@@ -162,7 +162,7 @@ class Party(
         log.debug("Listen on %r:%r", contactAddress, contactPort)
 
         tp = self.transport
-        lAddr = tp.listen(lHostName=contactAddress, port=contactPort)
+        lAddr = tp.listen(name=contactAddress, port=contactPort)
         assert lAddr[1] != 0
         log.info("Party listening on %r", lAddr)
         self._pt_listenAddress = lAddr

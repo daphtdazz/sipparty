@@ -759,11 +759,25 @@ class TupleRepresentable(object):
     """Semi-abstract base class for objects that can be represented
     by Tuples, providing equality and hash function."""
 
+    #
+    # =================== ABC INTERFACE =======================================
+    #
     @abstractmethod
     def tupleRepr(self):
         raise AttributeError(
             "%r needs to implement 'tupleRepr' itself to inherit from "
             "TupleRepresentable" % (self.__class__.__name__,))
+
+    #
+    # =================== INTERNAL METHODS ====================================
+    #
+    def __get_check_tuple_repr(self):
+        mytr = self.tupleRepr()
+        if not isinstance(mytr, tuple):
+            raise TypeError(
+                '%r instance tupleRepr method returned a value that was not a '
+                'tuple: %r' % (self.__class__.__name__, mytr))
+        return mytr
 
     #
     # =================== MAGIC METHODS =======================================
@@ -774,10 +788,11 @@ class TupleRepresentable(object):
     def __eq__(self, other):
         if not isinstance(other, TupleRepresentable):
             return False
-        return self.tupleRepr() == other.tupleRepr()
+        mytr = self.__get_check_tuple_repr()
+        return mytr == other.tupleRepr()
 
     def __hash__(self):
-        return hash(self.tupleRepr())
+        return hash(self.__get_check_tuple_repr())
 
 
 @TwoCompatibleThree

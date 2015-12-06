@@ -31,11 +31,6 @@ log = logging.getLogger(__name__)
 
 class TestDeepClass(SIPPartyTestCase):
 
-    def setUp(self):
-        # self.pushLogLevel("deepclass", logging.DETAIL)
-        # self.pushLogLevel("vb", logging.DETAIL)
-        pass
-
     def testVBInteraction(self):
 
         class TDObj(object):
@@ -79,3 +74,22 @@ class TestDeepClass(SIPPartyTestCase):
         testVbdc = TVBDC()
         self.assertIsNotNone(testVbdc.attrA)
         self.assertTrue(testVbdc.attrA is testVbdc.attrB)
+
+    def test_empty_prop(self):
+
+        log.info(
+            'Test a deepclass subclass has correct initial values for empty '
+            'attributes, and attribute \'name\' which originally was broken')
+
+        class TestDeepClass(DeepClass('_tdc_', {
+                    'attr1': {},
+                    'integral_attr': {
+                        dck.check: lambda x: isinstance(x, Integral)},
+                    'name': {},
+                })):
+            pass
+
+        tdc = TestDeepClass()
+        for attr in ('attr1', 'integral_attr', 'name'):
+            self.assertTrue(hasattr(tdc, attr), attr)
+            self.assertIs(getattr(tdc, attr), None, attr)
