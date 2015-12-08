@@ -79,17 +79,17 @@ find . -name "*.pyc" -delete
 if (( ${#tests} > 0 ))
 then
     python -m unittest unittest_logging "${tests[@]}" &
+    child_pid=$!
 else
     if (( pymajver > 2 ))
     then
         python -m unittest &
+        child_pid=$!
     else
         python -m unittest discover &
+        child_pid=$!
     fi
 fi
 
-while ! wait
-do :
-done
-
+wait "${child_pid}"
 exit $?
