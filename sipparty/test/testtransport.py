@@ -58,3 +58,11 @@ class TestTransport(SIPPartyTestCase):
         laddr2 = tp.listen_for_me(self.data_callback, sock_family=sock_family)
         self.assertIs(laddr, laddr2, laddr)
 
+        log.info('Release address once')
+        tp.release_listen_address(laddr)
+        log.info('Release address twice')
+        tp.release_listen_address(laddr)
+        log.info(
+            'Release address thrice and get an exception as it has now been '
+            'freed.')
+        self.assertRaises(KeyError, tp.release_listen_address, laddr)

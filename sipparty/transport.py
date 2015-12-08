@@ -17,17 +17,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 from collections import Callable
-from six import (binary_type as bytes, iteritems, itervalues, PY2)
+from six import (binary_type as bytes, iteritems, itervalues)
 import socket  # TODO: should remove and rely on from socket import ... below.
 import logging
-import select
 from socket import (
     socket as socket_class, SOCK_STREAM, SOCK_DGRAM, AF_INET, AF_INET6,
     gethostname)
 from numbers import Integral
 import re
 from .deepclass import (dck, DeepClass)
-from .fsm import (FSM, RetryThread)
+from .fsm import (RetryThread)
 from .util import (
     abytes, AsciiBytesEnum, astr, bglobals_g, DerivedProperty, Enum,
     Singleton,
@@ -203,14 +202,15 @@ def ValidPortNum(port):
     return 0 < port <= 0xffff
 
 
-class ListenAddress(DeepClass('_laddr_', {
+class ListenAddress(
+        DeepClass('_laddr_', {
             'port': {dck.check: ValidPortNum},
             'sock_family': {dck.check: lambda x: x in SOCK_FAMILIES},
             'sock_type': {dck.check: lambda x: x in SOCK_TYPES},
             'name': {},
             'flowinfo': {dck.check: lambda x: x == 0},
-            'scopeid': {dck.check: lambda x: x == 0}
-        }), TupleRepresentable):
+            'scopeid': {dck.check: lambda x: x == 0}}),
+        TupleRepresentable):
 
     def __init__(
             self, name, port, sock_family, sock_type, flowinfo=None,
@@ -219,8 +219,8 @@ class ListenAddress(DeepClass('_laddr_', {
         if sock_family == AF_INET6:
             for ip6_attr in ('flowinfo', 'scopeid'):
                 if locals()[ip6_attr] is None:
-                    raise TypeError('Must specify %r for and IPv6 address.' %
-                        ip6_attr)
+                    raise TypeError(
+                        'Must specify %r for and IPv6 address.' % ip6_attr)
 
         kwargs = {}
         for attr in (
@@ -236,7 +236,8 @@ class ListenAddress(DeepClass('_laddr_', {
             self.name)
 
 
-class _ListenSocket(DeepClass('_lsck_', {
+class _ListenSocket(
+        DeepClass('_lsck_', {
             'listen_address': {dck.check: lambda x: isinstance(
                 x, ListenAddress)},
             'socket': {dck.check: lambda x: isinstance(x, socket_class)}
@@ -328,8 +329,11 @@ class Transport(Singleton):
 
     def find_or_create_listen_socket(self, *args):
 
-        return (
-            self.find_listen_socket(*args) or self.create_listen_socket(*args))
+        lsck = self.find_listen_socket(*args)
+        if lsck is not None:
+            lsck.retain()
+            return lsck
+        return self.create_listen_socket(*args)
 
     def find_listen_socket(self, *args):
 
@@ -342,7 +346,7 @@ class Transport(Singleton):
         return None
 
     def create_listen_socket(self, sock_family, sock_type, name, port,
-            flowinfo, scopeid, port_filter):
+                             flowinfo, scopeid, port_filter):
 
         sck_address_tuple = (
             (name, port) if sock_family == AF_INET else
@@ -390,7 +394,7 @@ class Transport(Singleton):
 
     def iterate_dicts_to_sock(
             self, family_dict, sock_family, sock_type, name, port,
-            flowinfo, scopeid, port_filter):
+            flowinfo, scopeid, port_filter=None):
 
         log.debug('Find a listen socket: %r', locals())
         if sock_family is None:
@@ -482,28 +486,36 @@ class Transport(Singleton):
         lsck = self.find_or_create_listen_socket(
             sock_family, sock_type, name, port, flowinfo, scopeid, port_filter)
 
-        self._tp_listen_sockets[lsck.listen_address] = lsck
         return lsck.listen_address
 
-        if sock_type == SOCK_DGRAM:
-            return self.listenDgram(name, port, port_filter)
+    @staticmethod
+    def convert_listen_address_into_find_tuple(listen_address):
+        return (
+            listen_address.sock_family, listen_address.sock_type,
+            listen_address.name, listen_address.port, listen_address.flowinfo,
+            listen_address.scopeid, None)
 
-        return self.listenStream(name, port, port_filter)
-
-    def release_listen(self, listen_address):
+    def release_listen_address(self, listen_address):
         if not isinstance(listen_address, ListenAddress):
             raise TypeError(
                 'Cannot release something which is not a ListenAddress: %r' % (
                     listen_address))
 
-        listen_socket = self._tp_listen_sockets.get(listen_address)
-        if listen_socket is None:
+        ldict = None
+        lsck = None
+        for dict_to_sock_item in self.iterate_dicts_to_sock(
+                self._tp_listen_sockets,
+                *self.convert_listen_address_into_find_tuple(listen_address)):
+            ldict = lsck
+            lsck = dict_to_sock_item
+
+        if not isinstance(lsck, _ListenSocket):
             raise KeyError(
                 '%r was not a known ListenAddress.' % (listen_address))
 
-        listen_socket.release()
-        if not listen_socket.is_retained:
-            del self._tp_listen_sockets[listen_address]
+        lsck.release()
+        if not lsck.is_retained:
+            del ldict[lsck.listen_address.port]
 
     def resolveHost(self, host, port=None, family=None):
         """Resolve a host.
@@ -529,7 +541,7 @@ class Transport(Singleton):
                 if family is not None and ai[0] != family:
                     continue
                 return ai[4]
-        except socket.gaierror as exc:
+        except socket.gaierror:
             pass
 
         raise(UnresolvableAddress(address=host, port=port))

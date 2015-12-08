@@ -17,16 +17,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-from six import (binary_type as bytes, itervalues)
-import socket
-from weakref import (WeakValueDictionary, ref as weakref)
+from six import (binary_type as bytes)
+from weakref import (WeakValueDictionary)
 from ..parse import ParseError
 from ..transport import (Transport, SockTypeFromName)
 from ..util import (DerivedProperty, Singleton, WeakMethod)
 from . import prot
 from .components import Host
 from .message import Message
-from .transform import (TransformKeys,)
 
 log = logging.getLogger(__name__)
 prot_log = logging.getLogger("messages")
@@ -84,7 +82,7 @@ class SIPTransport(Singleton):
     def removeDialogHandlerForAOR(self, aor):
 
         hdlrs = self._sptr_dialogHandlers
-        if handler not in hdlrs:
+        if aor not in hdlrs:
             raise KeyError(
                 "AOR handler not registered for AOR %r" % bytes(aor))
 
@@ -144,7 +142,7 @@ class SIPTransport(Singleton):
 
         try:
             self.consumeMessage(msg)
-        except Exception as exc:
+        except Exception:
             log.exception(
                 "Consuming %r message raised exception.", msg)
 
@@ -182,7 +180,6 @@ class SIPTransport(Singleton):
         hdlrs[toAOR](msg)
 
     def consumeInDialogMessage(self, msg):
-        toAOR = msg.ToHeader.field.value.uri.aor
         estDs = self.establishedDialogs
 
         if msg.isresponse():
@@ -243,7 +240,7 @@ class SIPTransport(Singleton):
 
         try:
             did = dlg.dialogID
-            eds = tp.establishedDialogs
+            eds = self.establishedDialogs
             if did in eds:
                 del eds[did]
         except AttributeError:
