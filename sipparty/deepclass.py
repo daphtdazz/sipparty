@@ -51,7 +51,7 @@ def DCProperty(tlp, name, attrDesc):
     return DerivedProperty(internalName, **dpdict)
 
 
-def DeepClass(topLevelPrepend, topLevelAttributeDescs):
+def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
     """Creates a deep class type which
     """
 
@@ -247,7 +247,9 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
             return gen(**tlsvals)
 
         def __repr__(self):
-            return("%s(%s)" % (
-                self.__class__.__name__, ", ".join(self._dc_kvReprGen())))
+            myattrs = [attr_line for attr_line in self._dc_kvReprGen()]
+            if recurse_repr and hasattr(super(DeepClass, self), '_dc_kvReprGen'):
+                myattrs.extend([sattr for sattr in super(DeepClass, self)._dc_kvReprGen()])
+            return("%s(%s)" % (self.__class__.__name__, ", ".join(myattrs)))
 
     return DeepClass

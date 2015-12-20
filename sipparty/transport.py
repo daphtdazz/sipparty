@@ -28,8 +28,8 @@ import re
 from .deepclass import (dck, DeepClass)
 from .fsm import (RetryThread)
 from .util import (
-    abytes, AsciiBytesEnum, astr, bglobals_g, DerivedProperty, Enum,
-    Singleton,
+    abytes, AsciiBytesEnum, astr, bglobals_g, DelegateProperty,
+    DerivedProperty, Enum, Singleton,
     TupleRepresentable, TwoCompatibleThree, WeakMethod)
 
 
@@ -204,17 +204,28 @@ def ValidPortNum(port):
 
 class ListenAddress(
         DeepClass('_laddr_', {
-            'port': {dck.check: ValidPortNum},
+            'port': {dck.check: lambda x: x == 0 or ValidPortNum(x)},
             'sock_family': {dck.check: lambda x: x in SOCK_FAMILIES},
             'sock_type': {dck.check: lambda x: x in SOCK_TYPES},
             'name': {},
             'flowinfo': {dck.check: lambda x: x == 0},
-            'scopeid': {dck.check: lambda x: x == 0}}),
+            'scopeid': {dck.check: lambda x: x == 0},
+            'port_filter': {dck.check: lambda x: isinstance(x, Callable)}}),
         TupleRepresentable):
 
+    @classmethod
+    def address_from_socket(cls, sck):
+        sname = sck.getsockname()
+
+        addr = cls(
+            name=sname[0], sock_family=sck.family, sock_type=sck.type,
+            port=sname[1], flowinfo=None if len(sname) == 2 else sname[2],
+            scopeid=None if len(sname) == 2 else sname[3])
+        return addr
+
     def __init__(
-            self, name, port, sock_family, sock_type, flowinfo=None,
-            scopeid=None):
+            self, name, sock_family, sock_type, flowinfo=None,
+            scopeid=None, **kwargs):
 
         if sock_family == AF_INET6:
             for ip6_attr in ('flowinfo', 'scopeid'):
@@ -222,34 +233,84 @@ class ListenAddress(
                     raise TypeError(
                         'Must specify %r for and IPv6 address.' % ip6_attr)
 
-        kwargs = {}
         for attr in (
-                'port', 'name', 'sock_family', 'sock_type', 'flowinfo',
+                'name', 'sock_family', 'sock_type', 'flowinfo',
                 'scopeid'):
             kwargs[attr] = locals()[attr]
 
         super(ListenAddress, self).__init__(**kwargs)
+
+    @property
+    def sockname_tuple(self):
+        if self.name == Transport.SendFromAddressNameAny:
+            name = '0.0.0.0' if self.sock_family == AF_INET else '::'
+        else:
+            name = self.name
+        if self.sock_family == AF_INET:
+            return (name, self.port)
+        return (name, self.port, self.flowinfo, self.scopeid)
 
     def tupleRepr(self):
         return (
             self.__class__, self.sock_family, self.sock_type, self.port,
             self.name)
 
+    def listen(self):
+        """Return a _ListenSocket using the ListenAddress's parameters, or
+        raise an exception if not possible.
+        """
+        lsck = GetBoundSocket(
+            self.sock_family, self.sock_type, self.sockname_tuple,
+            self.port_filter)
 
-class _ListenSocket(
-        DeepClass('_lsck_', {
-            'listen_address': {dck.check: lambda x: isinstance(
-                x, ListenAddress)},
-            'socket': {dck.check: lambda x: isinstance(x, socket_class)}
-        })):
+        laddr = self.address_from_socket(lsck)
 
-    def __init__(self, listen_address, socket, **kwargs):
-        for attr in ('listen_address', 'socket'):
-            kwargs[attr] = locals()[attr]
+        return _ListenSocket(laddr, lsck)
 
-        super(_ListenSocket, self).__init__(**kwargs)
 
-        self.__retain_count = 1
+class ConnectedAddressDescription(
+        DeepClass('_cad_', {
+            'remote_name': {},
+            'remote_port': {dck.check: ValidPortNum},
+        }, recurse_repr=True),
+        ListenAddress):
+
+    @classmethod
+    def address_from_socket(cls, sck):
+        cad = super(ConnectedAddressDescription, cls).address_from_socket(sck)
+
+        cad.remote_name, cad.remote_port = sck.getpeername()
+        return cad
+
+    @property
+    def remote_sockname_tuple(self):
+        if self.sock_family == AF_INET:
+            return (self.remote_name, self.remote_port)
+        return (
+            self.remote_name, self.remote_port, self.flowinfo, self.scopeid)
+
+    def connect(self):
+        """Attempt to connect this description.
+        :returns: _ConnectedSocket
+        """
+
+        sck = socket.socket(self.sock_family, self.sock_type)
+        sck.bind(self.sockname_tuple)
+        sck.connect(self.remote_sockname_tuple)
+
+        csck = _ConnectedSocket(
+            local_address = ConnectedAddressDescription.address_from_socket(
+                sck),
+            socket=sck)
+
+        return csck
+
+
+class Retainable(object):
+
+    def __init__(self):
+        super(Retainable, self).__init__()
+        self.__retain_count = 0
 
     @property
     def is_retained(self):
@@ -257,9 +318,21 @@ class _ListenSocket(
 
     def retain(self):
         self.__retain_count += 1
+        log.debug('retain count now %d', self.__retain_count)
 
     def release(self):
         self.__retain_count -= 1
+        log.debug('retain count now %d', self.__retain_count)
+
+
+class _Socket(
+        DeepClass('_sck_', {
+            'local_address': {dck.check: lambda x: isinstance(
+                x, ListenAddress)},
+            'socket': {dck.check: lambda x: isinstance(x, socket_class)}
+        }), Retainable):
+
+    send = DelegateProperty('socket', 'send')
 
     #
     # =================== MAGIC METHODS =======================================
@@ -272,6 +345,23 @@ class _ListenSocket(
         dtr = getattr(super(self, _ListenSocket), '__del__', None)
         if dtr is not None:
             dtr()
+
+class _ListenSocket(_Socket):
+
+    @property
+    def listen_address(self):
+        return self.local_address
+
+    def __init__(self, listen_address, socket, **kwargs):
+        for attr in ('socket',):
+            kwargs[attr] = locals()[attr]
+        kwargs['local_address'] = listen_address
+
+        super(_ListenSocket, self).__init__(**kwargs)
+
+
+class _ConnectedSocket(_Socket):
+    pass
 
 
 class Transport(Singleton):
@@ -297,6 +387,16 @@ class Transport(Singleton):
                 'indicate that you wish to listen on an address you have '
                 'exposed on the Local Area Network.')})()
 
+    SendFromAddressNameAny = type(
+        'SendFromAddressNameAny', (), {
+            '__repr__': lambda self: (
+                __name__ + '.Transport.SendFromAddressNameAny'),
+            '__doc__': (
+                'Use this singleton object in your call to '
+                'get_send_from_address to '
+                'indicate that you wish to send from any routable '
+                'local address.')})()
+
     @classmethod
     def FormatBytesForLogging(cls, mbytes):
         return '\\n\n'.join(
@@ -321,141 +421,12 @@ class Transport(Singleton):
         # - socket name
         # - socket port
         self._tp_listen_sockets = {}
+        self._tp_connected_sockets = {}
 
         # Keyed by (lAddr, rAddr) independent of type.
         self._tp_connBuffers = {}
         # Keyed by local address tuple.
         self._tp_dGramSockets = {}
-
-    def find_or_create_listen_socket(self, *args):
-
-        lsck = self.find_listen_socket(*args)
-        if lsck is not None:
-            lsck.retain()
-            return lsck
-        return self.create_listen_socket(*args)
-
-    def find_listen_socket(self, *args):
-
-        for lsck in self.iterate_dicts_to_sock(self._tp_listen_sockets, *args):
-            pass
-        log.debug('Got back lsck %r', lsck)
-        if isinstance(lsck, _ListenSocket):
-            return lsck
-
-        return None
-
-    def create_listen_socket(self, sock_family, sock_type, name, port,
-                             flowinfo, scopeid, port_filter):
-
-        sck_address_tuple = (
-            (name, port) if sock_family == AF_INET else
-            (name, port, scopeid, port_filter))
-        sck = GetBoundSocket(
-            sock_family, sock_type, sck_address_tuple, port_filter)
-
-        if sock_type == SOCK_STREAM:
-            sck.listen()
-
-        sck_name = sck.getsockname()
-        name = sck_name[0]
-        port = sck_name[1]
-        lsck = _ListenSocket(ListenAddress(
-            name, port, sock_family, sock_type, flowinfo,
-            scopeid), sck)
-
-        keys = (sock_family, sock_type, name, port)
-        nd = self._tp_listen_sockets
-        dicts_to_sock_iter = self.iterate_dicts_to_sock(
-            nd, sock_family, sock_type, name, port,
-            flowinfo, scopeid, port_filter)
-        for key, index in zip(keys, range(len(keys))):
-            log.detail('Get item for key %r', key)
-            ld = nd
-            try:
-                nd = next(dicts_to_sock_iter)
-            except StopIteration:
-                break
-
-        log.detail(
-            'After search ld:%r, nd:%r, key:%r, index:%r', ld, nd, keys, index)
-        for rem_key in keys[index:-1]:
-            log.detail('Add key %r', rem_key)
-            nd = {}
-            ld[rem_key] = nd
-            ld = nd
-
-        ld[keys[-1]] = lsck
-
-        log.debug(
-            'Updated listen socket dictionary: %r', self._tp_listen_sockets)
-
-        return lsck
-
-    def iterate_dicts_to_sock(
-            self, family_dict, sock_family, sock_type, name, port,
-            flowinfo, scopeid, port_filter=None):
-
-        log.debug('Find a listen socket: %r', locals())
-        if sock_family is None:
-            raise NotImplementedError(
-                'Must currently specify a family for a listen socket.')
-
-        type_dict = family_dict.get(sock_family)
-        if type_dict is None:
-            type_dict = {}
-            family_dict[sock_family] = type_dict
-        yield type_dict
-        if not type_dict:
-            log.debug('No entries for the type yet.')
-            return
-
-        if sock_type is None:
-            raise NotImplementedError(
-                'Must currently specify a socket type for a listen socket.')
-
-        name_dict = type_dict.get(sock_type)
-        if name_dict is None:
-            name_dict = {}
-            type_dict[sock_type] = name_dict
-        yield name_dict
-        if not name_dict:
-            log.debug('No entries for the name yet.')
-            return
-
-        port_dict = name_dict.get(name)
-        if port_dict is None:
-            port_dict = {}
-            type_dict[name] = port_dict
-        yield port_dict
-        if not port_dict:
-            log.debug('No port entries for the name %r yet.', name)
-            return
-
-        if port == 0:
-            for port_num, lsck in iteritems(port_dict):
-                if port_filter is None:
-                    log.debug(
-                        'Returning first available listen socket with port %d',
-                        port_num)
-                    yield lsck
-                    break
-
-                if port_filter(port_num):
-                    log.debug(
-                        'Returning first available listen socket with port %d '
-                        'that satisfied the filter.',
-                        port_num)
-                    yield lsck
-                    break
-
-            return
-
-        lsck = port_dict.get(port)
-        if lsck is not None:
-            log.debug('Yielding existing listen socket for port %d', port)
-            yield lsck
-        return
 
     def listen_for_me(self, callback, sock_type=None, sock_family=None,
                       name=NameAll, port=0, port_filter=None, flowinfo=0,
@@ -464,17 +435,13 @@ class Transport(Singleton):
         if flowinfo != 0 or scopeid != 0:
             raise NotImplementedError(
                 'flowinfo and scopeid with values other than 0 can\'t be used '
-                'to specify a listen address yet.')
+                'yet.')
 
         if not isinstance(callback, Callable):
             raise TypeError(
                 '\'callback\' parameter %r is not a Callable' % callback)
-        if sock_family is None:
-            raise NotImplementedError(
-                'Currently you must specify an IP family to listen_for_me.')
-        if sock_family not in SOCK_FAMILIES:
-            raise TypeError(
-                'Invalid socket family: %s' % SockFamilyName(sock_family))
+
+        sock_family = self.fix_sock_family(sock_family)
 
         if name is self.NameAll:
             name = '0.0.0.0' if sock_family == AF_INET else '::'
@@ -483,39 +450,226 @@ class Transport(Singleton):
 
         sock_type = self.fixSockType(sock_type)
 
-        lsck = self.find_or_create_listen_socket(
-            sock_family, sock_type, name, port, flowinfo, scopeid, port_filter)
+        provisional_laddr = ListenAddress(
+            sock_family=sock_family, sock_type=sock_type, name=name,
+            port=port, flowinfo=flowinfo, scopeid=scopeid,
+            port_filter=port_filter)
 
-        return lsck.listen_address
+        lsck = self.find_or_create_listen_socket(provisional_laddr)
+
+        return lsck.local_address
+
+    def get_send_from_address(
+            self, sock_type=None, sock_family=None,
+            name=SendFromAddressNameAny, port=0, flowinfo=0, scopeid=0,
+            remote_name=None, remote_port=None, port_filter=None):
+
+        sock_type = self.fixSockType(sock_type)
+        sock_family = self.fix_sock_family(sock_family)
+
+        cad = ConnectedAddressDescription(
+            sock_type=sock_type, sock_family=sock_family, name=name, port=port,
+            port_filter=port_filter, flowinfo=flowinfo, scopeid=scopeid,
+            remote_name=remote_name, remote_port=remote_port)
+
+        fsck = self.find_or_create_send_from_socket(cad)
+
+        return fsck.local_address
+
+    def send(self, data, cad):
+        _, csck = self.find_send_from_socket(cad)
+        if csck is None:
+            raise KeyError('No socket for address %r', cad)
+
+        csck.send(data)
+
+    def find_or_create_listen_socket(self, local_address):
+
+        log.debug('Find local address %r', local_address)
+        tpl = self.convert_listen_address_into_find_tuple(local_address)
+        path, lsck = self.find_cached_object(self._tp_listen_sockets, tpl)
+
+        if lsck is not None:
+            log.debug('Found socket')
+            lsck.retain()
+            return lsck
+
+        _sck = local_address.listen()
+        _sck.retain()
+
+        sub_root = path[-1][1] if len(path) > 0 else self._tp_listen_sockets
+
+        tpl = self.convert_listen_address_into_find_tuple(_sck.local_address)
+        self.insert_cached_object(
+            sub_root, [obj[0] for obj in tpl[len(path):]], _sck)
+
+        return _sck
+
+    def find_send_from_socket(self, cad):
+        log.debug('Attempt to find send from address')
+        tpl = self.convert_connected_address_description_into_find_tuple(cad)
+        path, sck = self.find_cached_object(self._tp_connected_sockets, tpl)
+        if sck is not None:
+            sck.retain()
+        return path, sck
+
+    def find_or_create_send_from_socket(self, cad):
+
+        path, sck = self.find_send_from_socket(cad)
+        if sck is not None:
+            log.debug('Found existing send from socket')
+            return sck
+
+        sck = cad.connect()
+        sck.retain()
+
+        sub_root = path[-1][1] if len(path) > 0 else self._tp_connected_sockets
+
+        tpl = self.convert_connected_address_description_into_find_tuple(
+            sck.local_address)
+        self.insert_cached_object(
+            sub_root, [obj[0] for obj in tpl[len(path):]], sck)
+
+        return sck
+
+    def find_cached_object(self, cache_dict, find_tuple):
+
+        log.debug('Cache dict: %r', cache_dict)
+        log.debug('Find tuple: %r', find_tuple)
+        full_path_len = len(find_tuple)
+        path = [
+            (key, obj) for key, obj in self.yield_dict_path(
+                cache_dict,
+                find_tuple)]
+
+        log.debug(
+            'Path is %d long, full find tuple is %d long', len(path),
+            full_path_len)
+
+        assert len(path) <= full_path_len
+        if len(path) == full_path_len:
+            lsck = path[-1][1]
+            log.debug('Found object %r', lsck)
+            return path, lsck
+        return path, None
 
     @staticmethod
+    def insert_cached_object(root, path, obj):
+
+        next_dict = root
+        for key in path[:-1]:
+            new_dict = {}
+            next_dict[key] = new_dict
+            next_dict = new_dict
+        next_dict[path[-1]] = obj
+        return
+
+        last_obj = path[-1][1]
+        if len(path) <= self._listen_path_name_index:
+            nd = {}
+            last_obj[_sck.local_address.name] = nd
+            last_obj = nd
+
+        assert 0, (tpl, path)
+        if len(path) <= self._listen_path_port_index:
+            nd = {} if _sck.local_address.sock_family == AF_INET6 else _sck
+            last_obj[_sck.local_address.port] = nd
+            last_obj = nd
+
+        if _sck.local_address.sock_family == AF_INET:
+            return _sck
+
+        assert 0
+
+        return lsck
+
+    _yield_sentinel = type('YieldDictPathSentinel', (), {})()
+    @classmethod
+    def yield_dict_path(cls, root_dict, lookups):
+        next_dict = root_dict
+        sentinel = cls._yield_sentinel
+        for key, finder in lookups:
+            obj = next_dict.get(key, sentinel)
+            if obj is sentinel:
+                if not isinstance(finder, Callable):
+                    return
+
+                key, obj = finder(next_dict, key)
+                if obj is None:
+                    return
+                next_dict[key] = obj
+            yield key, obj
+            next_dict = obj
+
+    _listen_path_name_index = 2
+    _listen_path_port_index = 3
+    @staticmethod
     def convert_listen_address_into_find_tuple(listen_address):
+
+        pfilter = listen_address.port_filter
+        def find_suitable_port(pdict, port):
+            if port != 0:
+                return None, None
+
+            for port, next_dict in iteritems(pdict):
+                if pfilter is None or pfilter(port):
+                    return port, next_dict
+
+            return None, None
+
+        def find_suitable_name(pdict, name):
+            if name != Transport.SendFromAddressNameAny:
+                return None, None
+
+            for name, name_dict in iteritems(pdict):
+                return name, name_dict
+
+            return None, None
+
+        rtup = (
+            (listen_address.sock_family, lambda _dict, key: (key, {})),
+            (listen_address.sock_type, lambda _dict, key: (key, {})),
+            (listen_address.name, find_suitable_name),
+            (listen_address.port, find_suitable_port),
+            (listen_address.flowinfo, lambda _dict, key: (key, {})),
+            (listen_address.scopeid, None))
+        if listen_address.sock_family == AF_INET:
+            return rtup[:-2]
+        return rtup
+
+    @staticmethod
+    def convert_connected_address_description_into_find_tuple(cad):
+
+        ladtuple = Transport.convert_listen_address_into_find_tuple(cad)
+
+        # The remote address is more significant than the local one. So we
+        # allow a caller to request a connection to a particular address, but
+        # leave the local address undefined.
+
         return (
-            listen_address.sock_family, listen_address.sock_type,
-            listen_address.name, listen_address.port, listen_address.flowinfo,
-            listen_address.scopeid, None)
+            ladtuple[:2] + ((cad.remote_name, None), (cad.remote_port, None)) +
+            ladtuple[2:])
 
     def release_listen_address(self, listen_address):
+        log.debug('Release %r', listen_address)
         if not isinstance(listen_address, ListenAddress):
             raise TypeError(
                 'Cannot release something which is not a ListenAddress: %r' % (
                     listen_address))
 
-        ldict = None
-        lsck = None
-        for dict_to_sock_item in self.iterate_dicts_to_sock(
-                self._tp_listen_sockets,
-                *self.convert_listen_address_into_find_tuple(listen_address)):
-            ldict = lsck
-            lsck = dict_to_sock_item
-
-        if not isinstance(lsck, _ListenSocket):
+        path, lsck = self.find_cached_object(
+            self._tp_listen_sockets,
+            self.convert_listen_address_into_find_tuple(listen_address))
+        if lsck is None:
             raise KeyError(
                 '%r was not a known ListenAddress.' % (listen_address))
 
         lsck.release()
         if not lsck.is_retained:
-            del ldict[lsck.listen_address.port]
+            log.debug('Listen address no longer retained')
+            ldict = path[-2][1]
+            key = path[-1][0]
+            del ldict[key]
 
     def resolveHost(self, host, port=None, family=None):
         """Resolve a host.
@@ -637,6 +791,16 @@ class Transport(Singleton):
     #
     # =================== INTERNAL METHODS ====================================
     #
+    def fix_sock_family(self, sock_family):
+        if sock_family is None:
+            raise NotImplementedError(
+                'Currently you must specify an IP family.')
+        if sock_family not in SOCK_FAMILIES:
+            raise TypeError(
+                'Invalid socket family: %s' % SockFamilyName(sock_family))
+
+        return sock_family
+
     def fixSockType(self, sock_type):
         if sock_type is None:
             sock_type = self.DefaultTransportType

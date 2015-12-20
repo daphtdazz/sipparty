@@ -868,3 +868,38 @@ else:
 
     def astr(x):
         return str(x, encoding='ascii')
+
+
+class DelegateProperty(object):
+
+    _sentinel = type('DelegatePropertySentinel', (), {})()
+
+    def __init__(self, delegate_attribute, attribute):
+        self.__delegate_attribute = delegate_attribute
+        self.__attribute = attribute
+
+    def __get__(self, obj, cls):
+        if obj is None:
+            return self
+
+        delegate = getattr(obj, self.__delegate_attribute, self._sentinel)
+        if delegate is self._sentinel:
+            raise AttributeError(
+                '%r has no delegate at %r.', obj, self.__delegate_attribute)
+
+        val = getattr(delegate, self.__attribute, self._sentinel)
+        if val is self._sentinel:
+            raise AttributeError(
+                '%r delegate %r at attribute %r has no attribute %r', obj,
+                delegate, self.__delegate_attribute, self.__attribute)
+
+        return val
+
+    def __set__(self, obj, val):
+
+        delegate = getattr(obj, self.__delegate_attribute, self._sentinel)
+        if delegate is self._sentinel:
+            raise AttributeError(
+                '%r has no delegate at %r.', obj, self.__delegate_attribute)
+
+        setattr(delegate, self.__attribute, val)
