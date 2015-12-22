@@ -107,10 +107,10 @@ class SIPTransport(Singleton):
             return (None, 0)
 
         if isinstance(addr, Host):
-            return self.resolveHost(addr.address, addr.port)
+            return self.resolve_host(addr.address, addr.port)
 
         if isinstance(addr, bytes):
-            return self.resolveHost(addr)
+            return self.resolve_host(addr)
 
         if addr[1] is None:
             return (addr[0], self.DefaultPort)

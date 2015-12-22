@@ -18,7 +18,7 @@ limitations under the License.
 """
 import logging
 from socket import (SOCK_STREAM, SOCK_DGRAM, AF_INET, AF_INET6)
-from ..transport import (ListenAddress, Transport)
+from ..transport import (ListenDescription, Transport)
 from ..util import WaitFor
 from .setup import (MagicMock, patch, SIPPartyTestCase)
 
@@ -40,13 +40,13 @@ class TestTransport(SIPPartyTestCase):
         return True
 
     def test_listen_address_create(self):
-        log.info('ListenAddress requires a port argument')
+        log.info('ListenDescription requires a port argument')
 
         sock_family = AF_INET
         sock_type = SOCK_STREAM
 
-        self.assertRaises(TypeError, ListenAddress)
-        ListenAddress('somename', sock_family, sock_type, port=5060)
+        self.assertRaises(TypeError, ListenDescription)
+        ListenDescription('somename', sock_family, sock_type, port=5060)
 
         log.info('Get a standard (IPv4) listen address from the transport.')
         tp = Transport()
@@ -59,7 +59,7 @@ class TestTransport(SIPPartyTestCase):
             sock_type='not-sock-type')
         self.pushLogLevel('transport', logging.DETAIL)
         laddr = tp.listen_for_me(self.data_callback, sock_family=sock_family)
-        self.assertTrue(isinstance(laddr, ListenAddress), laddr)
+        self.assertTrue(isinstance(laddr, ListenDescription), laddr)
         laddr2 = tp.listen_for_me(self.data_callback, sock_family=sock_family)
         self.assertIs(laddr, laddr2)
 
@@ -79,18 +79,20 @@ class TestTransport(SIPPartyTestCase):
 
         tp = Transport()
         log.info('Get a listen address')
-        laddr1 = tp.listen_for_me(self.new_connection, sock_family=sock_family)
+        laddr1 = tp.listen_for_me(self.data_callback, sock_family=sock_family)
 
         log.info('Get send from address connected to the listen address')
         saddr = tp.get_send_from_address(
             sock_family=sock_family,
-            remote_name='127.0.0.1', remote_port=laddr1.port)
+            remote_name='127.0.0.1', remote_port=laddr1.port,
+            data_callback=self.data_callback)
 
         log.info('Reget the send from address and check it\'s the same one.')
         self.pushLogLevel('transport', logging.DETAIL)
         saddr2 = tp.get_send_from_address(
             sock_family=sock_family,
-            remote_name='127.0.0.1', remote_port=laddr1.port)
+            remote_name='127.0.0.1', remote_port=laddr1.port,
+            data_callback=self.data_callback)
 
         self.assertIs(saddr, saddr2)
 

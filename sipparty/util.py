@@ -903,3 +903,22 @@ class DelegateProperty(object):
                 '%r has no delegate at %r.', obj, self.__delegate_attribute)
 
         setattr(delegate, self.__attribute, val)
+
+
+class Retainable(object):
+
+    def __init__(self):
+        super(Retainable, self).__init__()
+        self.__retain_count = 0
+
+    @property
+    def is_retained(self):
+        return self.__retain_count != 0
+
+    def retain(self):
+        self.__retain_count += 1
+        log.debug('retain count now %d', self.__retain_count)
+
+    def release(self):
+        self.__retain_count -= 1
+        log.debug('retain count now %d', self.__retain_count)
