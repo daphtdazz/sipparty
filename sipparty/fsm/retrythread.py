@@ -33,7 +33,7 @@ limitations under the License.
 """
 import logging
 import select
-import socket
+from socket import (SHUT_RDWR, socketpair)
 import sys
 import threading
 import time
@@ -73,10 +73,16 @@ class _FDSource(object):
             if self._fds_exceptionCount >= self._fds_maxExceptions:
                 raise
 
-            log.exception(
-                "Exception %d processing new data for selectable %r (fd %d):",
-                self._fds_exceptionCount, self._fds_selectable, self._fds_int)
             self._fds_exceptionCount += 1
+            log.exception(
+                "Exception (%d%s) processing new data for selectable %r "
+                "(fd %d):", self._fds_exceptionCount,
+                'st' if self._fds_exceptionCount == 1 else
+                'nd' if self._fds_exceptionCount == 2 else
+                'rd' if self._fds_exceptionCount == 3 else
+                'th',
+                self._fds_selectable,
+                self._fds_int)
 
 
 class RetryThread(threading.Thread):
@@ -114,7 +120,8 @@ class RetryThread(threading.Thread):
         self._rthr_masterThread = master_thread
 
         # Set up the trigger mechanism.
-        self._rthr_triggerRunFD, output = socket.socketpair()
+        self._rthr_triggerRunFD, output = socketpair()
+        self._rthr_trigger_run_read_fd = output
         self.addInputFD(output, lambda selectable: selectable.recv(1))
 
         # Initialize support for util.OnlyWhenLocked
@@ -280,7 +287,14 @@ class RetryThread(threading.Thread):
         self._rthr_triggerSpin()
 
     #
-    # INTERNAL METHODS
+    # =================== MAGIC METHODS =======================================
+    #
+    def __del__(self):
+        for sock in (self._rthr_trigger_run_read_fd, self._rthr_triggerRunFD):
+            sock.close()
+
+    #
+    # =================== INTERNAL METHODS ====================================
     #
     def _rthr_processSelectedReadFDs(self, rfds, rsrcs):
         for rfd in rfds:

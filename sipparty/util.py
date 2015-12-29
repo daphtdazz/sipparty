@@ -555,7 +555,10 @@ class DerivedProperty(object):
 
     def update(self, newDP):
         """Updates the derived property so that subclasses can override
-        particular methods. newDP is an instance of `DerivedProperty`.""",
+        particular methods.
+
+        :param newDP: an instance of `DerivedProperty`.
+        """
         log.debug("Update %r with %r.", self, newDP)
         for pr in ("_rp_propName", "_rp_get", "_rp_set", "_rp_check"):
             np = getattr(newDP, pr)
@@ -608,10 +611,23 @@ class DerivedProperty(object):
     def __set__(self, obj, value):
         pname = self._rp_propName
         checker = self._rp_check
-        if value is not None and checker is not None and not checker(value):
-            raise ValueError(
-                "%r is not an allowed value for attribute %r of class %r." %
-                (value, pname, obj.__class__.__name__))
+        if value is not None and checker is not None:
+            exc_type = None
+            try:
+                if not checker(value):
+                    raise ValueError()
+            except (ValueError, TypeError) as exc:
+                exc_type = type(exc)
+                exc_class = (
+                    ValueError if issubclass(exc_type, ValueError) else
+                    TypeError)
+            finally:
+                if exc_type is not None:
+                    raise exc_class(
+                        "%r instance is not an allowed value for attribute %r "
+                        "of class %r." % (
+                            value.__class__.__name__, pname,
+                            obj.__class__.__name__))
 
         st = self._rp_set
 
@@ -922,3 +938,24 @@ class Retainable(object):
     def release(self):
         self.__retain_count -= 1
         log.debug('retain count now %d', self.__retain_count)
+
+
+class WeakProperty(object):
+
+    def __init__(self, pname):
+        self.__pname = '__weakref_' + pname
+
+    def __get__(self, obj, cls):
+        if obj is None:
+            return self
+
+        wr = getattr(obj, self.__pname, None)
+        if wr is None:
+            return None
+
+        return wr()
+
+    def __set__(self, obj, val):
+        wr = weakref(val)
+        setattr(obj, self.__pname, wr)
+
