@@ -357,16 +357,25 @@ class SocketProxy(
             'transport': {dck.descriptor: WeakProperty}
         }), Retainable):
 
-
     def send(self, data):
         sck = self.socket
+
+        def log_send(sname, pname, data):
+
+            prot_log.info(
+                "Sent %r -> %r\n>>>>>\n%s\n>>>>>", sname, pname,
+                Transport.FormatBytesForLogging(data))
+
         if isinstance(sck, socket_class):
+            log_send(sck.getsockname(), sck.getpeername(), data)
             return sck.send(data)
 
         # Socket shares a socket, so need to sendto.
         sck = sck.socket
         assert(sck.type == SOCK_DGRAM)
-        sck.sendto(data, self.local_address.remote_sockname_tuple)
+        paddr = self.local_address.remote_sockname_tuple
+        log_send(sck.getsockname(), paddr, data)
+        sck.sendto(data, paddr)
 
     #
     # =================== CALLBACKS ===========================================
@@ -407,10 +416,13 @@ class SocketProxy(
 
     def _readable_socket_selected(self):
 
-        log.debug(
-            'recvfrom %r local:%r', self.socket.type,
-            self.socket.getsockname())
+        sname = self.socket.getsockname()
+        log.debug('recvfrom %r local:%r', self.socket.type, sname)
         data, addr = self.socket.recvfrom(4096)
+        if len(data) > 0:
+            prot_log.info(
+                " received %r -> %r\n<<<<<\n%s\n<<<<<", addr, sname,
+                Transport.FormatBytesForLogging(data))
 
         if not self.is_connected:
             tp = self.transport
@@ -450,13 +462,24 @@ class Transport(Singleton):
 
     NameAll = type(
         'ListenNameAllAddresses', (), {
-            '__repr__': lambda self: __name__ + '.Transport.NameAll',
+            '__repr__': lambda self:
+                self.__name__ + '.Transport.NameAll',
             '__doc__': (
                 'Use this singleton object in your call to listen_for_me to '
                 'indicate that you wish to listen on all addresses.')})()
     NameLANHostname = type(
         'ListenNameLANHostname', (), {
-            '__repr__': lambda self: __name__ + '.Transport.NameLANHostname',
+            '__repr__': lambda self:
+                self.__name__ + '.Transport.NameLANHostname',
+            '__doc__': (
+                'Use this singleton object in your call to listen_for_me to '
+                'indicate that you wish to listen on an address you have '
+                'exposed on the Local Area Network.')})()
+
+    NameLoopbackAddress = type(
+        'ListenNameLoopbackAddress', (), {
+            '__repr__': lambda self:
+                self.__name__ + '.Transport.NameLoopbackAddress',
             '__doc__': (
                 'Use this singleton object in your call to listen_for_me to '
                 'indicate that you wish to listen on an address you have '
@@ -465,15 +488,15 @@ class Transport(Singleton):
     SendFromAddressNameAny = type(
         'SendFromAddressNameAny', (), {
             '__repr__': lambda self: (
-                __name__ + '.Transport.SendFromAddressNameAny'),
+                self.__name__ + '.Transport.SendFromAddressNameAny'),
             '__doc__': (
                 'Use this singleton object in your call to '
                 'get_send_from_address to '
                 'indicate that you wish to send from any routable '
                 'local address.')})()
 
-    @classmethod
-    def FormatBytesForLogging(cls, mbytes):
+    @staticmethod
+    def FormatBytesForLogging(mbytes):
         return '\\n\n'.join(
             [repr(astr(bs))[1:-1] for bs in mbytes.split(b'\n')]).rstrip('\n')
 
@@ -562,10 +585,6 @@ class Transport(Singleton):
         if sock_family is None:
             sock_family = IPAddressFamilyFromName(abytes(remote_name))
 
-        if data_callback is None:
-            raise NotImplementedError(
-                'Must specify data_callback.')
-
         create_kwargs = {}
         for attr in (
                 'sock_type', 'sock_family', 'name', 'port', 'flowinfo',
@@ -636,28 +655,15 @@ class Transport(Singleton):
     def add_connected_socket_proxy(self, socket_proxy, *args, **kwargs):
         tpl = self.convert_connected_address_description_into_find_tuple(
             socket_proxy.local_address)
-        self.add_socket_proxy(
+        self._add_socket_proxy(
             socket_proxy, self._tp_connected_sockets, tpl, *args, **kwargs)
         log.detail('connected sockets now: %r', self._tp_connected_sockets)
 
     def add_listen_socket_proxy(self, listen_socket_proxy, *args, **kwargs):
         tpl = self.convert_listen_description_into_find_tuple(
             listen_socket_proxy.local_address)
-        self.add_socket_proxy(
+        self._add_socket_proxy(
             listen_socket_proxy, self._tp_listen_sockets, tpl, *args, **kwargs)
-
-    def add_socket_proxy(self, socket_proxy, root_dict, find_tuple, path=()):
-        if isinstance(socket_proxy.socket, socket_class):
-            self._tp_retryThread.addInputFD(
-                socket_proxy.socket,
-                WeakMethod(socket_proxy, 'socket_selected'))
-        socket_proxy.retain()
-        keys = [obj[0] for obj in find_tuple[len(path):]]
-        log.detail('add_socket_proxy keys: %r', keys)
-
-        sub_root = path[-1][1] if len(path) > 0 else root_dict
-        self.insert_cached_object(
-            sub_root, keys, socket_proxy)
 
     def find_cached_object(self, cache_dict, find_tuple):
 
@@ -733,6 +739,7 @@ class Transport(Singleton):
     # =================== SOCKET INTERFACE ====================================
     #
     def new_connection(self, connection_proxy):
+        assert 0
         callback
 
     #
@@ -752,24 +759,18 @@ class Transport(Singleton):
     #
     # =================== INTERNAL METHODS ====================================
     #
-    def wrap_callback(self, callback):
-        ws = ref(self)
+    def _add_socket_proxy(self, socket_proxy, root_dict, find_tuple, path=()):
+        if isinstance(socket_proxy.socket, socket_class):
+            self._tp_retryThread.addInputFD(
+                socket_proxy.socket,
+                WeakMethod(socket_proxy, 'socket_selected'))
+        socket_proxy.retain()
+        keys = [obj[0] for obj in find_tuple[len(path):]]
+        log.detail('_add_socket_proxy keys: %r', keys)
 
-        def transport_data_callback(sock_proxy, to, data):
-
-            self = ws()
-            if self is not None:
-                log.debug('transport_data_callback: have data from %r', to)
-                sock_desc = sock_proxy.local_address
-                remote_name = to[0]
-                remote_port = to[1]
-                cad = self.find_or_create_send_from_socket(
-                    sock_desc, remote_name=remote_name,
-                    remote_port=remote_port)
-
-            return callback(frm, to, data)
-
-        return transport_data_callback
+        sub_root = path[-1][1] if len(path) > 0 else root_dict
+        self.insert_cached_object(
+            sub_root, keys, socket_proxy)
 
     @staticmethod
     def insert_cached_object(root, path, obj):
@@ -883,13 +884,6 @@ class Transport(Singleton):
     #
     # =================== OLD DEPRECATED METHOD ===============================
     #
-    def send(self, data, cad):
-        assert 0
-        _, csck = self.find_send_from_socket(cad)
-        if csck is None:
-            raise KeyError('No socket for address %r', cad)
-
-        csck.send(data)
 
     def addDgramSocket(self, sck):
         assert 0
@@ -966,9 +960,7 @@ class Transport(Singleton):
                     log.debug("Different socket family type skipped.")
                     continue
                 sck.sendto(msg, toAddr)
-                prot_log.info(
-                    "Sent %r -> %r\n>>>>>\n%s\n>>>>>", sname,
-                    toAddr, self.FormatBytesForLogging(msg))
+
                 return
             except socket.error as exc:
                 log.debug(
@@ -984,10 +976,7 @@ class Transport(Singleton):
 
     def receivedData(self, lAddr, rAddr, data):
         assert 0
-        if len(data) > 0:
-            prot_log.info(
-                " received %r -> %r\n<<<<<\n%s\n<<<<<", rAddr, lAddr,
-                self.FormatBytesForLogging(data))
+
         connkey = (lAddr, rAddr)
         bufs = self._tp_connBuffers
         if connkey not in bufs:

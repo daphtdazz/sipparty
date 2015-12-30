@@ -18,6 +18,7 @@ limitations under the License.
 """
 import logging
 from six import (binary_type as bytes)
+from socket import (AF_INET, SOCK_DGRAM)
 from weakref import (WeakValueDictionary)
 from ..parse import ParseError
 from ..transport import (Transport, SockTypeFromName)
@@ -31,13 +32,15 @@ prot_log = logging.getLogger("messages")
 prot_log.setLevel(logging.INFO)
 
 
-class SIPTransport(Singleton):
-    """SIP specific subclass of Transport."""
+class SIPTransport(Transport):
+    """SIPTransport."""
 
     #
     # =================== CLASS INTERFACE =====================================
     #
     DefaultPort = 5060
+    DefaultFamily = AF_INET
+    DefaultType = SOCK_DGRAM
 
     #
     # =================== INSTANCE INTERFACE ==================================
@@ -60,13 +63,17 @@ class SIPTransport(Singleton):
         # Dialog handler is keyed by AOR.
         self._sptr_dialogHandlers = {}
 
-        self.__transport = Transport()
+    def listen_for_me(self, **kwargs):
 
-        self.byteConsumer = WeakMethod(self, "sipByteConsumer")
+        for val, default in (
+                ('sock_family', self.DefaultFamily),
+                ('sock_type', self.DefaultType)):
+            if val not in kwargs:
+                kwargs[val] = default
 
-    def listen(self):
-
-        raise NotImplementedError('%s.listen' % self.__class__.__name__)
+        return super(
+            SIPTransport, self).listen_for_me(
+                WeakMethod(self, 'sipByteConsumer'), **kwargs)
 
     def addDialogHandlerForAOR(self, aor, handler):
         """Register a handler to call """
@@ -89,18 +96,22 @@ class SIPTransport(Singleton):
         log.debug("Remove handler for AOR %r", aor)
         del hdlrs[aor]
 
-    def sendMessage(self, msg, toAddr, fromAddr=None):
-        log.debug("Send message %r -> %r type %s", fromAddr, toAddr, msg.type)
+    def sendMessage(self, msg, name, port):
+        log.debug("Send message -> %r type %s", (name, port), msg.type)
 
-        toAddr = self.fixTargetAddress(toAddr)
-        fromAddr = self.fixTargetAddress(fromAddr)
+        if name is None:
+            name = msg.ContactHeader.host.address
+        if port is None:
+            port = msg.ContactHeader.host.port
 
-        sockType = SockTypeFromName(msg.viaheader.transport)
+        sock_type = SockTypeFromName(msg.viaheader.transport)
 
-        log.debug("Normalized addresses: %r -> %r type", fromAddr, toAddr)
+        sp = super(SIPTransport, self).get_send_from_address(
+            sock_type=sock_type, remote_name=name,
+            remote_port=port,
+            data_callback=WeakMethod(self, 'sipByteConsumer'))
 
-        super(SIPTransport, self).sendMessage(
-            bytes(msg), toAddr, sockType=sockType, fromAddr=fromAddr)
+        sp.send(bytes(msg))
 
     def fixTargetAddress(self, addr):
         if addr is None:
