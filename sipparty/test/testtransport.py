@@ -60,20 +60,33 @@ class TestTransport(SIPPartyTestCase):
         tp.add_connected_socket_proxy(sp)
         self.assertEqual(tp.connected_socket_count, 2)
 
+        log.info('Check descriptions can deduce some values.')
+        ld = ListenDescription(name='1.1.1.1')
+        self.assertEqual(ld.sock_family, None)
+        ld.deduce_missing_values()
+        self.assertEqual(ld.sock_family, AF_INET)
+
+        ld = ListenDescription(name='::1:2:3:4')
+        self.assertIs(ld.flowinfo, None)
+        self.assertIs(ld.scopeid, None)
+        ld.deduce_missing_values()
+        self.assertEqual(ld.sock_family, AF_INET6)
+        self.assertEqual(ld.flowinfo, 0)
+        self.assertEqual(ld.scopeid, 0)
+
     def test_listen_address_create(self):
         log.info('ListenDescription requires a port argument')
 
         sock_family = AF_INET
         sock_type = SOCK_STREAM
 
-        self.assertRaises(TypeError, ListenDescription)
-        ListenDescription('somename', sock_family, sock_type, port=5060)
+        ListenDescription(
+            name='somename', sock_family=sock_family, sock_type=sock_type,
+            port=5060)
 
         log.info('Get a standard (IPv4) listen address from the transport.')
         tp = Transport()
         self.assertRaises(TypeError, tp.listen_for_me, 'not-a-callable')
-        self.assertRaises(
-            NotImplementedError, tp.listen_for_me, self.data_callback)
         self.assertRaises(
             ValueError, tp.listen_for_me, self.data_callback,
             sock_family=sock_family,

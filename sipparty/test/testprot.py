@@ -167,7 +167,8 @@ class TestProtocol(SIPPartyTestCase):
             Body(type=sdpsyntax.SIPBodyType, content=b"This is a message"))
 
         new_inv_bytes = bytes(new_inv)
-        self.assertTrue(re.match(
+        self.assertMatchesPattern(
+            new_inv_bytes,
             b"INVITE sip:bill@biloxi.com SIP/2.0\r\n"
             b"From: <sip:alice@atlanta.com>;%(tag_pattern)s\r\n"
             # Note that the To: URI hasn't changed because when the parse
@@ -185,8 +186,8 @@ class TestProtocol(SIPPartyTestCase):
             b"Content-Type: %(SIPBodyType)s\r\n"
             b"\r\n"
             b"This is a message$"
-            b"" % self.message_patterns,
-            new_inv_bytes), repr(new_inv_bytes))
+            b"" % self.message_patterns
+        )
 
     def testProt(self):
         for name, obj in iteritems(prot.__dict__):

@@ -880,9 +880,19 @@ if PY2:
     astr = abytes
 else:
     def abytes(x):
-        return bytes(x, encoding='ascii')
+        if x is None:
+            return None
+        try:
+            return bytes(x, encoding='ascii')
+        except TypeError as exc:
+            raise type(exc)(
+                'Bad type %r for argument %r to abytes (not str).' % (
+                    type(x).__name__, x))
+
 
     def astr(x):
+        if x is None:
+            return None
         return str(x, encoding='ascii')
 
 

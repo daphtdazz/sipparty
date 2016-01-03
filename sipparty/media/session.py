@@ -1,4 +1,4 @@
-"""mediasession.py
+"""session.py
 
 A media session.
 
@@ -24,10 +24,20 @@ from ..deepclass import (DeepClass, dck)
 from ..sdp import (SessionDescription, MediaDescription)
 from ..sdp.mediatransport import MediaTransport
 from ..sdp.sdpsyntax import (username_re, AddrTypes)
-from ..util import (abytes, FirstListItemProxy,)
-from ..vb import ValueBinder
+from ..transport import (
+    IsSpecialName, ListenDescription, NameLANHostname, SOCK_FAMILIES)
+from ..util import (abytes, FirstListItemProxy, WeakMethod, WeakProperty)
+from ..vb import (KeyTransformer, ValueBinder)
 
 log = logging.getLogger(__name__)
+
+
+class MediaSessionError(Exception):
+    pass
+
+
+class NoMediaSessions(MediaSessionError):
+    pass
 
 
 class Session(
@@ -39,7 +49,12 @@ class Session(
                 dck.check: lambda x: isinstance(x, SessionDescription),
                 dck.gen: SessionDescription},
             "mediaSessions": {dck.gen: list},
-            }),
+
+            "name": {
+                dck.check: lambda x: IsSpecialName(x) or isinstance(x, str)
+            },
+            'sock_family': {dck.check: lambda x: x in SOCK_FAMILIES}
+        }),
         ValueBinder):
     """Implements a media session, with ways of playing media and creation of
     SDP. Strictly this is independent of SDP, but in practice its form is
@@ -50,19 +65,35 @@ class Session(
     SDP is defined in http://www.ietf.org/rfc/rfc4566.txt, which this duly
     follows.
     """
+    DefaultName = NameLANHostname
+
     vb_dependencies = (
         ("description", ("username", "address", "addressType")),)
+    vb_bindings = (
+        ('name', 'description.address', {KeyTransformer: abytes}),
+    )
     mediaSession = FirstListItemProxy("mediaSessions")
 
-    def listen(self):
+    def listen(self, **kwargs):
+        if not self.mediaSessions:
+            raise NoMediaSessions(
+                '%r instance has no media sessions.' % self.__class__.__name__)
+
         for ms in self.mediaSessions:
-            ms.listen(self.address)
+            name = self.name or self.DefaultName
+            ms.listen(name, **kwargs)
 
     def addMediaSession(self, mediaSession=None, **kwargs):
         if mediaSession is None:
             mediaSession = MediaSession(**kwargs)
+        else:
+            if kwargs:
+                raise TypeError(
+                    'addMediaSession was passed both a mediaSession and key-'
+                    'word args. Only one or the other may be used.')
         self.mediaSessions.insert(0, mediaSession)
         self.description.addMediaDescription(mediaSession.description)
+        mediaSession.parent_session = self
 
     def sdp(self):
         return bytes(self.description)
@@ -70,12 +101,18 @@ class Session(
 
 class MediaSession(
         DeepClass("_msess_", {
+            'parent_session': {
+                dck.descriptor: WeakProperty
+            },
             "transport": {
                 dck.gen: MediaTransport
             },
             "description": {
                 dck.check: lambda x: isinstance(x, MediaDescription),
                 dck.gen: MediaDescription},
+            'local_addr_description': {
+                dck.gen: ListenDescription,
+            }
         }),
         ValueBinder):
     vb_dependencies = (
@@ -83,15 +120,22 @@ class MediaSession(
             "mediaType", "port", "address", "addressType", "transProto",
             "fmts")),)
 
-    def listen(self, session_address):
-        if hasattr(self, "address"):
-            lAddr = self.address
-        else:
-            lAddr = session_address
+    vb_bindings = [
+        ('local_addr_description.name', ''),
+    ]
 
-        lAddrTuple = self.transport.listen(
-            name=lAddr, port_filter=lambda pt: pt % 2 == 0)
+    def listen(self, session_address, **kwargs):
 
-        self.address = abytes(lAddrTuple[0])
-        self.port = lAddrTuple[1]
-        return lAddrTuple
+        l_desc = self.transport.listen_for_me(
+            WeakMethod(self, 'data_received'),
+            name=session_address, port_filter=lambda pt: pt % 2 == 0,
+            **kwargs)
+        log.error('Media listen address: %r', l_desc)
+
+        #TODO: this is wrong.
+        self.address = abytes(l_desc.name)
+        self.port = l_desc.port
+        return l_desc
+
+    def data_received(self, socket_proxy, remote_address_tuple, data):
+        assert 0

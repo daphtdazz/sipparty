@@ -21,7 +21,8 @@ from six import (binary_type as bytes)
 from socket import (AF_INET, SOCK_DGRAM)
 from weakref import (WeakValueDictionary)
 from ..parse import ParseError
-from ..transport import (Transport, SockTypeFromName)
+from ..transport import (
+    Transport, SockTypeFromName, UnregisteredPortGenerator)
 from ..util import (DerivedProperty, Singleton, WeakMethod)
 from . import prot
 from .components import Host
@@ -39,8 +40,13 @@ class SIPTransport(Transport):
     # =================== CLASS INTERFACE =====================================
     #
     DefaultPort = 5060
-    DefaultFamily = AF_INET
     DefaultType = SOCK_DGRAM
+
+    @classmethod
+    def port_generator(cls):
+        yield 5060
+        for port in UnregisteredPortGenerator():
+            yield port
 
     #
     # =================== INSTANCE INTERFACE ==================================
@@ -66,11 +72,10 @@ class SIPTransport(Transport):
     def listen_for_me(self, **kwargs):
 
         for val, default in (
-                ('sock_family', self.DefaultFamily),
-                ('sock_type', self.DefaultType)):
-            if val not in kwargs:
+                ('sock_type', self.DefaultType),
+                ('port', self.DefaultPort)):
+            if val not in kwargs or kwargs[val] is None:
                 kwargs[val] = default
-
         return super(
             SIPTransport, self).listen_for_me(
                 WeakMethod(self, 'sipByteConsumer'), **kwargs)
@@ -98,11 +103,11 @@ class SIPTransport(Transport):
 
     def sendMessage(self, msg, name, port):
         log.debug("Send message -> %r type %s", (name, port), msg.type)
-
         if name is None:
             name = msg.ContactHeader.host.address
         if port is None:
             port = msg.ContactHeader.host.port
+
 
         sock_type = SockTypeFromName(msg.viaheader.transport)
 

@@ -17,7 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 from ..sdp.sdpsyntax import (MediaTypes, MediaProtocols)
-from ..media import (Session, MediaSession)
+from ..media.session import (Session, MediaSession)
 
 
 class SingleRTPSession(Session):

@@ -248,8 +248,11 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
 
         def __repr__(self):
             myattrs = [attr_line for attr_line in self._dc_kvReprGen()]
-            if recurse_repr and hasattr(super(DeepClass, self), '_dc_kvReprGen'):
-                myattrs.extend([sattr for sattr in super(DeepClass, self)._dc_kvReprGen()])
+            if (recurse_repr and
+                    hasattr(super(DeepClass, self), '_dc_kvReprGen')):
+                myattrs.extend([
+                    sattr
+                    for sattr in super(DeepClass, self)._dc_kvReprGen()])
             return("%s(%s)" % (self.__class__.__name__, ", ".join(myattrs)))
 
     return DeepClass

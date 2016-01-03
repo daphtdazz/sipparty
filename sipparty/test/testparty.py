@@ -24,6 +24,8 @@ from ..media.sessions import SingleRTPSession
 from ..party import (Party)
 from ..parties import (NoMediaSimpleCallsParty)
 from ..sip.dialogs import SimpleCall
+from ..sip.siptransport import SIPTransport
+from ..transport import NameLoopbackAddress
 from ..util import WaitFor
 from .setup import SIPPartyTestCase
 
@@ -33,55 +35,66 @@ log = logging.getLogger()
 class TestParty(SIPPartyTestCase):
 
     def assertIsNotNone(self, exp, *args, **kwargs):
-        if hasattr(super(TestParty, self), "assertIsNotNone"):
+        if hasattr(super(TestParty, self), 'assertIsNotNone'):
             return super(TestParty, self).assertIsNotNone(exp, *args, **kwargs)
 
         return self.assertTrue(exp is not None)
 
     def assertIsNone(self, exp, *args, **kwargs):
-        if hasattr(super(TestParty, self), "assertIsNone"):
+        if hasattr(super(TestParty, self), 'assertIsNone'):
             return super(TestParty, self).assertIsNone(exp, *args, **kwargs)
 
         return self.assertTrue(exp is None)
 
+    def setUp(self):
+        self.tp = SIPTransport()
+
+    def tearDown(self):
+        del self.tp
+
     def testBasicPartyTCP(self):
-        self.skipTest("TCP not yet implemented")
+        self.skipTest('TCP not yet implemented')
         self.subTestBasicParty(SOCK_STREAM, )
 
     def testBasicPartyUDP(self):
-        # self.pushLogLevel("party", logging.DEBUG)
+        # self.pushLogLevel('party', logging.DEBUG)
         self.subTestBasicParty(SOCK_DGRAM, b'127.0.0.1')
 
     def testBasicPartyUDPIPv6(self):
         self.subTestBasicParty(SOCK_DGRAM, b'::1')
 
-    def subTestBasicParty(self, socketType, contactAddress):
+    def subTestBasicParty(self, sock_type, contact_name):
 
         # self.pushLogLevel('transport', logging.DEBUG)
         # self.pushLogLevel('party', logging.DEBUG)
         # self.pushLogLevel('dialog', logging.DEBUG)
 
-        assert socketType == SOCK_DGRAM
+        assert sock_type == SOCK_DGRAM
+
+        log.info('Listen with type %r', sock_type)
 
         BasicParty = type(
-            "BasicParty", (Party,),
-            {"InviteDialog": SimpleCall,
-             "MediaSession": SingleRTPSession})
+            'BasicParty', (Party,), {
+                'InviteDialog': SimpleCall,
+                'MediaSession': type(
+                    'LoopbackSingleRTPSession', (SingleRTPSession,), {
+                        'DefaultName': NameLoopbackAddress
+                    }
+                )
+            }
+        )
 
         log.info('Start p1')
-        p1 = BasicParty(
-            aor=b"alice@atlanta.com", contactURI__address=contactAddress)
-        log.info('p2')
-        p2 = BasicParty(
-            aor=b"bob@biloxi.com", contactURI__address=contactAddress)
-        log.info('Listen p1')
-        p1.listen()
-        log.info('Listen p2')
-        p2.listen()
-        self.assertTrue(p1.transport is p2.transport)
+        p1 = BasicParty(aor=b'alice@atlanta.com')
+        log.info('..and p2')
+        p2 = BasicParty(aor=b'bob@biloxi.com')
 
-        log.info('p1 invites p2')
-        invD = p1.invite(p2)
+        log.info('p1 listens')
+        self.pushLogLevel('transport', logging.DEBUG)
+        p1.listen(name=contact_name, sock_type=sock_type)
+
+        log.info('p2 invites p1')
+        invD = p2.invite(p1)
 
         WaitFor(lambda: invD.state == invD.States.InDialog, 1)
 
@@ -94,8 +107,8 @@ class TestParty(SIPPartyTestCase):
 
         # Try another call.
         p3 = BasicParty(
-            aor=b"charlie@charlesville.com",
-            contactURI__address=contactAddress)
+            aor=b'charlie@charlesville.com',
+            contactURI__address=contact_name)
         p3.listen()
         self.assertTrue(p3.transport is p1.transport)
         self.assertTrue(p3.transport is p2.transport)
@@ -118,7 +131,7 @@ class TestParty(SIPPartyTestCase):
 
     def test_no_media_party(self):
 
-        log.info("Create two new no-media parties.")
+        log.info('Create two new no-media parties.')
         p1 = NoMediaSimpleCallsParty()
         p2 = NoMediaSimpleCallsParty()
 

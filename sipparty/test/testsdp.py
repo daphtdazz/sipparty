@@ -26,7 +26,7 @@ from .setup import SIPPartyTestCase
 log = logging.getLogger(__name__)
 
 
-class TestSDP(TestCaseREMixin, SIPPartyTestCase):
+class TestSDP(SIPPartyTestCase):
 
     def setUp(self):
         # self.pushLogLevel('sdp.sdp', logging.DEBUG)

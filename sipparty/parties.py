@@ -18,7 +18,7 @@ limitations under the License.
 """
 from six import itervalues
 from .sip.dialogs import SimpleCall
-from .media import SingleRTPSession
+from .media.sessions import SingleRTPSession
 from .party import Party
 
 

@@ -26,6 +26,7 @@ from ..fsm import (AsyncFSM, InitialStateKey, UnexpectedInput)
 from ..deepclass import DeepClass, dck
 from ..parse import ParsedPropertyOfClass
 from ..sdp import (sdpsyntax, SDPIncomplete)
+from ..transport import ValidPortNum
 from ..util import (abytes, Enum, WeakMethod)
 from .transform import (Transform, TransformKeys)
 from .components import (AOR, URI)
@@ -66,7 +67,8 @@ class Dialog(
             "fromURI": {dck.descriptor: ParsedPropertyOfClass(URI)},
             "toURI": {dck.descriptor: ParsedPropertyOfClass(URI)},
             "contactURI": {dck.descriptor: ParsedPropertyOfClass(URI)},
-            "remoteAddress": {},
+            "remote_name": {},
+            "remote_port": {dck.check: ValidPortNum},
             "localTag": {},
             "remoteTag": {},
             "transport": {},
@@ -91,9 +93,9 @@ class Dialog(
     # =================== CLASS INTERFACE =====================================
     #
     States = States
-    vb_dependencies = [
-        ("transport", ["sendMessage"])
-    ]
+    #vb_dependencies = [
+    #    ("transport", ["sendMessage"])
+    #]
     Transforms = None
 
     #
@@ -197,20 +199,24 @@ class Dialog(
             request=self._dlg_requests[-1])
 
         self.transport.sendMessage(
-            ack, self.remoteAddress, fromAddr=self.contactURI.host)
+            ack, self.remote_name, remote_port)
 
-    def sendRequest(self, reqType, remoteAddress=None):
+    def sendRequest(self, reqType, remote_name=None, remote_port=None):
 
         if self._dlg_callIDHeader is None:
             log.debug("First request, generate call ID header.")
             self._dlg_callIDHeader = Call_IdHeader()
 
-        if remoteAddress is not None:
-            log.debug("Learning remote address: %r", remoteAddress)
-            self.remoteAddress = remoteAddress
+        if remote_name is not None:
+            log.debug("Learning remote address: %r", remote_name)
+            self.remote_name = remote_name
+
+        if remote_port is not None:
+            log.debug("Learning remote address: %r", remote_name)
+            self.remote_name = remote_name
 
         for reqdAttr in (
-                "fromURI", "toURI", "contactURI", "remoteAddress",
+                "fromURI", "toURI", "contactURI", "remote_name",
                 "transport"):
             attrVal = getattr(self, reqdAttr)
             if attrVal is None:
@@ -251,7 +257,7 @@ class Dialog(
 
         try:
             tp.sendMessage(
-                req, self.remoteAddress, fromAddr=self.contactURI.host)
+                req, self.remote_name, self.remote_port)
         except prot.Incomplete:
             log.error("Incomplete message: %r", req)
             raise
@@ -350,15 +356,15 @@ class Dialog(
             msg.addBody(Body(type=sdpsyntax.SIPBodyType, content=sdpBody))
 
     def _dlg_resolveTarget(self, target):
-        if self._dlg_remoteAddress is None:
+        if self.remote_name is None:
             if target is None:
                 raise ValueError("No target set to send to.")
 
         if target is None:
-            target = self._dlg_remoteAddress
+            target = self.remote_name
             log.debug("Use cached address %r", target)
             return target
 
         log.debug("Use supplied target %r", target)
-        self._dlg_remoteAddress = target
+        self.remote_name = target
         return target

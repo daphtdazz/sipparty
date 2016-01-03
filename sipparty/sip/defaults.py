@@ -19,6 +19,7 @@ limitations under the License.
 from ..transport import SOCK_TYPE_IP_NAMES
 from .prot import protocols
 
+#useports = False
 port = 5060
 sipprotocol = getattr(protocols, 'SIP/2.0')
 

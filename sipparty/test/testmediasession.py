@@ -18,18 +18,19 @@ limitations under the License.
 """
 import logging
 from six import (binary_type as bytes)
-from ..media import Session
+from ..media.session import (MediaSession, NoMediaSessions, Session)
 from ..sdp import SDPIncomplete
 from ..sdp.sdpsyntax import (MediaTypes, AddrTypes, NetTypes)
+from ..transport import ValidPortNum
 from ..util import TestCaseREMixin
 from .setup import SIPPartyTestCase
 
 log = logging.getLogger(__name__)
 
 
-class TestSession(TestCaseREMixin, SIPPartyTestCase):
+class TestSession(SIPPartyTestCase):
 
-    def testBasicSession(self):
+    def test_basic_session(self):
 
         log.info("Create new Session and check it produces SDP when ready.")
         ms = Session(username=b"alice")
@@ -39,6 +40,14 @@ class TestSession(TestCaseREMixin, SIPPartyTestCase):
             ms.sdp(),
             b'v=0\r\n'
             b'o=alice \d+ \d+ IN IP4 127.0.0.1\r\n'
+            b's= \r\n'
+            b't=0 0\r\n$')
+
+        ms.address = b"::1"
+        self.assertMatchesPattern(
+            ms.sdp(),
+            b'v=0\r\n'
+            b'o=alice \d+ \d+ IN IP6 ::1\r\n'
             b's= \r\n'
             b't=0 0\r\n$')
 
@@ -52,7 +61,81 @@ class TestSession(TestCaseREMixin, SIPPartyTestCase):
         self.assertMatchesPattern(
             ms.sdp(),
             b'v=0\r\n'
-            b'o=alice \d+ \d+ IN IP4 127.0.0.1\r\n'
+            b'o=alice \d+ \d+ IN IP6 ::1\r\n'
             b's= \r\n'
             b't=0 0\r\n'
             b'm=audio 11000 RTP/AVP 123\r\n$')
+
+    def test_weak_media_session_parent(self):
+        ss = Session()
+        ms = MediaSession()
+
+        log.info('Show that we can\'t add a media session and create one.')
+        self.assertRaises(
+            TypeError, ss.addMediaSession, mediaSession=ms,
+            mediaType=MediaTypes.audio)
+
+        log.info(
+            'Demonstrate that a media session has a weak reference to its '
+            'parent.')
+        ss.addMediaSession(mediaSession=ms)
+        self.assertIs(ms.parent_session, ss)
+        del ss
+        self.assertIs(ms.parent_session, None)
+
+    def test_on_demand_port_allocation(self):
+        ss = Session(username=b'alice', name='127.0.0.1')
+        self.assertEqual(ss.address, b'127.0.0.1')
+
+        log.info('Exception if no media sessions.')
+        self.assertRaises(NoMediaSessions, ss.listen)
+
+        log.info('Listening allocates us a port.')
+        ss.addMediaSession(
+            mediaType=MediaTypes.audio, transProto = b"RTP/AVP", fmts=[123])
+        ss.listen()
+        self.assertTrue(ValidPortNum(ss.mediaSession.port))
+        self.assertMatchesPattern(
+            ss.sdp(),
+            b'v=0\r\n'
+            b'o=alice \d+ \d+ IN IP4 127.0.0.1\r\n'
+            b's= \r\n'
+            b't=0 0\r\n'
+            b'm=audio %(port)d RTP/AVP 123\r\n'
+            b'c=IN IP4 127.0.0.1\r\n' % {
+                b'port': ss.mediaSession.port
+            })
+
+    def test_domain_names(self):
+        log.info('Check that we can create a session at a domain name.')
+        ms = Session()
+        ms.username = b'alice'
+        ms.address = b'atlanta.com'
+        # Incomplete because with a domain name we must also specify the IP
+        # address type.
+        self.assertRaises(SDPIncomplete, lambda: ms.sdp())
+        ms.addressType = AddrTypes.IP6
+        self.assertMatchesPattern(
+            ms.sdp(),
+            b'v=0\r\n'
+            b'o=alice \d+ \d+ IN IP6 atlanta.com\r\n'
+            b's= \r\n'
+            b't=0 0\r\n$')
+
+        log.info('We can change the domain name without changing the IP type.')
+        ms.address = b'biloxi.com'
+        self.assertMatchesPattern(
+            ms.sdp(),
+            b'v=0\r\n'
+            b'o=alice \d+ \d+ IN IP6 biloxi.com\r\n'
+            b's= \r\n'
+            b't=0 0\r\n$')
+
+        log.info('We can set both still.')
+        ms.address = b'1.2.3.4'
+        self.assertMatchesPattern(
+            ms.sdp(),
+            b'v=0\r\n'
+            b'o=alice \d+ \d+ IN IP4 1.2.3.4\r\n'
+            b's= \r\n'
+            b't=0 0\r\n$')

@@ -67,6 +67,67 @@ IPv4address_re = re.compile(IPv4address + b'$')
 IPv6address_re = re.compile(IPv6address + b'$')
 IPaddress_re = re.compile(IPaddress + b'$')
 
+first_unregistered_port = 49152
+next_port = first_unregistered_port
+
+
+class Name(object):
+    def __repr__(self):
+        return __name__ + '.' + self.__class__.__name__
+
+NameAll = type(
+    'NameAll', (Name,), {
+        '__doc__': (
+            'Use this singleton object in your call to listen_for_me to '
+            'indicate that you wish to listen on all addresses.')
+    }
+)()
+NameLANHostname = type(
+    'NameLANHostname', (Name,), {
+        '__doc__': (
+            'Use this singleton object in your call to listen_for_me to '
+            'indicate that you wish to listen on an address you have '
+            'exposed on the Local Area Network.')
+    }
+)()
+NameLoopbackAddress = type(
+    'NameLoopbackAddress', (Name,), {
+        '__doc__': (
+            'Use this singleton object in your call to listen_for_me to '
+            'indicate that you wish to listen on an address you have '
+            'exposed on the Local Area Network.')
+    }
+)()
+SendFromAddressNameAny = type(
+    'SendFromAddressNameAny', (Name,), {
+        '__doc__': (
+            'Use this singleton object in your call to '
+            'get_send_from_address to '
+            'indicate that you wish to send from any routable '
+            'local address.')
+    }
+)()
+SpecialNames = set((
+    NameAll, NameLANHostname, NameLoopbackAddress, SendFromAddressNameAny
+))
+
+
+def IsSpecialName(name):
+    return name in SpecialNames
+
+
+def UnregisteredPortGenerator(port_filter=None):
+    global next_port
+    start_port = next_port
+    while True:
+        if port_filter is None or port_filter(next_port):
+            yield next_port
+        next_port += 1
+        if next_port > 0xffff:
+            next_port = first_unregistered_port
+        if next_port == start_port:
+            break
+
 
 def IPAddressFamilyFromName(name):
     """Returns the family of the IP address passed in in name, or None if it
@@ -75,7 +136,13 @@ def IPAddressFamilyFromName(name):
     of.
     :returns: None, AF_INET or AF_INET6.
     """
-    mo = IPaddress_re.match(name)
+    name = abytes(name)
+
+    try:
+        mo = IPaddress_re.match(name)
+    except (TypeError, ValueError):
+        log.error('Bad name: %r', name)
+        raise
 
     if mo is None:
         return None
@@ -89,6 +156,18 @@ def IPAddressFamilyFromName(name):
 
 def default_hostname():
     return gethostname()
+
+
+def loopback_address(sock_family):
+    if sock_family == AF_INET:
+        return '127.0.0.1'
+
+    if sock_family == AF_INET6:
+        return '::1'
+
+    raise ValueError(
+        'Can\'t form loopback address with unknown socket family: %r' % (
+            sock_family,))
 
 
 def ValidPortNum(port):
@@ -197,9 +276,8 @@ def GetBoundSocket(family, socktype, address, port_filter=None):
             return
 
         # Guess a port from the unregistered range.
-        for ii in range(49152, 0xffff):
-            if port_filter is None or port_filter(ii):
-                yield ii
+        for port in UnregisteredPortGenerator(port_filter):
+            yield port
 
     socketError = None
     for port in port_generator():
@@ -229,6 +307,7 @@ def GetBoundSocket(family, socktype, address, port_filter=None):
     return ssocket
 
 
+#Change to AddressDescription
 class ListenDescription(
         DeepClass('_laddr_', {
             'port': {dck.check: lambda x: x == 0 or ValidPortNum(x)},
@@ -250,26 +329,20 @@ class ListenDescription(
             scopeid=None if len(sname) == 2 else sname[3])
         return addr
 
-    def __init__(
-            self, name, sock_family, sock_type, flowinfo=None,
-            scopeid=None, **kwargs):
+    def deduce_missing_values(self):
 
-        for attr in (
-                'name', 'sock_family', 'sock_type', 'flowinfo',
-                'scopeid'):
-            kwargs[attr] = locals()[attr]
-
-        super(ListenDescription, self).__init__(**kwargs)
+        if self.sock_family is None:
+            if self.name is not None:
+                self.sock_family = IPAddressFamilyFromName(self.name)
 
         if self.sock_family == AF_INET6:
             for ip6_attr in ('flowinfo', 'scopeid'):
                 if getattr(self, ip6_attr) is None:
-                    raise TypeError(
-                        'Must specify %r for and IPv6 address.' % ip6_attr)
+                    setattr(self, ip6_attr, 0)
 
     @property
     def sockname_tuple(self):
-        if self.name == Transport.SendFromAddressNameAny:
+        if self.name == SendFromAddressNameAny:
             name = '0.0.0.0' if self.sock_family == AF_INET else '::'
         else:
             name = self.name
@@ -460,41 +533,6 @@ class Transport(Singleton):
     DefaultPort = 0
     DefaultFamily = AF_INET
 
-    NameAll = type(
-        'ListenNameAllAddresses', (), {
-            '__repr__': lambda self:
-                self.__name__ + '.Transport.NameAll',
-            '__doc__': (
-                'Use this singleton object in your call to listen_for_me to '
-                'indicate that you wish to listen on all addresses.')})()
-    NameLANHostname = type(
-        'ListenNameLANHostname', (), {
-            '__repr__': lambda self:
-                self.__name__ + '.Transport.NameLANHostname',
-            '__doc__': (
-                'Use this singleton object in your call to listen_for_me to '
-                'indicate that you wish to listen on an address you have '
-                'exposed on the Local Area Network.')})()
-
-    NameLoopbackAddress = type(
-        'ListenNameLoopbackAddress', (), {
-            '__repr__': lambda self:
-                self.__name__ + '.Transport.NameLoopbackAddress',
-            '__doc__': (
-                'Use this singleton object in your call to listen_for_me to '
-                'indicate that you wish to listen on an address you have '
-                'exposed on the Local Area Network.')})()
-
-    SendFromAddressNameAny = type(
-        'SendFromAddressNameAny', (), {
-            '__repr__': lambda self: (
-                self.__name__ + '.Transport.SendFromAddressNameAny'),
-            '__doc__': (
-                'Use this singleton object in your call to '
-                'get_send_from_address to '
-                'indicate that you wish to send from any routable '
-                'local address.')})()
-
     @staticmethod
     def FormatBytesForLogging(mbytes):
         return '\\n\n'.join(
@@ -548,12 +586,21 @@ class Transport(Singleton):
             raise TypeError(
                 '\'callback\' parameter %r is not a Callable' % callback)
 
-        sock_family = self.fix_sock_family(sock_family)
-
-        if name is self.NameAll:
+        if name is NameAll:
             name = '0.0.0.0' if sock_family == AF_INET else '::'
-        elif name is self.NameLANHostname:
+        elif name is NameLANHostname:
             name = default_hostname()
+        elif name is NameLoopbackAddress:
+            if sock_family is None:
+                raise ValueError(
+                    'Must specify a socket type to use the loopback address '
+                    'name.')
+            name = loopback_address(sock_family)
+
+        if sock_family is None:
+            sock_family = IPAddressFamilyFromName(name)
+
+        sock_family = self.fix_sock_family(sock_family)
 
         sock_type = self.fix_sock_type(sock_type)
 
@@ -583,7 +630,7 @@ class Transport(Singleton):
             from_description=None, to_description=None):
 
         if sock_family is None:
-            sock_family = IPAddressFamilyFromName(abytes(remote_name))
+            sock_family = IPAddressFamilyFromName(remote_name)
 
         create_kwargs = {}
         for attr in (
@@ -797,7 +844,7 @@ class Transport(Singleton):
             return None, None
 
         def find_suitable_name(pdict, name):
-            if name != Transport.SendFromAddressNameAny:
+            if name != SendFromAddressNameAny:
                 return None, None
 
             for name, name_dict in iteritems(pdict):
