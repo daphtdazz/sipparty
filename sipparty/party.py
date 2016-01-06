@@ -176,7 +176,7 @@ class Party(
 
         invD = self.newInviteDialog(toURI)
 
-        log.debug("Initialize dialog to %r", proxy)
+        log.debug("Initialize dialog to %r", ((remote_name, remote_port,)))
         invD.initiate(remote_name=remote_name, remote_port=remote_port)
         return invD
 

@@ -27,7 +27,7 @@ from ..deepclass import DeepClass, dck
 from ..parse import ParsedPropertyOfClass
 from ..sdp import (sdpsyntax, SDPIncomplete)
 from ..transport import ValidPortNum
-from ..util import (abytes, Enum, WeakMethod)
+from ..util import (abytes, astr, Enum, WeakMethod)
 from .transform import (Transform, TransformKeys)
 from .components import (AOR, URI)
 from .header import Call_IdHeader
@@ -199,7 +199,7 @@ class Dialog(
             request=self._dlg_requests[-1])
 
         self.transport.sendMessage(
-            ack, self.remote_name, remote_port)
+            ack, self.remote_name, self.remote_port)
 
     def sendRequest(self, reqType, remote_name=None, remote_port=None):
 
@@ -209,11 +209,11 @@ class Dialog(
 
         if remote_name is not None:
             log.debug("Learning remote address: %r", remote_name)
-            self.remote_name = remote_name
+            self.remote_name = astr(remote_name)
 
         if remote_port is not None:
-            log.debug("Learning remote address: %r", remote_name)
-            self.remote_name = remote_name
+            log.debug("Learning remote port: %r", remote_port)
+            self.remote_port = remote_port
 
         for reqdAttr in (
                 "fromURI", "toURI", "contactURI", "remote_name",
@@ -273,8 +273,8 @@ class Dialog(
         resp = MessageResponse(response)
 
         self.configureResponse(resp, req)
-        self.transport.sendMessage(
-            resp, req.ContactHeader.host, fromAddr=self.contactURI.host)
+        vh = req.viaheader
+        self.transport.sendMessage(resp, astr(vh.address), vh.port)
 
     def configureResponse(self, resp, req):
         log.debug("Configure response starting %r, startline %r", resp,

@@ -24,7 +24,6 @@ class SingleRTPSession(Session):
     def __init__(self, **kwargs):
         super(SingleRTPSession, self).__init__(**kwargs)
         ms = RTPPCMUMediaSession()
-        ms.address = self.address
         self.addMediaSession(ms)
 
 

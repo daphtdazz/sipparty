@@ -20,7 +20,8 @@ import logging
 from socket import (SOCK_STREAM, SOCK_DGRAM, AF_INET, AF_INET6)
 from ..transport import (
     ConnectedAddressDescription, ListenDescription, SocketInUseError,
-    SocketProxy, Transport)
+    SocketProxy, Transport, IPv4address_re, IPv6address_re,
+    IPv6address_only_re)
 from ..util import WaitFor
 from .setup import (MagicMock, patch, SIPPartyTestCase)
 
@@ -40,6 +41,32 @@ class TestTransport(SIPPartyTestCase):
 
     def new_connection(self, local_address, remote_address):
         return True
+
+    def test_ip_addresses(self):
+        for ip6_string in (
+                b'::1', b'::', b'fe80::1', b'fe80:1:1:1:1:1:1:1',
+                b'fe80::aa66:7fff:FE0e:f035', b'fe80::', b'1:2:3:4:5:6:7::'):
+            mo = IPv6address_re.match(ip6_string)
+            self.assertIsNotNone(mo)
+            self.assertEqual(mo.group(0), ip6_string)
+
+            # Should get the same results with an exact match.
+            mo = IPv6address_only_re.match(ip6_string)
+            self.assertIsNotNone(mo)
+            self.assertEqual(mo.group(0), ip6_string)
+
+        for bad_ip6_addr in (
+                b'fe80::1::1', b':::', b'1:2:3:4:5:6:7:8:9',
+                b'1:2:3::5:6:7:8:9', b'1::3:4:5:6:7:8:9', b'1::3:4:5:6:7:8:',
+                b'1:2:3:4:5:6:7::9'):
+            mo = IPv6address_only_re.match(bad_ip6_addr)
+            self.assertIsNone(mo)
+
+        for contains_ip_addr, offset, length in (
+                (b'fe80::aa66:7fff:fe0e:f035%en0', 0, 25),):
+            mo = IPv6address_re.match(contains_ip_addr)
+            self.assertIsNotNone(mo)
+            self.assertEqual(mo.group(0), contains_ip_addr[offset:length])
 
     def test_transport_data_structures(self):
         log.info('Test transport data structures')

@@ -17,6 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 from collections import Callable
+from copy import copy
 import logging
 from numbers import Integral
 import re
@@ -52,20 +53,39 @@ DIGIT = b"[%(digitrange)s]" % bglobals()
 hexrange = b"%(digitrange)sa-fA-F" % bglobals()
 HEXDIG = b"[%(hexrange)s]" % bglobals()
 hex4 = b"%(HEXDIG)s{1,4}" % bglobals()
-# Surely IPv6 address length is limited?
-hexseq = b"%(hex4)s(?::%(hex4)s)*" % bglobals()
-hexpart = (
-    b"(?:%(hexseq)s|%(hexseq)s::(?:%(hexseq)s)?|::(?:%(hexseq)s)?)" %
-    bglobals())
 IPv4address = b"%(DIGIT)s{1,3}(?:[.]%(DIGIT)s{1,3}){3}" % bglobals()
-IPv6address = b"%(hexpart)s(?::%(IPv4address)s)?" % bglobals()
+
+# IPv6address is a bit complicated. This expression is to ensure we match all
+# possibilities with restricted length, and do a maximal match each time which
+# doesn't happen if we slavishly follow the ABNF in RFC 2373, which is a bit
+# rubbish and doesn't seem to care about the length of the address (!).
+col_hex4 = b':%(hex4)s' % bglobals()
+col_hex4_gp = b'(?:%(col_hex4)s)' % bglobals()
+IPv6address = (
+    # May start with double colon such as ::, ::1, ::fe80:1:2 etc.
+    b'(?:::(?:%(hex4)s%(col_hex4_gp)s{,6})?|'  # Net one '('...
+    # Or there is a double colon somewhere inside... but we want to make sure
+    # we match the double colon immediately, without the regex engine having to
+    # track back, so do each option explicitly.
+    b'%(hex4)s(?:::(?:%(hex4)s%(col_hex4_gp)s{,5})?|'  # (
+    b'%(col_hex4_gp)s(?:::(?:%(hex4)s%(col_hex4_gp)s{,4})?|'  # (
+    b'%(col_hex4_gp)s(?:::(?:%(hex4)s%(col_hex4_gp)s{,3})?|'  # (
+    b'%(col_hex4_gp)s(?:::(?:%(hex4)s%(col_hex4_gp)s{,2})?|'  # (
+    b'%(col_hex4_gp)s(?:::(?:%(hex4)s%(col_hex4_gp)s{,1})?|'  # (
+    b'%(col_hex4_gp)s(?:::(?:%(hex4)s)?|'  # (
+    b'%(col_hex4_gp)s(?:::|'  # (
+    b'%(col_hex4_gp)s'
+    b'))))))))' % bglobals())
+
 IPaddress = b"(?:(%(IPv4address)s)|(%(IPv6address)s))" % bglobals()
 port = b"%(DIGIT)s+" % bglobals()
 
 # Some pre-compiled regular expression versions.
-IPv4address_re = re.compile(IPv4address + b'$')
-IPv6address_re = re.compile(IPv6address + b'$')
-IPaddress_re = re.compile(IPaddress + b'$')
+IPv4address_re = re.compile(IPv4address)
+IPv4address_only_re = re.compile(IPv4address + b'$')
+IPv6address_re = re.compile(IPv6address)
+IPv6address_only_re = re.compile(IPv6address + b'$')
+IPaddress_re = re.compile(IPaddress)
 
 first_unregistered_port = 49152
 next_port = first_unregistered_port
@@ -116,6 +136,10 @@ def IsSpecialName(name):
     return name in SpecialNames
 
 
+def IsValidTransportName(name):
+    return isinstance(name, str) or IsSpecialName(name)
+
+
 def UnregisteredPortGenerator(port_filter=None):
     global next_port
     start_port = next_port
@@ -136,6 +160,8 @@ def IPAddressFamilyFromName(name):
     of.
     :returns: None, AF_INET or AF_INET6.
     """
+    if name is None:
+        return None
     name = abytes(name)
 
     try:
@@ -159,6 +185,8 @@ def default_hostname():
 
 
 def loopback_address(sock_family):
+    #DELETE
+    assert 0
     if sock_family == AF_INET:
         return '127.0.0.1'
 
@@ -198,10 +226,14 @@ class BadNetwork(TransportException):
         super(BadNetwork, self).__init__(msg)
         self.socketError = socketError
 
-    def __bytes__(self):
-        sp = super(BadNetwork, self)
-        sms = sp.__bytes__() if hasattr(sp, "__bytes__") else sp.__str__()
-        return "%s. Socket error: %s" % (sms, self.socketError)
+    def __str__(self):
+        sp_str_gt = getattr(super(BadNetwork, self), '__str__', None)
+        if sp_str_gt is not None:
+            sp_str = sp_str_gt()
+        else:
+            sp_str = 'BadNetwork'
+
+        return "%s. Socket error: %s" % (sp_str, self.socketError)
 
 
 class SocketInUseError(TransportException):
@@ -218,7 +250,7 @@ def SockTypeName(socktype):
     if socktype == SOCK_DGRAM:
         return SOCK_TYPE_IP_NAMES.UDP
 
-    assert socktype in SOCK_TYPES
+    raise TypeError('%r is not one of %r' % (socktype, SOCK_TYPES))
 
 
 def SockTypeFromName(socktypename):
@@ -255,18 +287,28 @@ def GetBoundSocket(family, socktype, address, port_filter=None):
     # socktype e.g. SOCK_STREAM
     # Just grab the first addr info if we haven't
     log.debug("GetBoundSocket addr:%r port:%r family:%r socktype:%r...",
-              address[0], address[1], family, SockTypeName(socktype))
+              address[0], address[1], family, socktype)
 
     addrinfos = getaddrinfo(address[0], address[1], family, socktype)
-    log.debug("Got addresses.")
-    log.detail("  %r", addrinfos)
 
     if len(addrinfos) == 0:
-        raise BadNetwork("Could not find an address to bind to %r." % address)
+        raise BadNetwork(
+            "Could not find an address to bind to %r." % address, None)
+
+    log.debug("Using address %r.", addrinfos[0])
+    log.detail("  %r", addrinfos)
 
     _family, _socktype, _proto, _canonname, address = addrinfos[0]
+    ssocket = socket_class(_family, _socktype)
 
-    ssocket = socket_class(_family, socktype)
+    # Clean the address, which on some devices if it's IPv6 will have the name
+    # of the interface appended after a % character.
+    if _family == AF_INET6:
+        old_name = address[0]
+        mo = IPv6address_re.match(abytes(old_name))
+        address = (mo.group(0),) + address[1:]
+        if old_name != address[0]:
+            log.debug('Cleaned IPv6address: %r -> %r', old_name, address[0])
 
     def port_generator():
         if address[1] != 0:
@@ -280,28 +322,47 @@ def GetBoundSocket(family, socktype, address, port_filter=None):
             yield port
 
     socketError = None
+    max_retries = 10
+    attempts = 0
+    bind_addr = None
     for port in port_generator():
         try:
             # TODO: catch specific errors (e.g. address in use) to bail
             # immediately rather than inefficiently try all ports.
-            ssocket.bind((address[0], port))
+
+            if _family == AF_INET:
+                bind_addr = (address[0], port)
+            else:
+                bind_addr = (address[0], port) + address[2:]
+            ssocket.bind(bind_addr)
             log.debug(
-                'Bind socket to %r, result %r', (address[0], port),
+                'Bind socket to %r, result %r', bind_addr,
                 ssocket.getsockname())
             socketError = None
             break
+
         except socket.error as _se:
-            log.debug("Socket error on (%r, %d)", address[0], port)
+            log.debug("Socket error on %r", bind_addr)
             socketError = _se
+            attempts += 1
+
         except socket.gaierror as _se:
-            log.debug("GAI error on (%r, %d)", address[0], port)
+            log.debug("GAI error on %r", bind_addr)
             socketError = _se
             break
 
+        except OSError as exc:
+            log.error('%r', exc)
+            raise
+
+        if attempts == max_retries:
+            log.error('Hit max retries: %d', max_retries)
+            break
+
+
     if socketError is not None:
         raise BadNetwork(
-            "Couldn't bind to address %s" % address[0],
-            socketError)
+            "Couldn't bind to address %r" % bind_addr, socketError)
 
     log.debug("Socket bound to %r type %r", ssocket.getsockname(), _family)
     return ssocket
@@ -313,9 +374,10 @@ class ListenDescription(
             'port': {dck.check: lambda x: x == 0 or ValidPortNum(x)},
             'sock_family': {dck.check: lambda x: x in SOCK_FAMILIES},
             'sock_type': {dck.check: lambda x: x in SOCK_TYPES},
-            'name': {},
-            'flowinfo': {dck.check: lambda x: x == 0},
-            'scopeid': {dck.check: lambda x: x == 0},
+            'name': {
+                dck.check: lambda x: IsValidTransportName(x)},
+            'flowinfo': {dck.check: lambda x: isinstance(x, Integral)},
+            'scopeid': {dck.check: lambda x: isinstance(x, Integral)},
             'port_filter': {dck.check: lambda x: isinstance(x, Callable)}}),
         TupleRepresentable):
 
@@ -372,7 +434,8 @@ class ListenDescription(
 
 class ConnectedAddressDescription(
         DeepClass('_cad_', {
-            'remote_name': {},
+            'remote_name': {
+                dck.check: lambda x: IsValidTransportName(x)},
             'remote_port': {dck.check: ValidPortNum},
         }, recurse_repr=True),
         ListenDescription):
@@ -408,6 +471,9 @@ class ConnectedAddressDescription(
             'Bind socket to %r, result %r', self.sockname_tuple,
             sck.getsockname())
         sck.connect(self.remote_sockname_tuple)
+        log.debug(
+            'Connect to %r, result (%r --> %r)', self.remote_sockname_tuple,
+            sck.getsockname(), sck.getpeername())
 
         csck = SocketProxy(
             local_address=ConnectedAddressDescription.description_from_socket(
@@ -574,40 +640,35 @@ class Transport(Singleton):
 
     # bind_listen_address
     def listen_for_me(self, callback, sock_type=None, sock_family=None,
-                      name=NameAll, port=0, port_filter=None, flowinfo=0,
-                      scopeid=0):
-
-        if flowinfo != 0 or scopeid != 0:
-            raise NotImplementedError(
-                'flowinfo and scopeid with values other than 0 can\'t be used '
-                'yet.')
+                      name=NameAll, port=0, port_filter=None, flowinfo=None,
+                      scopeid=None, listen_description=None):
 
         if not isinstance(callback, Callable):
             raise TypeError(
                 '\'callback\' parameter %r is not a Callable' % callback)
 
-        if name is NameAll:
-            name = '0.0.0.0' if sock_family == AF_INET else '::'
-        elif name is NameLANHostname:
-            name = default_hostname()
-        elif name is NameLoopbackAddress:
+        if listen_description is None:
+            if name is NameAll:
+                name = '0.0.0.0' if sock_family == AF_INET else '::'
+            elif name is NameLANHostname:
+                name = default_hostname()
+            elif name is NameLoopbackAddress:
+                name = None
+
             if sock_family is None:
-                raise ValueError(
-                    'Must specify a socket type to use the loopback address '
-                    'name.')
-            name = loopback_address(sock_family)
+                sock_family = IPAddressFamilyFromName(name)
 
-        if sock_family is None:
-            sock_family = IPAddressFamilyFromName(name)
+            sock_family = self.fix_sock_family(sock_family)
 
-        sock_family = self.fix_sock_family(sock_family)
+            sock_type = self.fix_sock_type(sock_type)
 
-        sock_type = self.fix_sock_type(sock_type)
-
-        provisional_laddr = ListenDescription(
-            sock_family=sock_family, sock_type=sock_type, name=name,
-            port=port, flowinfo=flowinfo, scopeid=scopeid,
-            port_filter=port_filter)
+            provisional_laddr = ListenDescription(
+                sock_family=sock_family, sock_type=sock_type, name=name,
+                port=port, flowinfo=flowinfo, scopeid=scopeid,
+                port_filter=port_filter)
+        else:
+            provisional_laddr = copy(listen_description)
+        provisional_laddr.deduce_missing_values()
 
         tpl = self.convert_listen_description_into_find_tuple(
             provisional_laddr)
@@ -637,26 +698,10 @@ class Transport(Singleton):
                 'sock_type', 'sock_family', 'name', 'port', 'flowinfo',
                 'scopeid', 'port_filter'):
 
-            if from_description is not None:
-                assert 0
-                val = getattr(from_description, attr, None)
-                if val is not None:
-                    log.debug('Use from_description\'s %r value', attr)
-                    create_kwargs[attr] = val
-                    continue
-
             create_kwargs[attr] = locals()[attr]
 
         for remote_attr, to_desc_attr in (
                 ('remote_name', 'name'), ('remote_port', 'port')):
-
-            if to_description is not None:
-                assert 0
-                val = getattr(to_description, to_desc_attr, None)
-                if val is not None:
-                    log.debug('Use to_description\'s %r value', remote_attr)
-                    create_kwargs[remote_attr] = val
-                    continue
 
             create_kwargs[remote_attr] = locals()[remote_attr]
 
@@ -714,7 +759,6 @@ class Transport(Singleton):
 
     def find_cached_object(self, cache_dict, find_tuple):
 
-        log.debug('Cache dict: %r', cache_dict)
         log.debug('Find tuple: %r', [_item[0] for _item in find_tuple])
         full_path_len = len(find_tuple)
         path = [
@@ -844,6 +888,7 @@ class Transport(Singleton):
             return None, None
 
         def find_suitable_name(pdict, name):
+            log.debug('Find name for %r in keys %r', name, pdict.keys())
             if name != SendFromAddressNameAny:
                 return None, None
 
@@ -882,6 +927,8 @@ class Transport(Singleton):
         next_dict = root_dict
         sentinel = cls._yield_sentinel
         for key, finder in lookups:
+            assert not isinstance(key, bytes)
+            log.debug('Find next key %r from keys %r', key, next_dict.keys())
             obj = next_dict.get(key, sentinel)
             if obj is sentinel:
                 if not isinstance(finder, Callable):

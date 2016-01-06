@@ -26,7 +26,7 @@ from ..parties import (NoMediaSimpleCallsParty)
 from ..sip.dialogs import SimpleCall
 from ..sip.siptransport import SIPTransport
 from ..transport import NameLoopbackAddress
-from ..util import WaitFor
+from ..util import (abytes, WaitFor)
 from .setup import SIPPartyTestCase
 
 log = logging.getLogger()
@@ -56,12 +56,12 @@ class TestParty(SIPPartyTestCase):
         self.skipTest('TCP not yet implemented')
         self.subTestBasicParty(SOCK_STREAM, )
 
-    def testBasicPartyUDP(self):
-        # self.pushLogLevel('party', logging.DEBUG)
-        self.subTestBasicParty(SOCK_DGRAM, b'127.0.0.1')
+    def testBasicPartyUDPIPv4(self):
+        self.pushLogLevel('party', logging.DEBUG)
+        self.subTestBasicParty(SOCK_DGRAM, '127.0.0.1')
 
     def testBasicPartyUDPIPv6(self):
-        self.subTestBasicParty(SOCK_DGRAM, b'::1')
+        self.subTestBasicParty(SOCK_DGRAM, '::1')
 
     def subTestBasicParty(self, sock_type, contact_name):
 
@@ -108,8 +108,8 @@ class TestParty(SIPPartyTestCase):
         # Try another call.
         p3 = BasicParty(
             aor=b'charlie@charlesville.com',
-            contactURI__address=contact_name)
-        p3.listen()
+            contactURI__address=abytes(contact_name))
+        p3.listen(sock_type=sock_type, name=contact_name, port=5061)
         self.assertTrue(p3.transport is p1.transport)
         self.assertTrue(p3.transport is p2.transport)
         invD3to2 = p2.invite(p3)

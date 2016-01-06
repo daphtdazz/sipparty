@@ -25,7 +25,7 @@ from ..sdp import (SessionDescription, MediaDescription)
 from ..sdp.mediatransport import MediaTransport
 from ..sdp.sdpsyntax import (username_re, AddrTypes)
 from ..transport import (
-    IsSpecialName, ListenDescription, NameLANHostname, SOCK_FAMILIES)
+    IsValidTransportName, ListenDescription, NameLANHostname, SOCK_FAMILIES)
 from ..util import (abytes, FirstListItemProxy, WeakMethod, WeakProperty)
 from ..vb import (KeyTransformer, ValueBinder)
 
@@ -40,6 +40,12 @@ class NoMediaSessions(MediaSessionError):
     pass
 
 
+def MediaSessionListenDescription():
+    # Media sessions need to listen on even ports, so the RTCP port is on one
+    # above.
+    return ListenDescription(port_filter=lambda pt: pt % 2 == 0)
+
+
 class Session(
         DeepClass("_sess_", {
             "transport": {
@@ -51,7 +57,7 @@ class Session(
             "mediaSessions": {dck.gen: list},
 
             "name": {
-                dck.check: lambda x: IsSpecialName(x) or isinstance(x, str)
+                dck.check: lambda x: IsValidTransportName(x)
             },
             'sock_family': {dck.check: lambda x: x in SOCK_FAMILIES}
         }),
@@ -81,7 +87,7 @@ class Session(
 
         for ms in self.mediaSessions:
             name = self.name or self.DefaultName
-            ms.listen(name, **kwargs)
+            ms.listen()
 
     def addMediaSession(self, mediaSession=None, **kwargs):
         if mediaSession is None:
@@ -94,6 +100,8 @@ class Session(
         self.mediaSessions.insert(0, mediaSession)
         self.description.addMediaDescription(mediaSession.description)
         mediaSession.parent_session = self
+        mediaSession.name = self.name
+        mediaSession.sock_family = self.sock_family
 
     def sdp(self):
         return bytes(self.description)
@@ -111,7 +119,7 @@ class MediaSession(
                 dck.check: lambda x: isinstance(x, MediaDescription),
                 dck.gen: MediaDescription},
             'local_addr_description': {
-                dck.gen: ListenDescription,
+                dck.gen: MediaSessionListenDescription,
             }
         }),
         ValueBinder):
@@ -120,16 +128,12 @@ class MediaSession(
             "mediaType", "port", "address", "addressType", "transProto",
             "fmts")),)
 
-    vb_bindings = [
-        ('local_addr_description.name', ''),
-    ]
-
-    def listen(self, session_address, **kwargs):
+    def listen(self):
 
         l_desc = self.transport.listen_for_me(
             WeakMethod(self, 'data_received'),
-            name=session_address, port_filter=lambda pt: pt % 2 == 0,
-            **kwargs)
+            listen_description=self.local_addr_description
+            )
         log.error('Media listen address: %r', l_desc)
 
         #TODO: this is wrong.

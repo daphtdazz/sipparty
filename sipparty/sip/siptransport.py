@@ -22,8 +22,9 @@ from socket import (AF_INET, SOCK_DGRAM)
 from weakref import (WeakValueDictionary)
 from ..parse import ParseError
 from ..transport import (
-    Transport, SockTypeFromName, UnregisteredPortGenerator)
-from ..util import (DerivedProperty, Singleton, WeakMethod)
+    IsValidTransportName, Transport, SockTypeFromName,
+    UnregisteredPortGenerator)
+from ..util import (abytes, DerivedProperty, Singleton, WeakMethod)
 from . import prot
 from .components import Host
 from .message import Message
@@ -103,11 +104,11 @@ class SIPTransport(Transport):
 
     def sendMessage(self, msg, name, port):
         log.debug("Send message -> %r type %s", (name, port), msg.type)
-        if name is None:
-            name = msg.ContactHeader.host.address
-        if port is None:
-            port = msg.ContactHeader.host.port
 
+        if not IsValidTransportName(name):
+            raise TypeError(
+                'remote_name %r is not a valid transport name (special name '
+                'or string)' % name)
 
         sock_type = SockTypeFromName(msg.viaheader.transport)
 
@@ -115,6 +116,13 @@ class SIPTransport(Transport):
             sock_type=sock_type, remote_name=name,
             remote_port=port,
             data_callback=WeakMethod(self, 'sipByteConsumer'))
+
+        vh = msg.viaheader
+        if not vh.address:
+            vh.address = abytes(sp.local_address.name)
+
+        if not vh.port:
+            vh.port = sp.local_address.port
 
         sp.send(bytes(msg))
 

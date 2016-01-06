@@ -22,7 +22,7 @@ limitations under the License.
 """
 from six import PY2
 from ..transport import (
-    digitrange, DIGIT, hexrange, HEXDIG, hex4, hexseq, hexpart, IPv4address,
+    digitrange, DIGIT, hexrange, HEXDIG, hex4, IPv4address,
     IPv6address, port)
 from ..util import (AsciiBytesEnum, astr, bglobals_g, Enum, sipheader)
 

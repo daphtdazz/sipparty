@@ -25,7 +25,7 @@ KeyTransformer = "transformer"
 KeyIgnoredExceptions = "ignore_exceptions"
 
 # Use to generate extra profile info.
-PROFILE = True
+PROFILE = False
 
 sentinel = type('ValueBinderNoAttributeSentinel', (), {})()
 

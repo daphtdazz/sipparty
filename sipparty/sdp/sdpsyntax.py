@@ -21,7 +21,7 @@ limitations under the License.
 """
 import re
 from .. import util
-from ..transport import (IPv4address_re, IPv6address_re)
+from ..transport import (IPv4address_only_re, IPv6address_only_re)
 from ..util import (bglobals_g, AsciiBytesEnum)
 
 
@@ -130,10 +130,10 @@ fmt_space_re = re.compile(b"%(space)s" % bglobals())
 #
 def AddressToSDPAddrType(address):
 
-    if IPv6address_re.match(address):
+    if IPv6address_only_re.match(address):
         return AddrTypes.IP6
 
-    if IPv4address_re.match(address):
+    if IPv4address_only_re.match(address):
         return AddrTypes.IP4
 
     # address not obviously IP4 or IP6 so return None

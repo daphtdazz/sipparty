@@ -882,6 +882,8 @@ else:
     def abytes(x):
         if x is None:
             return None
+        if isinstance(x, bytes):
+            return x
         try:
             return bytes(x, encoding='ascii')
         except TypeError as exc:

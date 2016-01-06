@@ -35,7 +35,8 @@ class TestSession(SIPPartyTestCase):
         log.info("Create new Session and check it produces SDP when ready.")
         ms = Session(username=b"alice")
         self.assertRaises(SDPIncomplete, lambda: ms.sdp())
-        ms.address = b"127.0.0.1"
+        ms.name = '127.0.0.1'
+        self.assertEqual(ms.address, b'127.0.0.1')
         self.assertMatchesPattern(
             ms.sdp(),
             b'v=0\r\n'
@@ -66,7 +67,7 @@ class TestSession(SIPPartyTestCase):
             b't=0 0\r\n'
             b'm=audio 11000 RTP/AVP 123\r\n$')
 
-    def test_weak_media_session_parent(self):
+    def test_media_session_parent(self):
         ss = Session()
         ms = MediaSession()
 
@@ -75,17 +76,19 @@ class TestSession(SIPPartyTestCase):
             TypeError, ss.addMediaSession, mediaSession=ms,
             mediaType=MediaTypes.audio)
 
+        ss.name = 'atlanta.com'
+        ss.addMediaSession(mediaSession=ms)
+        self.assertEqual(ms.name, 'atlanta.com')
+
         log.info(
             'Demonstrate that a media session has a weak reference to its '
             'parent.')
-        ss.addMediaSession(mediaSession=ms)
         self.assertIs(ms.parent_session, ss)
         del ss
         self.assertIs(ms.parent_session, None)
 
     def test_on_demand_port_allocation(self):
-        ss = Session(username=b'alice', name='127.0.0.1')
-        self.assertEqual(ss.address, b'127.0.0.1')
+        ss = Session(username=b'alice')
 
         log.info('Exception if no media sessions.')
         self.assertRaises(NoMediaSessions, ss.listen)
@@ -104,7 +107,15 @@ class TestSession(SIPPartyTestCase):
             b'm=audio %(port)d RTP/AVP 123\r\n'
             b'c=IN IP4 127.0.0.1\r\n' % {
                 b'port': ss.mediaSession.port
-            })
+            }
+        )
+
+        log.info(
+            'Test that listen works even when the IP addr type must be '
+            'deduced')
+        ss = Session(username=b'bob', name='127.0.0.1')
+        ss.addMediaSession(
+            mediaType=MediaTypes.audio, transProto = b"RTP/AVP", fmts=[123])
 
     def test_domain_names(self):
         log.info('Check that we can create a session at a domain name.')
