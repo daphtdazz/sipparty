@@ -57,7 +57,6 @@ class TestParty(SIPPartyTestCase):
         self.subTestBasicParty(SOCK_STREAM, )
 
     def testBasicPartyUDPIPv4(self):
-        self.pushLogLevel('party', logging.DEBUG)
         self.subTestBasicParty(SOCK_DGRAM, '127.0.0.1')
 
     def testBasicPartyUDPIPv6(self):
@@ -90,7 +89,7 @@ class TestParty(SIPPartyTestCase):
         p2 = BasicParty(aor=b'bob@biloxi.com')
 
         log.info('p1 listens')
-        self.pushLogLevel('transport', logging.DEBUG)
+        #self.pushLogLevel('transport', logging.DEBUG)
         p1.listen(name=contact_name, sock_type=sock_type)
 
         log.info('p2 invites p1')

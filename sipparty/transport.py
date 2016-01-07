@@ -410,7 +410,9 @@ class ListenDescription(
             name = self.name
         if self.sock_family == AF_INET:
             return (name, self.port)
-        return (name, self.port, self.flowinfo, self.scopeid)
+        fi = self.flowinfo or 0
+        scid = self.scopeid or 0
+        return (name, self.port, fi, scid)
 
     def tupleRepr(self):
         return (
@@ -456,8 +458,10 @@ class ConnectedAddressDescription(
     def remote_sockname_tuple(self):
         if self.sock_family == AF_INET:
             return (self.remote_name, self.remote_port)
-        return (
-            self.remote_name, self.remote_port, self.flowinfo, self.scopeid)
+
+        fi = self.flowinfo or 0
+        scid = self.scopeid or 0
+        return (self.remote_name, self.remote_port, fi, scid)
 
     def connect(self, data_callback, transport):
         """Attempt to connect this description.
@@ -685,7 +689,7 @@ class Transport(Singleton):
     # connect
     def get_send_from_address(
             self, sock_type=None, sock_family=None,
-            name=SendFromAddressNameAny, port=0, flowinfo=0, scopeid=0,
+            name=SendFromAddressNameAny, port=0, flowinfo=None, scopeid=None,
             remote_name=None, remote_port=None, port_filter=None,
             data_callback=None,
             from_description=None, to_description=None):
@@ -768,6 +772,7 @@ class Transport(Singleton):
         log.debug(
             'Path is %d long, full find tuple is %d long', len(path),
             full_path_len)
+        assert not (len(path) == 7 and full_path_len == 8), path[-1]
 
         assert len(path) <= full_path_len
         if len(path) == full_path_len:
@@ -897,13 +902,24 @@ class Transport(Singleton):
 
             return None, None
 
+        def find_suitable_flowinfo_or_scopeid(pdict, val):
+            log.debug(
+                'Find flowinfo or scopeid for %r in keys %r', val, pdict.keys())
+            if val is not None:
+                return None, None
+
+            for name, name_dict in iteritems(pdict):
+                return name, name_dict
+
+            return None, None
+
         rtup = (
             (listen_address.sock_family, lambda _dict, key: (key, {})),
             (listen_address.sock_type, lambda _dict, key: (key, {})),
             (listen_address.name, find_suitable_name),
             (listen_address.port, find_suitable_port),
-            (listen_address.flowinfo, lambda _dict, key: (key, {})),
-            (listen_address.scopeid, None))
+            (listen_address.flowinfo, find_suitable_flowinfo_or_scopeid),
+            (listen_address.scopeid, find_suitable_flowinfo_or_scopeid))
         if listen_address.sock_family == AF_INET:
             return rtup[:-2]
         return rtup
