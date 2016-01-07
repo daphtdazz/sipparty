@@ -26,7 +26,7 @@ from ..fsm import (AsyncFSM, InitialStateKey, UnexpectedInput)
 from ..deepclass import DeepClass, dck
 from ..parse import ParsedPropertyOfClass
 from ..sdp import (sdpsyntax, SDPIncomplete)
-from ..transport import ValidPortNum
+from ..transport import IsValidPortNum
 from ..util import (abytes, astr, Enum, WeakMethod)
 from .transform import (Transform, TransformKeys)
 from .components import (AOR, URI)
@@ -68,7 +68,7 @@ class Dialog(
             "toURI": {dck.descriptor: ParsedPropertyOfClass(URI)},
             "contactURI": {dck.descriptor: ParsedPropertyOfClass(URI)},
             "remote_name": {},
-            "remote_port": {dck.check: ValidPortNum},
+            "remote_port": {dck.check: IsValidPortNum},
             "localTag": {},
             "remoteTag": {},
             "transport": {},

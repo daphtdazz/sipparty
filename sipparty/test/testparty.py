@@ -25,7 +25,7 @@ from ..party import (Party)
 from ..parties import (NoMediaSimpleCallsParty)
 from ..sip.dialogs import SimpleCall
 from ..sip.siptransport import SIPTransport
-from ..transport import NameLoopbackAddress
+from ..transport import (IsValidPortNum, NameLoopbackAddress)
 from ..util import (abytes, WaitFor)
 from .setup import SIPPartyTestCase
 
@@ -135,4 +135,4 @@ class TestParty(SIPPartyTestCase):
         p2 = NoMediaSimpleCallsParty()
 
         p1.listen()
-        self.assertEqual(p1.listenAddress, ())
+        self.assertTrue(IsValidPortNum(p1.contactURI.port))

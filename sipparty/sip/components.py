@@ -239,7 +239,8 @@ class URI(
     def __eq__(self, other):
 
         return all([
-            getattr(self, component) == getattr(self, component)
+            hasattr(other, component) and
+            getattr(self, component) == getattr(other, component)
             for component in self.significant_attributes
         ])
 

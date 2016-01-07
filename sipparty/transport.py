@@ -198,7 +198,7 @@ def loopback_address(sock_family):
             sock_family,))
 
 
-def ValidPortNum(port):
+def IsValidPortNum(port):
     return 0 < port <= 0xffff
 
 
@@ -371,7 +371,7 @@ def GetBoundSocket(family, socktype, address, port_filter=None):
 #Change to AddressDescription
 class ListenDescription(
         DeepClass('_laddr_', {
-            'port': {dck.check: lambda x: x == 0 or ValidPortNum(x)},
+            'port': {dck.check: lambda x: x == 0 or IsValidPortNum(x)},
             'sock_family': {dck.check: lambda x: x in SOCK_FAMILIES},
             'sock_type': {dck.check: lambda x: x in SOCK_TYPES},
             'name': {
@@ -438,7 +438,7 @@ class ConnectedAddressDescription(
         DeepClass('_cad_', {
             'remote_name': {
                 dck.check: lambda x: IsValidTransportName(x)},
-            'remote_port': {dck.check: ValidPortNum},
+            'remote_port': {dck.check: IsValidPortNum},
         }, recurse_repr=True),
         ListenDescription):
 
@@ -812,7 +812,7 @@ class Transport(Singleton):
             port = self.DefaultPort
         if not isinstance(port, Integral):
             raise TypeError('Port is not an Integer: %r' % port)
-        if not ValidPortNum(port):
+        if not IsValidPortNum(port):
             raise ValueError('Invalid port number: %r' % port)
         if family not in (None, AF_INET, AF_INET6):
             raise ValueError("Invalid socket family %r" % family)
@@ -972,10 +972,10 @@ class Transport(Singleton):
             yield val
 
     def fix_sock_family(self, sock_family):
-        if sock_family is None:
-            raise NotImplementedError(
-                'Currently you must specify an IP family.')
-        if sock_family not in SOCK_FAMILIES:
+        #if sock_family is None:
+        #    raise NotImplementedError(
+        #        'Currently you must specify an IP family.')
+        if sock_family not in (None,) + tuple(SOCK_FAMILIES):
             raise TypeError(
                 'Invalid socket family: %s' % SockFamilyName(sock_family))
 

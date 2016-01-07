@@ -21,7 +21,7 @@ from six import (binary_type as bytes)
 from ..media.session import (MediaSession, NoMediaSessions, Session)
 from ..sdp import SDPIncomplete
 from ..sdp.sdpsyntax import (MediaTypes, AddrTypes, NetTypes)
-from ..transport import ValidPortNum
+from ..transport import IsValidPortNum
 from ..util import TestCaseREMixin
 from .setup import SIPPartyTestCase
 
@@ -97,7 +97,7 @@ class TestSession(SIPPartyTestCase):
         ss.addMediaSession(
             mediaType=MediaTypes.audio, transProto = b"RTP/AVP", fmts=[123])
         ss.listen()
-        self.assertTrue(ValidPortNum(ss.mediaSession.port))
+        self.assertTrue(IsValidPortNum(ss.mediaSession.port))
         self.assertMatchesPattern(
             ss.sdp(),
             b'v=0\r\n'
