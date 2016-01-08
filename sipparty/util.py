@@ -299,7 +299,16 @@ class FirstListItemProxy(object):
 
         # Take a copy so the length won't change between checking it and
         # returning the first item.
-        list_attr = list(getattr(instance, self._flip_attrName))
+        list_attr = getattr(instance, self._flip_attrName)
+
+        try:
+            list_attr = list(list_attr)
+        except TypeError:
+            raise TypeError(
+                'List attribute %r of %r instance is of type %r and cannot '
+                'be used with FirstListItemProxy' % (
+                    self._flip_attrName, instance.__class__.__name__,
+                    list_attr.__class__.__name__))
 
         if len(list_attr) == 0:
             raise AttributeError(

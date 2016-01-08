@@ -203,7 +203,17 @@ class ValueBinder(object):
                 if KeyIgnoredExceptions in opts:
                     ignored_exceptions = opts[KeyIgnoredExceptions]
 
-            self.bind(binding[0], binding[1], transformer, ignored_exceptions)
+            try:
+                self.bind(
+                    binding[0], binding[1], transformer, ignored_exceptions)
+            except Exception as exc:
+                exc.args += (
+                    'raised attempting to bind %r to %r on %r '
+                    'instance' % (
+                        binding[0],
+                        binding[1], self.__class__.__name__),)
+
+                raise
 
     def unbind(self, frompath, topath):
         """Unbind a binding. Raises NoSuchBinding() if the binding does not
