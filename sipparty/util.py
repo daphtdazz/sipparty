@@ -278,6 +278,11 @@ class FirstListItemProxy(object):
     def __init__(self, list_attr_name):
         super(FirstListItemProxy, self).__init__()
 
+        if not isinstance(list_attr_name, str):
+            raise TypeError(
+                'List attribute name passed to FirstListItemProxy is not a '
+                'string: %r' % list_attr_name)
+
         try:
             hasattr(self, list_attr_name)
         except TypeError:
