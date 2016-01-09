@@ -149,12 +149,12 @@ class TestUtil(SIPPartyTestCase):
 
         log.info('Check AttributeError raised for None and missing lists')
         self.assertRaises(AttributeError, getattr, obj, 'first_of_my_list')
-        obj.my_list = []
-        self.assertRaises(AttributeError, getattr, obj, 'first_of_my_list')
+        for attr_error_obj in ([], None):
+            obj.my_list = attr_error_obj
+            self.assertRaises(AttributeError, getattr, obj, 'first_of_my_list')
 
         log.info('Check TypeError when attempting to use a non-list list.')
-
-        for bad_type_object in (1, None):
+        for bad_type_object in (1, {'a:': 1}):
             obj.my_list = bad_type_object
             self.assertRaises(TypeError, getattr, obj, 'first_of_my_list')
 

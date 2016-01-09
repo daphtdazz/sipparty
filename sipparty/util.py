@@ -17,7 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 from abc import (ABCMeta, abstractmethod)
-from collections import Callable
+from collections import (Callable, Sequence)
 import logging
 import re
 from six import (
@@ -273,9 +273,13 @@ class ClassType(object):
 
 
 class FirstListItemProxy(object):
-    "This descriptor provides access to the first item in a list attribute."
+    """This descriptor provides access to the first item in a list attribute.
+    """
 
     def __init__(self, list_attr_name):
+        """
+        :param str list_attr_name: Should be the name of an attribute.
+        """
         super(FirstListItemProxy, self).__init__()
 
         if not isinstance(list_attr_name, str):
@@ -292,30 +296,43 @@ class FirstListItemProxy(object):
         self._flip_attrName = list_attr_name
 
     def __get__(self, instance, owner):
-        if instance is None:
-            raise AttributeError(
-                "Class use of FirstListItemProxy descriptors not supported. "
-                "List attribute name: %r." % (self._flip_attrName,))
+        """
+        If the instance has the attribute, or it is None or an empty
+        Sequence, getting this descriptor will raise AttributeError, as the
+        instance clearly doesn't have a 'first list item' to get.
 
-        # Take a copy so the length won't change between checking it and
-        # returning the first item.
+        If the instance has this attribute and it is a non-empty Sequence, then
+        the first item of the Sequence is returned.
+
+        Otherwise raises TypeError.
+        """
+
+        if instance is None:
+            return owner
+
         list_attr = getattr(instance, self._flip_attrName)
 
-        try:
-            list_attr = list(list_attr)
-        except TypeError:
+        def attr_err():
+            raise AttributeError(
+                "Instance %r of class %r does not have attribute %r." % (
+                    instance, owner, self._flip_attrName))
+
+        if list_attr is None:
+            attr_err()
+
+        if not isinstance(list_attr, Sequence):
             raise TypeError(
-                'List attribute %r of %r instance is of type %r and cannot '
-                'be used with FirstListItemProxy' % (
+                'List attribute %r of %r instance is not a Sequence (has type '
+                '%r) and cannot be used with FirstListItemProxy' % (
                     self._flip_attrName, instance.__class__.__name__,
                     list_attr.__class__.__name__))
 
-        if len(list_attr) == 0:
-            raise AttributeError(
-                "Instance %r of class %r does not have attribute %r."
-                "".format(instance, owner, self._flip_attrName))
+        for obj in list_attr:
+            # I.e. just return the first item, if the list is not empty.
+            return obj
 
-        return list_attr[0]
+        # List was empty, raise AttributeError.
+        attr_err()
 
     def __set__(self, instance, val):
         if instance is None:
