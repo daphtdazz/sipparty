@@ -177,6 +177,7 @@ class ValueBinder(object):
                 log.debug(
                     "Target bindings after forward bind: %r",
                     at._vb_forwardbindings)
+
         self._vb_binddirection(
             topath, frompath, None, transformer, self.VB_Backward,
             ignore_exceptions)
@@ -246,12 +247,16 @@ class ValueBinder(object):
     @property
     def vb_parent(self):
         wp = self._vb_weakBindingParent
-        log.debug("vb_parent weakref: %s", wp)
+        log.detail(
+            "Get vb_parent from %r instance, weakref: %s",
+            self.__class__.__name__, wp)
         return wp() if wp is not None else None
 
     @vb_parent.setter
     def vb_parent(self, newParent):
-        log.debug("Set vb_parent to %r", newParent)
+        log.debug(
+            "Set vb_parent of %r instance to %r instance",
+            self.__class__.__name__, newParent.__class__.__name__)
         if newParent is None:
             self._vb_weakBindingParent = None
             return
@@ -278,14 +283,12 @@ class ValueBinder(object):
 
     def vb_updateAttributeBindings(self, attr, existing_val, val):
 
-        log.debug(
-            "Update attribute %r bindings after change, 0x%x -> 0x%x.", attr,
-            id(existing_val), id(val))
+        log.debug("Update paths bound through %r.", attr)
+
         if isinstance(existing_val, ValueBinder):
             expar = existing_val.vb_parent
             if expar is self:
-                log.debug(
-                    "Unbind all parent since we are removing it from ourself.")
+                log.debug("Unbind old attribute's parent.")
                 existing_val._vb_unbindAllParent()
 
         if isinstance(val, ValueBinder):
@@ -310,8 +313,8 @@ class ValueBinder(object):
                         subtopath = self.VB_PrependParent(topath)
                         tf = bd[KeyTransformer]
                         ie = bd[KeyIgnoredExceptions]
-                        log.debug("%r bind new value %r to %r", direction,
-                                  subpath, subtopath)
+                        log.detail("%r bind new value %r to %r", direction,
+                                   subpath, subtopath)
                         val._vb_binddirection(subpath, subtopath, self, tf,
                                               direction, ie)
 
@@ -324,8 +327,8 @@ class ValueBinder(object):
         for fromattrattrs, bds in iteritems(fbds):
             if len(fromattrattrs) == 0:
                 for topath, bd in iteritems(bds):
-                    log.debug("Push %s.%s to %s", attr, fromattrattrs,
-                              topath)
+                    log.detail("Push %s.%s to %s", attr, fromattrattrs,
+                               topath)
                     self._vb_push_value_to_target(val, topath, bd)
 
     #
@@ -345,7 +348,7 @@ class ValueBinder(object):
                         self.__class__.__name__, attr))
             return (attr, gattr(attr))
 
-        log.debug("%r get %r", self.__class__.__name__, attr)
+        log.debug("Get %r (from %r instance)", attr, self.__class__.__name__)
         sd = self.__dict__
 
         # Check for delegate attributes.
@@ -375,7 +378,7 @@ class ValueBinder(object):
         if PROFILE:
             self.hit_set_attr(attr)
 
-        log.detail("Set %r.", attr)
+        log.debug("Set %r (on %r instance).", attr, cn)
         sd = self.__dict__
 
         # Avoid recursion if a subclass has not called init (perhaps failed
@@ -392,6 +395,7 @@ class ValueBinder(object):
                     "delegated to attribute %r which is None." % (
                         attr, cn, deleattr))
 
+            log.debug('Set on delegate attribute %r', deleattr)
             return setattr(dele, attr, val)
 
         existing_val = getattr(self, attr, None)
@@ -522,11 +526,11 @@ class ValueBinder(object):
         attr, _ = self.VB_PartitionPath(path)
         vbdas = self._vb_delegate_attributes
         if attr not in vbdas:
-            log.debug("Non-delegated path %r", path)
+            log.detail("Non-delegated path %r", path)
             return path
 
         da = vbdas[attr]
-        log.debug("Delegated path %r through %r", path, da)
+        log.detail("Delegated path %r through %r", path, da)
         return self.VB_JoinPath((da, path))
 
     def _vb_bindingsForDirection(self, direction):
@@ -632,9 +636,9 @@ class ValueBinder(object):
             ignore_exceptions):
         """
         """
-        log.debug("%r %r bindings before bind %r",
-                  self.__class__.__name__, direction,
-                  self._vb_bindingsForDirection(direction))
+        cn = self.__class__.__name__
+        log.debug(
+            "Bind %r of %r instance %s to %r", frompath, cn, direction, topath)
         resolvedfrompath = self._vb_resolveFromPath(frompath)
         resolvedtopath = self._vb_resolveFromPath(topath)
 
@@ -644,15 +648,13 @@ class ValueBinder(object):
         if resolvedtopath in bds:
             raise BindingAlreadyExists(
                 "Attribute path %r of %r instance already bound to %r." % (
-                    resolvedfrompath, self.__class__.__name__,
-                    resolvedtopath))
+                    resolvedfrompath, cn, resolvedtopath))
         ignore_exceptions = (
             tuple() if not ignore_exceptions else ignore_exceptions)
         bd = {
             KeyTransformer: transformer,
             KeyIgnoredExceptions: ignore_exceptions
         }
-        bds[resolvedtopath] = bd
 
         currparent = self.vb_parent
         assert (currparent is None or
@@ -660,31 +662,62 @@ class ValueBinder(object):
                 currparent is parent), (
             "Attempt to bind %r instance with a %r instance parent different "
             "from its current %r instance one." % (
-                self.__class__.__name__, parent.__class__.__name__,
-                currparent.__class__.__name__))
+                cn, parent.__class__.__name__, currparent.__class__.__name__))
         if currparent is None:
+            # Else is currparent is parent, so nothing to do.
             self.vb_parent = parent
 
+        try:
+            self._vb_recurse_binddirection(
+                frompath, resolvedfrompath, fromattr, fromattrattrs, direction,
+                topath, resolvedtopath, transformer, ignore_exceptions, bd)
+        except:
+            # Exception: must back out the state change we made.
+            self.vb_parent = currparent
+            raise
+
+        # Seemed to work. Update dictionary.
+        bds[resolvedtopath] = bd
+
+        log.detail(
+            "  %r bindings after bind %r", direction,
+            self._vb_bindingsForDirection(direction))
+
+    def _vb_recurse_binddirection(
+            self, frompath, resolvedfrompath, fromattr, fromattrattrs,
+            direction, topath, resolvedtopath, transformer, ignore_exceptions,
+            bd):
         if fromattrattrs:
             # This is an indirect binding, so recurse if possible.
             # E.g.
             # self.bindforward("a.b", "c")
             # >> self.a.bindforward("b", ".c")
-            log.debug("indirect %r binding %r -> %r", direction, frompath,
+            log.debug("indirect %s binding %r -> %r", direction, frompath,
                       resolvedtopath)
             if len(fromattr) == 0:
                 # Parent in the from path.
                 log.debug("  parent in frompath")
                 fromattr_resolved = "vb_parent"
+                subobj = parent
             else:
                 fromattr_resolved = fromattr
+                subobj = getattr(self, fromattr_resolved, None)
 
-            subobj = getattr(self, fromattr_resolved, None)
             if isinstance(subobj, ValueBinder):
                 log.debug("  child is VB compatible.")
                 subobj._vb_binddirection(
                     fromattrattrs, ValueBinder.PS + resolvedtopath, self,
                     transformer, direction, ignore_exceptions)
+            elif subobj is not None:
+                raise TypeError(
+                    'Attempt to bind path %r (resolved as %r) of %r instance '
+                    'to path %r (resolved as %r) failed as the first '
+                    'attribute at '
+                    '%r was not a ValueBinder instance (was %r '
+                    'instance).' % (
+                        frompath, resolvedfrompath,
+                        self.__class__.__name__, topath, resolvedtopath,
+                        fromattr_resolved, subobj.__class__.__name__))
         else:
             # This is a direct binding. If we already have a value for it, set
             # the target. E.g.
@@ -701,11 +734,6 @@ class ValueBinder(object):
                 log.debug("Pull value.")
                 val = self._vb_pullValue(resolvedtopath)
                 self._vb_push_value_to_target(val, fromattr, bd)
-
-        if PROFILE and log.getEffectiveLevel() <= logging.DEBUG:
-            log.debug(
-                "  %r bindings after bind %r", direction,
-                self._vb_bindingsForDirection(direction))
 
     def _vb_unbinddirection(self, frompath, topath, direction):
         """Unbind a particular path.

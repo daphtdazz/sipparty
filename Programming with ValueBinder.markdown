@@ -63,3 +63,27 @@ The following methods, if implemented in subclasses, must invoke `super`'s metho
     __del__
     __getattr__
     __setattr__
+
+## Known problems ##
+
+### Putting non-ValueBinder instances in the binding path ###
+
+If you attempt to bind a path which has an existing non-None and non-ValueBinder instance in the binding path, the call will raise a TypeError. Also the internal state of the object is not guaranteed to be the same as it started, but it should behave in the same way (i.e. dictionaries may have been pre-emptively created but subsequently left empty since the bind failed).
+
+E.g.
+
+    a = ValueBinder()
+    b = NonValueBinder()
+    a.b = b
+    a.bind('b.c', 'another_attribute')
+    >> raises TypeError since 'b' does not inherit from ValueBinder.
+
+However, if you attempt to set a non-ValueBinder object into a binding path, then this will quietly be allowed. This is considered a bug since it can be hard to work out what the problem is if you have forgotten you didn't make a particular subclass inherit from ValueBinder.
+
+E.g.
+    a = ValueBinder()
+    b = NonValueBinder()
+    a.bind('b.c', 'another_attribute')
+    a.b = b
+    >> Should but does not raise TypeError.
+    
