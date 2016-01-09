@@ -18,6 +18,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 from collections import Callable
+from contextlib import contextmanager
 import inspect
 import logging
 from six import (iteritems, iterkeys)
@@ -80,6 +81,7 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
             # dictionary.
             topLevelAttrArgs = {}
             sd = self.__dict__
+            sd['_dc_in_repr'] = False
             for tlName in iterkeys(topLevelAttributeDescs):
                 sd[topLevelPrepend + tlName] = None
                 topLevelAttrArgs[tlName] = [None, {}]
@@ -246,13 +248,25 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
 
             return gen(**tlsvals)
 
+        @contextmanager
+        def _dc_enter_repr(self):
+            self._dc_in_repr = True
+            yield
+            self._dc_in_repr = False
+
         def __repr__(self):
-            myattrs = [attr_line for attr_line in self._dc_kvReprGen()]
-            if (recurse_repr and
-                    hasattr(super(DeepClass, self), '_dc_kvReprGen')):
-                myattrs.extend([
-                    sattr
-                    for sattr in super(DeepClass, self)._dc_kvReprGen()])
+            if self._dc_in_repr:
+                return '<DC %x>' % id(self)
+
+            with self._dc_enter_repr():
+                myattrs = [attr_line for attr_line in self._dc_kvReprGen()]
+                if (recurse_repr and
+                        hasattr(super(DeepClass, self), '_dc_kvReprGen')):
+
+                    myattrs.extend([
+                        sattr
+                        for sattr in super(DeepClass, self)._dc_kvReprGen()])
+
             return("%s(%s)" % (self.__class__.__name__, ", ".join(myattrs)))
 
     return DeepClass

@@ -93,3 +93,16 @@ class TestDeepClass(SIPPartyTestCase):
         for attr in ('attr1', 'integral_attr', 'name'):
             self.assertTrue(hasattr(tdc, attr), attr)
             self.assertIs(getattr(tdc, attr), None, attr)
+
+    def test_repr_recursion(self):
+
+        class TestDeepClass(DeepClass('_tdc_', {
+                    'attr1': {},
+                })):
+            pass
+
+        dc1 = TestDeepClass()
+        dc2 = TestDeepClass()
+        dc1.attr1 = dc2
+        dc2.attr1 = dc1
+        dc1_repr = repr(dc1)
