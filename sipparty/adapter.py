@@ -29,6 +29,11 @@ log = logging.getLogger(__name__)
 AdapterOptionKeyConversion = 'conversion'
 
 
+def AdaptToClass(obj, dst_class, format=_DefaultFormat):
+    adapter = _AdapterManager().lookup_adapter(type(obj), dst_class, format)()
+    return adapter.adapt(obj)
+
+
 class AdapterProperty(object):
 
     def __init__(self, to_class, format=_DefaultFormat):
