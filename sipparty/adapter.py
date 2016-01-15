@@ -34,6 +34,14 @@ def AdaptToClass(obj, dst_class, format=_DefaultFormat):
     return adapter.adapt(obj)
 
 
+def ListConverter(dst_class, format=_DefaultFormat):
+
+    def adapt_list(lst):
+        return [AdaptToClass(_x, dst_class, format=format) for _x in lst]
+
+    return adapt_list
+
+
 class AdapterProperty(object):
 
     def __init__(self, to_class, format=_DefaultFormat):

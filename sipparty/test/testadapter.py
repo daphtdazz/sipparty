@@ -18,8 +18,8 @@ limitations under the License.
 """
 import logging
 from ..adapter import (
-    AdaptToClass, AdapterOptionKeyConversion, AdapterProperty, ProxyAdapter,
-    NoSuchAdapterError)
+    AdaptToClass, AdapterOptionKeyConversion, AdapterProperty, ListConverter,
+    NoSuchAdapterError, ProxyAdapter)
 from .._adapter import (_AdapterManager)
 from .setup import (MagicMock, patch, SIPPartyTestCase)
 
@@ -66,9 +66,7 @@ class TestAdapter(SIPPartyTestCase):
                 }),
                 ('class2_attr2', 'class1_attr2'),
                 ('class2_children', 'class1_children', {
-                    AdapterOptionKeyConversion: lambda lst: [
-                        AdaptToClass(_x, Class2) for _x in lst
-                    ]})
+                    AdapterOptionKeyConversion: ListConverter(Class2)})
             )
 
         c1 = Class1()
