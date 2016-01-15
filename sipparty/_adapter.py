@@ -71,9 +71,6 @@ class _AdapterManager(Singleton):
     _St_SharedInstances = {}
 
     def __init__(self, *args, **kwargs):
-        if self.singletonInited:
-            log.debug('_AdapterManager singleton already inited')
-            return
 
         log.debug('Initial init of _AdapterManager singleton')
         super(_AdapterManager, self).__init__(*args, **kwargs)
