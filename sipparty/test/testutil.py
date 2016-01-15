@@ -92,6 +92,15 @@ class TestUtil(SIPPartyTestCase):
         self.assertTrue(s3 is s4)
         self.assertFalse(s3 is s1)
 
+        log.info('Check that a Singleton subclass with no __init__ works.')
+
+        class SingletonSubclass(Singleton):
+            pass
+
+        ss1 = SingletonSubclass()
+        ss2 = SingletonSubclass()
+        self.assertIs(ss1, ss2)
+
     def testCumulativeProperties(self):
 
         @add_metaclass(CCPropsFor(("CPs", "CPList", "CPDict")))

@@ -753,6 +753,30 @@ def WaitFor(condition, timeout_s=1, action_on_timeout=None, resolution=0.0001):
             raise Timeout("Timed out waiting for %r" % condition)
 
 
+class SingletonType(type):
+
+    def __new__(cls, name, mro, dct):
+
+        init_proc = dct.get('__init__', None)
+
+        def singleton_init_wrapper(self, *args, **kwargs):
+            if hasattr(self, 'singleton_inited'):
+                return
+
+            if init_proc is not None:
+                init_proc(self, *args, **kwargs)
+            else:
+                # This class didn't have an init proc, so recurse to the next
+                # one in the mro.
+                super(self.__class__, self).__init__(*args, **kwargs)
+            self.singleton_inited = True
+
+        dct['__init__'] = singleton_init_wrapper
+
+        return super(SingletonType, cls).__new__(cls, name, mro, dct)
+
+
+@add_metaclass(SingletonType)
 class Singleton(object):
     """Classes inheriting from this will only have one instance."""
 
@@ -766,13 +790,10 @@ class Singleton(object):
             name = kwargs[skey]
             del kwargs[skey]
         else:
-            name = ''
+            name = cls.__name__
 
-        log.debug("New with class %r, name %r", cls, name)
-        existing_inst = (
-            None
-            if name not in cls._St_SharedInstances else
-            cls._St_SharedInstances[name])
+        log.debug("Get singleton for class %r, name %r", cls, name)
+        existing_inst = cls._St_SharedInstances.get(name, None)
 
         if existing_inst is not None:
             log.debug("  Return Existing instance")
@@ -785,14 +806,8 @@ class Singleton(object):
 
         return ns
 
-    @property
-    def singletonInited(self):
-        return "_st_inited" in self.__dict__
-
     def __init__(self, *args, **kwargs):
-        if self.singletonInited:
-            return
-        self.__dict__["_st_inited"] = True
+        assert(not hasattr(self, 'singleton_inited'))
 
         if self._St_SingletonNameKey in kwargs:
             del kwargs[self._St_SingletonNameKey]

@@ -30,7 +30,7 @@ from ..sip.components import URI
 from ..sip.header import ContactHeader
 from ..sip.prot import (Incomplete)
 from ..sip.request import Request
-from ..util import (Singleton, bglobals_g)
+from ..util import (bglobals_g)
 from .setup import SIPPartyTestCase
 
 log = logging.getLogger(__name__)

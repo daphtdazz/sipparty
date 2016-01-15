@@ -622,8 +622,6 @@ class Transport(Singleton):
         return count
 
     def __init__(self):
-        if self.singletonInited:
-            return
         super(Transport, self).__init__()
         self._tp_byteConsumer = None
         self._tp_retryThread = RetryThread()

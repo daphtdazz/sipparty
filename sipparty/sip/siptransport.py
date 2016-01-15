@@ -60,8 +60,6 @@ class SIPTransport(Transport):
     establishedDialogs = DerivedProperty("_sptr_establishedDialogs")
 
     def __init__(self):
-        if self.singletonInited:
-            return
         super(SIPTransport, self).__init__()
         self._sptr_messageConsumer = None
         self._sptr_messages = []
