@@ -18,7 +18,7 @@ limitations under the License.
 """
 from abc import (ABCMeta, abstractproperty)
 import logging
-from .util import Singleton
+from .util import (Singleton, SingletonType)
 
 log = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ class NoSuchAdapterError(AdapterError):
 _DefaultFormat = ''
 
 
-class _AdapterMeta(ABCMeta):
+class _AdapterMeta(ABCMeta, SingletonType):
 
     def __new__(cls, *args, **kwargs):
 

@@ -20,6 +20,7 @@ from abc import (ABCMeta, abstractmethod, abstractproperty)
 import logging
 from six import add_metaclass
 from weakref import ref
+from .util import Singleton
 from ._adapter import (
     AdapterError, AdapterAlreadyExistsError, NoSuchAdapterError,
     _AdapterManager, _AdapterMeta, _DefaultFormat)
@@ -56,13 +57,19 @@ class AdapterProperty(object):
         if obj is None:
             return self
 
-        adapter = _AdapterManager().lookup_adapter(
-            owner, self.__to_class, self.__format)()
+        try:
+            adapter = _AdapterManager().lookup_adapter(
+                owner, self.__to_class, self.__format)()
+        except:
+            log.warning(
+                'Exception looking up / creating adapter from %r to %r',
+                owner.__name__, self.__to_class.__name__)
+            raise
 
         return adapter.adapt(obj)
 
 
-class BaseAdapter(object):
+class BaseAdapter(Singleton, metaclass=_AdapterMeta):
 
     @abstractproperty
     def from_class(self):
@@ -85,7 +92,6 @@ class BaseAdapter(object):
             'BaseAdapter does not implement the adapt method.')
 
 
-@add_metaclass(_AdapterMeta)
 class SelfRegisteringAdapter(BaseAdapter):
     pass
 
@@ -98,8 +104,6 @@ class ProxyAdapter(SelfRegisteringAdapter):
 
     def __init__(self):
         super(ProxyAdapter, self).__init__()
-
-
         self.__proxy_type = type(
             '_ProxyFor' + self.to_class.__name__,
             (NewProxyWithAdaptations(self.adaptations), self.to_class), {})

@@ -21,7 +21,7 @@ from six import (add_metaclass, next, PY2)
 import unittest
 from ..util import (
     AsciiBytesEnum, bglobals_g, CCPropsFor, class_or_instance_method, Enum,
-    FirstListItemProxy, Singleton)
+    FirstListItemProxy, Singleton, SingletonType)
 from .setup import SIPPartyTestCase
 
 log = logging.getLogger(__name__)
@@ -100,6 +100,28 @@ class TestUtil(SIPPartyTestCase):
         ss1 = SingletonSubclass()
         ss2 = SingletonSubclass()
         self.assertIs(ss1, ss2)
+
+        log.info(
+            'Check we get a TypeError if attempting to use an unrelated '
+            'metaclass on a subclass of Singleton (standard python behaviour)')
+        class NewBadMetaclass(type):
+            pass
+
+        self.assertRaises(
+            TypeError, NewBadMetaclass, 'BadSingletonSubclass', (Singleton,),
+            {})
+
+        log.info('Can we make a metaclass that is OK with Singleton?')
+        class SubMetaclass(SingletonType):
+            pass
+
+        class SingletonSubclass1(Singleton, metaclass=SubMetaclass):
+            pass
+
+        sing = SingletonSubclass1()
+        sing1 = SingletonSubclass1()
+        self.assertIs(sing, sing1)
+        self.assertIsNot(sing, ss1)
 
     def testCumulativeProperties(self):
 

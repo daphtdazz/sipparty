@@ -755,25 +755,77 @@ def WaitFor(condition, timeout_s=1, action_on_timeout=None, resolution=0.0001):
 
 class SingletonType(type):
 
+    @property
+    def __initing_attribute(cls):
+        return '__' + cls.__name__ + '_singleton_initing'
+
     def __new__(cls, name, mro, dct):
 
+        log.debug('New type called %r', name)
         init_proc = dct.get('__init__', None)
+        log.debug('Init proc for %r class: %r', cls.__name__, init_proc)
+        new_cls_list = []
 
         def singleton_init_wrapper(self, *args, **kwargs):
+
+            assert len(new_cls_list) == 1
+            singleton_subclass = new_cls_list[0]
+            log.debug(
+                'Init of %r type wrapper for %r instance, initing attr %r',
+                singleton_subclass.__name__,
+                self.__class__.__name__,
+                singleton_subclass.__initing_attribute)
+
             if hasattr(self, 'singleton_inited'):
+                log.debug('  instance already inited')
                 return
 
-            if init_proc is not None:
-                init_proc(self, *args, **kwargs)
-            else:
-                # This class didn't have an init proc, so recurse to the next
-                # one in the mro.
-                super(self.__class__, self).__init__(*args, **kwargs)
-            self.singleton_inited = True
+            try:
+                if (not getattr(
+                            self, singleton_subclass.__initing_attribute,
+                            False) and
+                        init_proc is not None):
+                    log.debug(
+                        'Call underlying init method %r on %r class',
+                        init_proc, singleton_subclass.__name__)
+                    setattr(
+                        self, singleton_subclass.__initing_attribute, True)
+                    init_proc(self, *args, **kwargs)
+                else:
+                    # This class didn't have an init proc, so recurse to the next
+                    # one in the mro.
+                    ia = singleton_subclass.__initing_attribute
+                    log.debug('ia: %r', ia)
+                    setattr(self, ia, True)
+                    try:
+                        assert isinstance(self, object)
+                        assert not isinstance(self, type)
+                        assert isinstance(singleton_subclass, type)
+
+                        log.debug('Call super(%r, %r).init', singleton_subclass, self)
+                        assert singleton_subclass in set(self.__class__.__mro__), (
+                            singleton_subclass, id(singleton_subclass),
+                            self.__class__.__mro__,
+                            [id(base) for base in self.__class__.__mro__])
+                        super(singleton_subclass, self).__init__(*args, **kwargs)
+                    except:
+                        log.warning(
+                            'super init failed on %r, wrapper for '
+                            '%r',
+                            self, singleton_subclass)
+                        raise
+
+                self.singleton_inited = True
+            finally:
+                setattr(self, singleton_subclass.__initing_attribute, False)
 
         dct['__init__'] = singleton_init_wrapper
 
-        return super(SingletonType, cls).__new__(cls, name, mro, dct)
+        assert len(new_cls_list) == 0
+        new_cls_list.append(super(SingletonType, cls).__new__(
+            cls, name, mro, dct))
+
+        return new_cls_list[0]
 
 
 @add_metaclass(SingletonType)
