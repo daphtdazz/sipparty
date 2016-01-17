@@ -133,6 +133,8 @@ class ProxyAdapter(SelfRegisteringAdapter):
 
 class ProxyProperty(object):
 
+    __underlying_object_attrname = '_adapted_object'
+
     def __init__(self, attr_to_adapt, options=None):
 
         self.__attr_to_adapt = attr_to_adapt
@@ -146,7 +148,7 @@ class ProxyProperty(object):
         if obj is None:
             return self
 
-        wr = obj._adapted_object
+        wr = getattr(obj, self.__underlying_object_attrname)
         adapted_object = wr()
         if adapted_object is None:
             raise AttributeError(
@@ -163,7 +165,9 @@ class Proxy(object):
 
     def __init__(self, adapted_object):
         super(Proxy, self).__init__()
-        self._adapted_object = ref(adapted_object)
+        setattr(
+            self, ProxyProperty.__underlying_object_attrname,
+            ref(adapted_object))
 
 
 def NewProxyWithAdaptations(adaptations):
