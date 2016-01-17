@@ -25,6 +25,7 @@ from six import (
 import threading
 import time
 import timeit
+from traceback import extract_stack
 from weakref import (ref as weakref, WeakValueDictionary)
 
 log = logging.getLogger(__name__)
@@ -755,21 +756,25 @@ def WaitFor(condition, timeout_s=1, action_on_timeout=None, resolution=0.0001):
 
 class SingletonType(type):
 
+    # Dictionary of names. This is to prevent double __new__.
+    __instance_names = {}
+
     @property
     def __initing_attribute(cls):
         return '__' + cls.__name__ + '_singleton_initing'
 
-    def __new__(cls, name, mro, dct):
+    def __new__(meta, name, bases, dct):
 
-        log.debug('New type called %r', name)
+        log.debug(
+            'New %r instance called %r with bases %r', meta.__name__, name,
+            bases)
         init_proc = dct.get('__init__', None)
-        log.debug('Init proc for %r class: %r', cls.__name__, init_proc)
-        new_cls_list = []
+        new_module_name = []
 
         def singleton_init_wrapper(self, *args, **kwargs):
 
-            assert len(new_cls_list) == 1
-            singleton_subclass = new_cls_list[0]
+            assert len(new_module_name) == 1
+            singleton_subclass = meta.__instance_names[new_module_name[0]]
             log.debug(
                 'Init of %r type wrapper for %r instance, initing attr %r',
                 singleton_subclass.__name__,
@@ -780,34 +785,33 @@ class SingletonType(type):
                 log.debug('  instance already inited')
                 return
 
+            ia = singleton_subclass.__initing_attribute
             try:
-                if (not getattr(
-                            self, singleton_subclass.__initing_attribute,
-                            False) and
-                        init_proc is not None):
+                if not getattr(self, ia, False) and init_proc is not None:
                     log.debug(
                         'Call underlying init method %r on %r class',
                         init_proc, singleton_subclass.__name__)
-                    setattr(
-                        self, singleton_subclass.__initing_attribute, True)
+                    setattr(self, ia, True)
                     init_proc(self, *args, **kwargs)
                 else:
-                    # This class didn't have an init proc, so recurse to the next
-                    # one in the mro.
-                    ia = singleton_subclass.__initing_attribute
-                    log.debug('ia: %r', ia)
+                    # This class didn't have an init proc, so recurse to the
+                    # next one in the mro.
                     setattr(self, ia, True)
                     try:
                         assert isinstance(self, object)
                         assert not isinstance(self, type)
                         assert isinstance(singleton_subclass, type)
-
-                        log.debug('Call super(%r, %r).init', singleton_subclass, self)
-                        assert singleton_subclass in set(self.__class__.__mro__), (
+                        assert singleton_subclass in self.__class__.__mro__, (
                             singleton_subclass, id(singleton_subclass),
                             self.__class__.__mro__,
-                            [id(base) for base in self.__class__.__mro__])
-                        super(singleton_subclass, self).__init__(*args, **kwargs)
+                            [id(base) for base in self.__class__.__mro__],
+                            singleton_subclass.__module__ + '.' +
+                            singleton_subclass.__name__)
+                        log.debug(
+                            'Call super(%r, %r).init', singleton_subclass,
+                            self)
+                        super(singleton_subclass, self).__init__(
+                            *args, **kwargs)
                     except:
                         log.warning(
                             'super init failed on %r, wrapper for '
@@ -821,11 +825,32 @@ class SingletonType(type):
 
         dct['__init__'] = singleton_init_wrapper
 
-        assert len(new_cls_list) == 0
-        new_cls_list.append(super(SingletonType, cls).__new__(
-            cls, name, mro, dct))
+        assert len(new_module_name) == 0
+        new_type = super(SingletonType, meta).__new__(
+            meta, name, bases, dct)
 
-        return new_cls_list[0]
+        module_path = '.'.join((new_type.__module__, new_type.__name__))
+        new_module_name.append(module_path)
+
+        if module_path in meta.__instance_names:
+            log.debug(
+                'Overwriting existing class at %s, check this is using the '
+                'six module', module_path)
+            st = extract_stack()
+            for frame in st[::-1]:
+                if 'six.py' in frame[0] and 'wrapper' in frame[2]:
+                    break
+            else:
+                raise RuntimeError(
+                    'Unexpected double creation of type %s inheriting from '
+                    '\'singleton.Singleton\'. Creating two types with the '
+                    'same name in the same module that both inherit from '
+                    'Singleton is not supported.' % module_path)
+
+        meta.__instance_names[module_path] = new_type
+
+        log.debug('New %r instance %s - FINISHED', meta.__name__, module_path)
+        return new_type
 
 
 @add_metaclass(SingletonType)

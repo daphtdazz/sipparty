@@ -69,7 +69,8 @@ class AdapterProperty(object):
         return adapter.adapt(obj)
 
 
-class BaseAdapter(Singleton, metaclass=_AdapterMeta):
+@add_metaclass(_AdapterMeta)
+class BaseAdapter(Singleton):
 
     @abstractproperty
     def from_class(self):

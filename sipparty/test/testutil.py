@@ -17,7 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-from six import (add_metaclass, next, PY2)
+from six import (add_metaclass, exec_, next, PY2)
 import unittest
 from ..util import (
     AsciiBytesEnum, bglobals_g, CCPropsFor, class_or_instance_method, Enum,
@@ -111,17 +111,39 @@ class TestUtil(SIPPartyTestCase):
             TypeError, NewBadMetaclass, 'BadSingletonSubclass', (Singleton,),
             {})
 
-        log.info('Can we make a metaclass that is OK with Singleton?')
+        log.info('Can we make a metaclass that is OK with Singleton, with six')
         class SubMetaclass(SingletonType):
             pass
 
-        class SingletonSubclass1(Singleton, metaclass=SubMetaclass):
+        @add_metaclass(SubMetaclass)
+        class SingletonSubclass1(Singleton):
             pass
 
         sing = SingletonSubclass1()
         sing1 = SingletonSubclass1()
         self.assertIs(sing, sing1)
         self.assertIsNot(sing, ss1)
+
+        # Because six uses a class decorator, the SingletonSubclass1 above is
+        # actually created twice. The first time before the decorator is
+        # called, i.e. the class SingletonSubclass1() line. This is created by
+        # a call to the SingletonType.__new__ method because the metaclass is
+        # inherited from SingletonSubclass1's base Singleton. However, then six
+        # creates a new version of SingletonSubclass1 by calling
+        # SubMetaclass.__new__() and passes in info it scraped from the initial
+        # creation. SingletonType doesn't really support this, which we test
+        # below, but there's an exception when this is triggered by six as that
+        # will be common! In this case the initial creation is deleted.
+        log.info('Check attempting to create the same type fails.')
+        cmd = ("""
+class SingletonSubclass1(Singleton):
+    __metaclass__ = SingletonType
+""" if PY2 else """
+class SingletonSubclass1(Singleton, metaclass=SingletonType):
+    pass
+""")
+        with self.assertRaises(RuntimeError):
+            exec_(cmd)
 
     def testCumulativeProperties(self):
 
@@ -170,8 +192,18 @@ class TestUtil(SIPPartyTestCase):
         self.assertEqual(inst.b, 2)
 
     def test_list_attribute(self):
-        for bad_attr_name in (1, None, b'hi'):
+        for bad_attr_name in (1, None):
+            log.info(
+                'Check bad list attribute for FirstListItemProxy %r',
+                bad_attr_name)
             self.assertRaises(TypeError, FirstListItemProxy, bad_attr_name)
+
+        if not PY2:
+            for bad_attr_name in (b'hi',):
+                log.info(
+                    'Check bad list attribute for FirstListItemProxy %r',
+                    bad_attr_name)
+                self.assertRaises(TypeError, FirstListItemProxy, bad_attr_name)
 
         class ClassWithListAndFirstListItemProps(object):
             first_of_my_list = FirstListItemProxy('my_list')
