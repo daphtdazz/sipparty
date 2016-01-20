@@ -771,6 +771,8 @@ class SingletonType(type):
         init_proc = dct.get('__init__', None)
         new_module_name = []
 
+        # Create a wrapper for the init. This is to prevent the init of the
+        # underlying class from being called twice.
         def singleton_init_wrapper(self, *args, **kwargs):
 
             assert len(new_module_name) == 1
@@ -825,7 +827,8 @@ class SingletonType(type):
 
         dct['__init__'] = singleton_init_wrapper
 
-        assert len(new_module_name) == 0
+        # Now we've patched init, we can call super to create the instance of
+        # this metaclass.
         new_type = super(SingletonType, meta).__new__(
             meta, name, bases, dct)
 
@@ -1094,3 +1097,27 @@ class WeakProperty(object):
         wr = weakref(val)
         setattr(obj, self.__pname, wr)
 
+
+class FallbackProperty(object):
+
+    def __init__(self, pname, fallbacks):
+        self._fp_prop_name = pname
+        self._fp_fallbacks = fallbacks
+
+    def __get__(self, obj, owner):
+        if obj is None:
+            return self
+
+        obj_val = getattr(obj, self._fp_prop_name, None)
+        if obj_val is not None:
+            return obj_val
+
+        for fallback in self._fp_fallbacks:
+            if isinstance(fallback, str):
+                obj_val = getattr(self, fallback, None)
+                if obj_val is not None:
+                    return obj_val
+                continue
+
+            raise TypeError(
+                'Bad object %r used for fallback attribute' % fallback)

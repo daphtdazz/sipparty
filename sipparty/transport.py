@@ -30,6 +30,7 @@ from socket import (
 from weakref import ref
 from .deepclass import (dck, DeepClass)
 from .fsm import (RetryThread)
+from .vb import ValueBinder
 from .util import (
     abytes, AsciiBytesEnum, astr, bglobals_g, DelegateProperty,
     DerivedProperty, Enum, Singleton, Retainable,
@@ -160,7 +161,7 @@ def IPAddressFamilyFromName(name):
     of.
     :returns: None, AF_INET or AF_INET6.
     """
-    if name is None:
+    if name is None or name in SpecialNames:
         return None
     name = abytes(name)
 
@@ -181,21 +182,8 @@ def IPAddressFamilyFromName(name):
 
 
 def default_hostname():
+    # This is partly here so we can patch it in UTs.
     return gethostname()
-
-
-def loopback_address(sock_family):
-    #DELETE
-    assert 0
-    if sock_family == AF_INET:
-        return '127.0.0.1'
-
-    if sock_family == AF_INET6:
-        return '::1'
-
-    raise ValueError(
-        'Can\'t form loopback address with unknown socket family: %r' % (
-            sock_family,))
 
 
 def IsValidPortNum(port):
@@ -279,42 +267,40 @@ def GetBoundSocket(family, socktype, address, port_filter=None):
             SOCK_FAMILY_NAMES,))
     assert socktype in (0, SOCK_STREAM, SOCK_DGRAM)
 
-    address = list(address)
-    if address[0] is None:
-        address[0] = default_hostname()
+    address_list = list(address)
 
     # family e.g. AF_INET / AF_INET6
     # socktype e.g. SOCK_STREAM
     # Just grab the first addr info if we haven't
     log.debug("GetBoundSocket addr:%r port:%r family:%r socktype:%r...",
-              address[0], address[1], family, socktype)
+              address_list[0], address_list[1], family, socktype)
 
-    addrinfos = getaddrinfo(address[0], address[1], family, socktype)
-
+    gai_tuple = (address_list[0], address_list[1], family, socktype)
+    addrinfos = getaddrinfo(*gai_tuple)
     if len(addrinfos) == 0:
         raise BadNetwork(
-            "Could not find an address to bind to %r." % address, None)
+            "Could not find an address to bind to for %r." % address, None)
 
     log.debug("Using address %r.", addrinfos[0])
     log.detail("  %r", addrinfos)
 
-    _family, _socktype, _proto, _canonname, address = addrinfos[0]
+    _family, _socktype, _proto, _canonname, ai_address = addrinfos[0]
     ssocket = socket_class(_family, _socktype)
 
     # Clean the address, which on some devices if it's IPv6 will have the name
     # of the interface appended after a % character.
     if _family == AF_INET6:
-        old_name = address[0]
+        old_name = ai_address[0]
         mo = IPv6address_re.match(abytes(old_name))
-        address = (mo.group(0),) + address[1:]
-        if old_name != address[0]:
-            log.debug('Cleaned IPv6address: %r -> %r', old_name, address[0])
+        ai_address = (mo.group(0),) + ai_address[1:]
+        if old_name != ai_address[0]:
+            log.debug('Cleaned IPv6address: %r -> %r', old_name, ai_address[0])
 
     def port_generator():
-        if address[1] != 0:
+        if ai_address[1] != 0:
             # The port was specified.
-            log.debug("Using just passed port %d", address[1])
-            yield address[1]
+            log.debug("Using just passed port %d", ai_address[1])
+            yield ai_address[1]
             return
 
         # Guess a port from the unregistered range.
@@ -331,9 +317,9 @@ def GetBoundSocket(family, socktype, address, port_filter=None):
             # immediately rather than inefficiently try all ports.
 
             if _family == AF_INET:
-                bind_addr = (address[0], port)
+                bind_addr = (ai_address[0], port)
             else:
-                bind_addr = (address[0], port) + address[2:]
+                bind_addr = (ai_address[0], port) + ai_address[2:]
             ssocket.bind(bind_addr)
             log.debug(
                 'Bind socket to %r, result %r', bind_addr,
@@ -362,7 +348,10 @@ def GetBoundSocket(family, socktype, address, port_filter=None):
 
     if socketError is not None:
         raise BadNetwork(
-            "Couldn't bind to address %r" % bind_addr, socketError)
+            "Couldn't bind to address %r (request was for %r), tried %d "
+            "ports" % (
+                bind_addr, address, attempts),
+            socketError)
 
     log.debug("Socket bound to %r type %r", ssocket.getsockname(), _family)
     return ssocket
@@ -379,6 +368,7 @@ class ListenDescription(
             'flowinfo': {dck.check: lambda x: isinstance(x, Integral)},
             'scopeid': {dck.check: lambda x: isinstance(x, Integral)},
             'port_filter': {dck.check: lambda x: isinstance(x, Callable)}}),
+        ValueBinder,
         TupleRepresentable):
 
     @classmethod
@@ -404,15 +394,27 @@ class ListenDescription(
 
     @property
     def sockname_tuple(self):
-        if self.name == SendFromAddressNameAny:
+        if self.name is NameAll:
             name = '0.0.0.0' if self.sock_family == AF_INET else '::'
+        elif self.name is SendFromAddressNameAny:
+            name = ''
+        elif self.name is NameLoopbackAddress:
+            name = None
+        elif self.name is NameLANHostname:
+            name = default_hostname()
         else:
             name = self.name
+
+        if self.port is None:
+            port = 0
+        else:
+            port = self.port
+
         if self.sock_family == AF_INET:
             return (name, self.port)
         fi = self.flowinfo or 0
         scid = self.scopeid or 0
-        return (name, self.port, fi, scid)
+        return (name, port, fi, scid)
 
     def tupleRepr(self):
         return (
@@ -650,12 +652,6 @@ class Transport(Singleton):
                 '\'callback\' parameter %r is not a Callable' % callback)
 
         if listen_description is None:
-            if name is NameAll:
-                name = '0.0.0.0' if sock_family == AF_INET else '::'
-            elif name is NameLANHostname:
-                name = default_hostname()
-            elif name is NameLoopbackAddress:
-                name = None
 
             if sock_family is None:
                 sock_family = IPAddressFamilyFromName(name)

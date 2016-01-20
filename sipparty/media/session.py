@@ -19,15 +19,18 @@ limitations under the License.
 import datetime
 import logging
 import re
-from six import (binary_type as bytes)
+from six import (binary_type as bytes, iteritems)
+from ..adapter import AdapterProperty
 from ..deepclass import (DeepClass, dck)
 from ..sdp import (SessionDescription, MediaDescription)
 from ..sdp.mediatransport import MediaTransport
-from ..sdp.sdpsyntax import (username_re, AddrTypes)
+from ..sdp.sdpsyntax import (AddrTypes, MediaTypes, sdp_username_is_ok)
 from ..transport import (
-    IsValidTransportName, ListenDescription, NameLANHostname, SOCK_FAMILIES)
+    IsValidPortNum, IsValidTransportName, ListenDescription, NameLANHostname,
+    SOCK_FAMILIES)
 from ..util import (abytes, FirstListItemProxy, WeakMethod, WeakProperty)
 from ..vb import (KeyTransformer, ValueBinder)
+from . import adapters
 
 log = logging.getLogger(__name__)
 
@@ -48,17 +51,12 @@ def MediaSessionListenDescription():
 
 class Session(
         DeepClass("_sess_", {
+            'username': {dck.check: sdp_username_is_ok},
+            'address': {dck.check: IsValidTransportName},
             "transport": {
                 dck.gen: MediaTransport
             },
-            "description": {
-                dck.check: lambda x: isinstance(x, SessionDescription),
-                dck.gen: SessionDescription},
             "mediaSessions": {dck.gen: list},
-
-            "name": {
-                dck.check: lambda x: IsValidTransportName(x)
-            },
             'sock_family': {dck.check: lambda x: x in SOCK_FAMILIES}
         }),
         ValueBinder):
@@ -73,12 +71,8 @@ class Session(
     """
     DefaultName = NameLANHostname
 
-    vb_dependencies = (
-        ("description", ("username", "address", "addressType")),)
-    vb_bindings = (
-        ('name', 'description.address', {KeyTransformer: abytes}),
-    )
-    mediaSession = FirstListItemProxy("mediaSessions")
+    description = AdapterProperty(SessionDescription)
+    mediaSession = FirstListItemProxy('mediaSessions')
 
     def listen(self, **kwargs):
         if not self.mediaSessions:
@@ -86,22 +80,37 @@ class Session(
                 '%r instance has no media sessions.' % self.__class__.__name__)
 
         for ms in self.mediaSessions:
-            name = self.name or self.DefaultName
-            ms.listen()
+            ms.listen(sock_family=self.sock_family)
 
-    def addMediaSession(self, mediaSession=None, **kwargs):
-        if mediaSession is None:
-            mediaSession = MediaSession(**kwargs)
+    def addMediaSession(self, new_med_sess=None, **kwargs):
+        """Add a media session to the session.
+
+        NB: This is not thread-safe.
+        """
+        if new_med_sess is None:
+            new_med_sess = MediaSession(**kwargs)
         else:
             if kwargs:
                 raise TypeError(
-                    'addMediaSession was passed both a mediaSession and key-'
+                    'addMediaSession was passed both a new_med_sess and key-'
                     'word args. Only one or the other may be used.')
-        self.mediaSessions.insert(0, mediaSession)
-        self.description.addMediaDescription(mediaSession.description)
-        mediaSession.parent_session = self
-        mediaSession.name = self.name
-        mediaSession.sock_family = self.sock_family
+
+        # Check that the new media session is compatible with any existing
+        # media sessions.
+        for curr_med_session in self.mediaSessions:
+            for prop in ('name', 'sock_family'):
+                cattr = getattr(curr_med_session, prop)
+                nattr = getattr(new_med_sess, prop)
+                if cattr != nattr:
+                    raise ValueError(
+                        'Property %r of %r instance %r does not match that of '
+                        'the existing media session: %r' % (
+                            prop, new_med_sess.__class__.__name__, nattr,
+                            cattr))
+            break
+
+        self.mediaSession = new_med_sess
+        new_med_sess.parent_session = self
 
     def sdp(self):
         return bytes(self.description)
@@ -120,26 +129,30 @@ class MediaSession(
                 dck.gen: MediaDescription},
             'local_addr_description': {
                 dck.gen: MediaSessionListenDescription,
-            }
+            },
+            'media_type': {dck.check: lambda x: x in MediaTypes},
+            'formats': {dck.check: lambda x: isinstance(x, dict)},
+            'transProto': {dck.check: lambda x: isinstance(x, str)}
         }),
         ValueBinder):
-    vb_dependencies = (
-        ("description", (
-            "mediaType", "port", "address", "addressType", "transProto",
-            "fmts")),)
 
-    def listen(self):
+    vb_dependencies = (
+        ('local_addr_description', (
+            'name', 'sock_family', 'sock_type', 'port')),
+    )
+
+    def listen(self, **local_address_attributes):
+
+        for attr_name, attr_val in iteritems(local_address_attributes):
+            setattr(self.local_addr_description, attr_name, attr_val)
 
         l_desc = self.transport.listen_for_me(
             WeakMethod(self, 'data_received'),
             listen_description=self.local_addr_description
-            )
+        )
         log.error('Media listen address: %r', l_desc)
 
-        #TODO: this is wrong.
-        self.address = abytes(l_desc.name)
-        self.port = l_desc.port
-        return l_desc
+        self.local_addr_description = l_desc
 
     def data_received(self, socket_proxy, remote_address_tuple, data):
         assert 0

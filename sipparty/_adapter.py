@@ -111,16 +111,21 @@ class _AdapterManager(Singleton):
             src_class.__name__, dst_class.__name__, format
         )
         log.detail('  Adapters dictionary: %r', self.__adapters)
-        dst_class_dict = self.__adapters.get(src_class, None)
-        if dst_class_dict is None:
-            raise NoSuchAdapterError(src_class, dst_class, format)
+        for cls in (src_class,) + src_class.__mro__:
+            dst_class_dict = self.__adapters.get(cls, None)
+            if dst_class_dict is None:
+                continue
 
-        format_dict = dst_class_dict.get(dst_class, None)
-        if format_dict is None:
-            raise NoSuchAdapterError(src_class, dst_class, format)
+            format_dict = dst_class_dict.get(dst_class, None)
+            if format_dict is None:
+                continue
 
-        format_entry = format_dict.get(format, None)
-        if format_entry is None:
+            format_entry = format_dict.get(format, None)
+            if format_entry is None:
+                continue
+
+            break
+        else:
             raise NoSuchAdapterError(src_class, dst_class, format)
 
         return format_entry

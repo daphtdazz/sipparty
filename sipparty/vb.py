@@ -208,7 +208,9 @@ class ValueBinder(object):
                 self.bind(
                     binding[0], binding[1], transformer, ignored_exceptions)
             except Exception as exc:
-                exc.args += (
+                exc.args = (
+                    str(exc.args[0]) +
+                    '; '
                     'raised attempting to bind %r to %r on %r '
                     'instance' % (
                         binding[0],

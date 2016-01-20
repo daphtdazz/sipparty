@@ -18,8 +18,9 @@ limitations under the License.
 """
 import logging
 from ..adapter import (
-    AdaptToClass, AdapterOptionKeyConversion, AdapterProperty, ListConverter,
-    NoSuchAdapterError, ProxyAdapter)
+    AdaptToClass, AdapterOptionKeyClass, AdapterOptionKeyConversion,
+    AdapterProperty, ListConverter,
+    NoSuchAdapterError, ProxyAdapter, ProxyProperty)
 from .._adapter import (_AdapterManager)
 from .setup import (MagicMock, patch, SIPPartyTestCase)
 
@@ -39,6 +40,18 @@ class TestAdapter(SIPPartyTestCase):
         m2 = _AdapterManager()
         self.assertIs(m1, m2)
 
+    def test_adapter_proxy(self):
+
+        class Class1(object):
+            pass
+
+        class Class2(object):
+            pass
+
+        self.assertRaises(TypeError, ProxyProperty, 'this_attribute')
+        pp = ProxyProperty('this_attribute', Class1)
+        self.assertRaises(TypeError, ProxyProperty, Class1, Class2, 'notamap')
+
     def test_adapter_property(self):
 
         self.assertRaises(TypeError, AdapterProperty, 'not-a-type')
@@ -47,6 +60,10 @@ class TestAdapter(SIPPartyTestCase):
             def class2_method(self, alist):
                 alist.append(1)
 
+        class Class3(object):
+            def class3_method(self):
+                alist.append(3)
+
         class Class1(object):
 
             class2_version = AdapterProperty(Class2)
@@ -54,6 +71,7 @@ class TestAdapter(SIPPartyTestCase):
             def __init__(self):
                 self.class1_attr1 = 1
                 self.class1_attr2 = 2
+                self.class1_attr3 = 3
                 self.class1_children = []
 
         log.info('Register the adapters (just by creating the class).')
@@ -66,8 +84,19 @@ class TestAdapter(SIPPartyTestCase):
                 }),
                 ('class2_attr2', 'class1_attr2'),
                 ('class2_children', 'class1_children', {
-                    AdapterOptionKeyConversion: ListConverter(Class2)})
+                    AdapterOptionKeyConversion: ListConverter(Class2)}),
+                ('class3_attr', {
+                    AdapterOptionKeyClass: Class3
+                })
             )
+
+        class Class1ToClass3Adapter(ProxyAdapter):
+            from_class = Class1
+            to_class = Class3
+            adaptations = (
+                ('class3_attr1', 'class1_attr3', {
+                    AdapterOptionKeyConversion: lambda x: x * 3
+                }),)
 
         c1 = Class1()
         self.assertEqual(c1.class2_version.class2_attr1, 5)
@@ -87,3 +116,6 @@ class TestAdapter(SIPPartyTestCase):
             [child.class2_attr1
              for child in c1.class2_version.class2_children],
             [5, 10, 15])
+
+        log.info('Show Adapting directly to another class works')
+        self.assertEqual(c1.class2_version.class3_attr.class3_attr1, 9)

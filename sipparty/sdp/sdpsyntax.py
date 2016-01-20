@@ -20,9 +20,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import re
+from socket import (AF_INET, AF_INET6)
 from .. import util
 from ..transport import (IPv4address_only_re, IPv6address_only_re)
-from ..util import (bglobals_g, AsciiBytesEnum)
+from ..util import (abytes, AsciiBytesEnum, bglobals_g)
 
 
 def bglobals():
@@ -121,23 +122,48 @@ SIPBodyType = b"application/sdp"
 #
 # =================== Pre-compiled REs ========================================
 #
-username_re = re.compile(b"%(username)s$" % bglobals())
+username_only_re = re.compile(b"%(username)s$" % bglobals())
 fmt_space_re = re.compile(b"%(space)s" % bglobals())
 
 
 #
-# =================== Conversions =======================================
+# =================== Conversions and Checks ==================================
 #
 def AddressToSDPAddrType(address):
+    if address is None:
+        return None
+    try:
+        if IPv6address_only_re.match(address):
+            return AddrTypes.IP6
 
-    if IPv6address_only_re.match(address):
-        return AddrTypes.IP6
+        if IPv4address_only_re.match(address):
+            return AddrTypes.IP4
+    except TypeError as exc:
+        exc.args += ('type of address: %r' % address.__class__.__name__,)
+        raise
 
-    if IPv4address_only_re.match(address):
-        return AddrTypes.IP4
-
-    # address not obviously IP4 or IP6 so return None
+    # address not obviously IP4 or IP6 so raise
     raise ValueError(
         "Address %r is not an IPv4 or IPv6 address" % (address,))
+
+
+def sdp_username_is_ok(uname):
+    if isinstance(uname, str):
+        uname = abytes(uname)
+    return username_only_re.match(uname) is not None
+
+
+def sock_family_to_addr_type(sock_family):
+
+    if sock_family is None:
+        return None
+
+    if sock_family == AF_INET:
+        return AddrTypes.IP4
+
+    if sock_family == AF_INET6:
+        return AddrTypes.IP6
+
+    raise ValueError('Unknown socket family: %r' % sock_family)
 
 bdict = bglobals()

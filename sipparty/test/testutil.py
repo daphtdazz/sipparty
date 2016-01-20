@@ -21,7 +21,7 @@ from six import (add_metaclass, exec_, next, PY2)
 import unittest
 from ..util import (
     AsciiBytesEnum, bglobals_g, CCPropsFor, class_or_instance_method, Enum,
-    FirstListItemProxy, Singleton, SingletonType)
+    FirstListItemProxy, Singleton, SingletonType, WeakProperty)
 from .setup import SIPPartyTestCase
 
 log = logging.getLogger(__name__)
@@ -225,4 +225,19 @@ class SingletonSubclass1(Singleton, metaclass=SingletonType):
         for list_obj in ([1, 2, 3], [{'a':2, 'c':3}, None, None], [None]):
             obj.my_list = list_obj
             self.assertIs(obj.first_of_my_list, list_obj[0])
+
+    def test_weak_property(self):
+
+        class Parent(object):
+            pass
+
+        class Child(object):
+            parent = WeakProperty('parent')
+
+        pp = Parent()
+        cc = Child()
+        cc.parent = pp
+        self.assertIs(cc.parent, pp)
+        del pp
+        self.assertIs(cc.parent, None)
 

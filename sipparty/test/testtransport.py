@@ -121,9 +121,10 @@ class TestTransport(SIPPartyTestCase):
 
         laddr = tp.listen_for_me(self.data_callback, sock_family=sock_family)
         self.assertTrue(isinstance(laddr, ListenDescription), laddr)
-        self.assertRaises(
-            SocketInUseError, tp.listen_for_me, self.data_callback,
-            sock_family=sock_family)
+
+        log.info('Listen a second time')
+        laddr2 = tp.listen_for_me(self.data_callback, sock_family=sock_family)
+        self.assertNotEqual(laddr2.port, laddr.port)
 
         log.info('Listening on ports %d', laddr.port)
 
@@ -133,6 +134,9 @@ class TestTransport(SIPPartyTestCase):
             'Release address twice and get an exception as it has now been '
             'freed.')
         self.assertRaises(KeyError, tp.release_listen_address, laddr)
+
+        log.info('Release second listen address')
+        tp.release_listen_address(laddr2)
 
     def test_listen_address_receive_data(self):
         sock_family = AF_INET
