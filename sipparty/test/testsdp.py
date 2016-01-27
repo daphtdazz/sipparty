@@ -20,13 +20,12 @@ import logging
 from six import (binary_type as bytes)
 from ..sdp import (
     AddrTypes, LineTypes, MediaTypes, SessionDescription, SDPIncomplete)
-from ..util import (TestCaseREMixin)
 from .setup import SIPPartyTestCase
 
 log = logging.getLogger(__name__)
 
 
-class TestSDP(TestCaseREMixin, SIPPartyTestCase):
+class TestSDP(SIPPartyTestCase):
 
     def setUp(self):
         # self.pushLogLevel('sdp.sdp', logging.DEBUG)
@@ -50,7 +49,7 @@ class TestSDP(TestCaseREMixin, SIPPartyTestCase):
         sd.addressType = AddrTypes.IP4
         sd.addMediaDescription(
             mediaType=MediaTypes.audio, port=1815,
-            transProto=b"RTP/AVP", fmts=[0])
+            transProto=b"RTP/AVP", formats=[0])
         sd.mediaDescriptions[0].address = b"media.atlanta.com"
         sd.mediaDescriptions[0].addressType = AddrTypes.IP4
 

@@ -17,12 +17,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-from six import (binary_type as bytes, iteritems, add_metaclass)
+from numbers import Integral
 from ..deepclass import (DeepClass, dck)
-from ..parse import ParseError
-from ..sip import (prot, components)
-from ..sip.components import URI
-from ..sip.request import Request
 from ..vb import ValueBinder
 from .setup import SIPPartyTestCase
 
@@ -30,11 +26,6 @@ log = logging.getLogger(__name__)
 
 
 class TestDeepClass(SIPPartyTestCase):
-
-    def setUp(self):
-        # self.pushLogLevel("deepclass", logging.DETAIL)
-        # self.pushLogLevel("vb", logging.DETAIL)
-        pass
 
     def testVBInteraction(self):
 
@@ -79,3 +70,38 @@ class TestDeepClass(SIPPartyTestCase):
         testVbdc = TVBDC()
         self.assertIsNotNone(testVbdc.attrA)
         self.assertTrue(testVbdc.attrA is testVbdc.attrB)
+
+    def test_empty_prop(self):
+
+        log.info(
+            'Test a deepclass subclass has correct initial values for empty '
+            'attributes, and attribute \'name\' which originally was broken')
+
+        class TestDeepClass(DeepClass('_tdc_', {
+                    'attr1': {},
+                    'integral_attr': {
+                        dck.check: lambda x: isinstance(x, Integral)},
+                    'name': {},
+                })):
+            pass
+
+        tdc = TestDeepClass()
+        for attr in ('attr1', 'integral_attr', 'name'):
+            self.assertTrue(hasattr(tdc, attr), attr)
+            self.assertIs(getattr(tdc, attr), None, attr)
+
+    def test_repr_recursion(self):
+
+        class TestDeepClass(DeepClass('_tdc_', {
+                    'attr1': {},
+                })):
+            pass
+
+        dc1 = TestDeepClass()
+        dc2 = TestDeepClass()
+        dc1.attr1 = dc2
+        dc2.attr1 = dc1
+        dc1_repr = repr(dc1)
+        self.assertRegexpMatches(
+            dc1_repr,
+            'TestDeepClass\(attr1=TestDeepClass\(attr1=<DC [0-9a-f]+>\)\)')

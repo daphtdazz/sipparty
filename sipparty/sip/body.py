@@ -21,7 +21,7 @@ limitations under the License.
 import logging
 from ..deepclass import (DeepClass, dck)
 from ..parse import Parser
-from ..util import (BytesGenner, TwoCompatibleThree)
+from ..util import BytesGenner
 
 log = logging.getLogger(__name__)
 

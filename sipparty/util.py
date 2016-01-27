@@ -17,7 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 from abc import (ABCMeta, abstractmethod)
-from collections import Callable
+from collections import (Callable, Sequence)
 import logging
 import re
 from six import (
@@ -25,6 +25,7 @@ from six import (
 import threading
 import time
 import timeit
+from traceback import extract_stack
 from weakref import (ref as weakref, WeakValueDictionary)
 
 log = logging.getLogger(__name__)
@@ -208,50 +209,51 @@ class Enum(set):
         return name
 
 
-class AsciiBytesEnum(Enum):
+if not PY2:
+    class AsciiBytesEnum(Enum):
 
-    def __init__(self, vals=None, normalize=None, aliases=None):
-        def bad_val_type(val):
-            raise TypeError(
-                '%r instance %r cannot be used in %r instance as it is not a '
-                'bytes-like type.' % (
-                    val.__class__.__name__, val, self.__class__.__name__))
+        def __init__(self, vals=None, normalize=None, aliases=None):
+            def bad_val_type(val):
+                raise TypeError(
+                    '%r instance %r cannot be used in %r instance as it is '
+                    'not a bytes-like type.' % (
+                        val.__class__.__name__, val, self.__class__.__name__))
 
-        if vals:
-            for vv in [
-                    _vv
-                    for _vl in (vals, aliases) if _vl is not None
-                    for _vv in _vl]:
-                if not isinstance(vv, bytes):
-                    bad_val_type(vv)
-        super(AsciiBytesEnum, self).__init__(
-            vals=vals, normalize=normalize, aliases=aliases)
+            if vals:
+                for vv in [
+                        _vv
+                        for _vl in (vals, aliases) if _vl is not None
+                        for _vv in _vl]:
+                    if not isinstance(vv, bytes):
+                        bad_val_type(vv)
+            super(AsciiBytesEnum, self).__init__(
+                vals=vals, normalize=normalize, aliases=aliases)
 
-    def add(self, item):
-        if not isinstance(item, bytes):
-            raise TypeError(
-                'New %r instance is inconsistent with enum %r containing '
-                'only instances of %r' % (
-                    item.__class__.__name__, self, self._en_type.__name__))
-        super(AsciiBytesEnum, self).add(item)
+        def add(self, item):
+            if not isinstance(item, bytes):
+                raise TypeError(
+                    'New %r instance is inconsistent with enum %r containing '
+                    'only instances of %r' % (
+                        item.__class__.__name__, self, self._en_type.__name__))
+            super(AsciiBytesEnum, self).add(item)
 
-    def REPattern(self):
-        return b"(?:%s)" % b"|".join(self)
+        def REPattern(self):
+            return b"(?:%s)" % b"|".join(self)
 
-    def enum(self):
-        return Enum(
-            [astr(val) for val in self._en_list],
-            aliases=self._en_aliases, normalize=self._en_normalize)
+        def enum(self):
+            return Enum(
+                [astr(val) for val in self._en_list],
+                aliases=self._en_aliases, normalize=self._en_normalize)
 
-    def _en_fixAttr(self, name):
-        if isinstance(name, str):
-            log.detail('Convert %r to ascii bytes', name)
-            name = abytes(name)
+        def _en_fixAttr(self, name):
+            if isinstance(name, str):
+                log.detail('Convert %r to ascii bytes', name)
+                name = abytes(name)
 
-        fixedStrAttr = super(AsciiBytesEnum, self)._en_fixAttr(name)
-        return fixedStrAttr
+            fixedStrAttr = super(AsciiBytesEnum, self)._en_fixAttr(name)
+            return fixedStrAttr
 
-if PY2:
+else:
     AsciiBytesEnum = Enum
 
 
@@ -267,16 +269,25 @@ class ClassType(object):
         class_short_name = class_name.replace(capp, "")
         try:
             return getattr(owner.types, class_short_name)
-        except AttributeError as exc:
+        except AttributeError:
             raise AttributeError(
                 "No such known header class type %r" % (class_short_name,))
 
 
 class FirstListItemProxy(object):
-    "This descriptor provides access to the first item in a list attribute."
+    """This descriptor provides access to the first item in a list attribute.
+    """
 
     def __init__(self, list_attr_name):
+        """
+        :param str list_attr_name: Should be the name of an attribute.
+        """
         super(FirstListItemProxy, self).__init__()
+
+        if not isinstance(list_attr_name, str):
+            raise TypeError(
+                'List attribute name passed to FirstListItemProxy is not a '
+                'string: %r' % list_attr_name)
 
         try:
             hasattr(self, list_attr_name)
@@ -287,27 +298,45 @@ class FirstListItemProxy(object):
         self._flip_attrName = list_attr_name
 
     def __get__(self, instance, owner):
+        """
+        If the instance has the attribute, or it is None or an empty
+        Sequence, getting this descriptor will raise AttributeError, as the
+        instance clearly doesn't have a 'first list item' to get.
+
+        If the instance has this attribute and it is a non-empty Sequence, then
+        the first item of the Sequence is returned.
+
+        Otherwise raises TypeError.
+        """
+
         if instance is None:
+            return owner
+
+        list_attr = getattr(instance, self._flip_attrName)
+
+        def attr_err():
             raise AttributeError(
-                "Class use of FirstListItemProxy descriptors not supported. "
-                "List attribute name: %r." % (self._flip_attrName,))
+                "Instance %r of class %r does not have attribute %r." % (
+                    instance, owner, self._flip_attrName))
 
-        # Take a copy so the length won't change between checking it and
-        # returning the first item.
-        list_attr = list(getattr(instance, self._flip_attrName))
+        if list_attr is None:
+            attr_err()
 
-        if len(list_attr) == 0:
-            raise AttributeError(
-                "Instance %r of class %r does not have attribute %r."
-                "".format(instance, owner, self._flip_attrName))
+        if not isinstance(list_attr, Sequence):
+            raise TypeError(
+                'List attribute %r of %r instance is not a Sequence (has type '
+                '%r) and cannot be used with FirstListItemProxy' % (
+                    self._flip_attrName, instance.__class__.__name__,
+                    list_attr.__class__.__name__))
 
-        return list_attr[0]
+        for obj in list_attr:
+            # I.e. just return the first item, if the list is not empty.
+            return obj
+
+        # List was empty, raise AttributeError.
+        attr_err()
 
     def __set__(self, instance, val):
-        if instance is None:
-            raise AttributeError(
-                "Class %r does not support FirstListItemProxy descriptors. "
-                "List attribute name: %r." % (owner, self._flip_attrName))
 
         # Use a slice which works for the first addition as well.
         list_attr = getattr(instance, self._flip_attrName)
@@ -513,39 +542,51 @@ def OnlyWhenLocked(method):
     """This decorator sees if the owner of method has a _lock attribute, and
     if so locks it before calling method, releasing it after."""
 
+    log = logging.getLogger('OnlyWhenLocked')
+
     def maybeGetLock(self, *args, **kwargs):
+
+        obj_name = (
+            getattr(self, 'name', None) or
+            getattr(self, '_fsm_name', None) or
+            self)
+
         if not hasattr(self, "_lock") or not self._lock:
-            log.debug("No locking in this object.")
+            log.debug(
+                "No locking in %s instance %s.", self.__class__.__name__,
+                obj_name)
             return method(self, *args, **kwargs)
 
         if not hasattr(self, "_lock_holdingThread"):
             raise AttributeError(
-                "Object %r of type %r uses OnlyWhenLocked but has no "
+                "%s instance % uses OnlyWhenLocked but has no "
                 "attribute _lock_holdingThread which is required." %
-                (self, self.__class__))
+                (self.__class__.__name__, obj_name))
 
         cthr = threading.currentThread()
         hthr = self._lock_holdingThread
 
         if cthr is hthr:
             raise RuntimeError(
-                "Thread %r attempting to get FSM lock when it already has "
-                "it." % cthr)
+                "Thread %s attempting to get FSM lock when it already has "
+                "it." % cthr.name)
 
-        log.debug("Thread %r get FSM %r lock for %r (held by %r).",
-                  cthr, self, method, hthr)
+        log.debug("Thread %s get lock for %s instance (held by %s).",
+                  cthr.name, self.__class__.__name__,
+                  hthr.name if hthr is not None else None)
 
         with self._lock:
-            log.debug("Thread %r got FSM %r lock for %r.",
-                      cthr, self, method)
+            log.debug("Thread %s GOT lock for %s.%s",
+                      cthr.name, obj_name, method.__name__)
             self._lock_holdingThread = cthr
             try:
                 result = method(self, *args, **kwargs)
             finally:
                 self._lock_holdingThread = None
 
-        log.debug("Thread %r released FSM %r lock.",
-                  cthr, self)
+        log.debug(
+            "Thread %s RELEASED lock for %s.%s", cthr.name, obj_name,
+            method.__name__)
         return result
 
     return maybeGetLock
@@ -555,7 +596,10 @@ class DerivedProperty(object):
 
     def update(self, newDP):
         """Updates the derived property so that subclasses can override
-        particular methods. newDP is an instance of `DerivedProperty`.""",
+        particular methods.
+
+        :param newDP: an instance of `DerivedProperty`.
+        """
         log.debug("Update %r with %r.", self, newDP)
         for pr in ("_rp_propName", "_rp_get", "_rp_set", "_rp_check"):
             np = getattr(newDP, pr)
@@ -608,10 +652,24 @@ class DerivedProperty(object):
     def __set__(self, obj, value):
         pname = self._rp_propName
         checker = self._rp_check
-        if value is not None and checker is not None and not checker(value):
-            raise ValueError(
-                "%r is not an allowed value for attribute %r of class %r." %
-                (value, pname, obj.__class__.__name__))
+        if value is not None and checker is not None:
+            exc_type = None
+            try:
+                if not checker(value):
+                    raise ValueError()
+            except (ValueError, TypeError) as exc:
+                log.error(exc.__class__.__name__)
+                exc_type = type(exc)
+                exc_class = (
+                    ValueError if issubclass(exc_type, ValueError) else
+                    TypeError)
+            finally:
+                if exc_type is not None:
+                    raise exc_class(
+                        "%r instance is not an allowed value for attribute %r "
+                        "of class %r." % (
+                            value.__class__.__name__, pname,
+                            obj.__class__.__name__))
 
         st = self._rp_set
 
@@ -625,7 +683,7 @@ class DerivedProperty(object):
                 raise ValueError(
                     "Setter attribute %r of %r object is not callable." % (
                         st, obj.__class__.__name__))
-            val = meth(value)
+            meth(value)
         else:
             st(obj, value)
 
@@ -706,52 +764,146 @@ def WaitFor(condition, timeout_s=1, action_on_timeout=None, resolution=0.0001):
             raise Timeout("Timed out waiting for %r" % condition)
 
 
+class SingletonType(type):
+
+    # Dictionary of names. This is to prevent double __new__.
+    __instance_names = {}
+
+    @property
+    def __initing_attribute(cls):
+        return '__' + cls.__name__ + '_singleton_initing'
+
+    def __new__(meta, name, bases, dct):
+
+        log.debug(
+            'New %r instance called %r with bases %r', meta.__name__, name,
+            bases)
+        init_proc = dct.get('__init__', None)
+        new_module_name = []
+
+        # Create a wrapper for the init. This is to prevent the init of the
+        # underlying class from being called twice.
+        def singleton_init_wrapper(self, singleton=None, *args, **kwargs):
+
+            assert len(new_module_name) == 1
+            singleton_subclass = meta.__instance_names[new_module_name[0]]
+            log.debug(
+                'Init of %r type wrapper for %r instance, initing attr %r',
+                singleton_subclass.__name__,
+                self.__class__.__name__,
+                singleton_subclass.__initing_attribute)
+
+            if hasattr(self, 'singleton_inited'):
+                log.debug('  instance already inited')
+                return
+
+            ia = singleton_subclass.__initing_attribute
+            try:
+                if not getattr(self, ia, False) and init_proc is not None:
+                    log.debug(
+                        'Call underlying init method %r on %r class',
+                        init_proc, singleton_subclass.__name__)
+                    setattr(self, ia, True)
+                    init_proc(self, *args, **kwargs)
+                else:
+                    # This class didn't have an init proc, so recurse to the
+                    # next one in the mro.
+                    setattr(self, ia, True)
+                    try:
+                        assert isinstance(self, object)
+                        assert not isinstance(self, type)
+                        assert isinstance(singleton_subclass, type)
+                        assert singleton_subclass in self.__class__.__mro__, (
+                            singleton_subclass, id(singleton_subclass),
+                            self.__class__.__mro__,
+                            [id(base) for base in self.__class__.__mro__],
+                            singleton_subclass.__module__ + '.' +
+                            singleton_subclass.__name__)
+                        log.debug(
+                            'Call super(%r, %r).init', singleton_subclass,
+                            self)
+                        super(singleton_subclass, self).__init__(
+                            *args, **kwargs)
+                    except:
+                        log.warning(
+                            'super init failed on %r, wrapper for '
+                            '%r',
+                            self, singleton_subclass)
+                        raise
+
+                self.singleton_inited = True
+            finally:
+                setattr(self, singleton_subclass.__initing_attribute, False)
+
+        dct['__init__'] = singleton_init_wrapper
+
+        # Now we've patched init, we can call super to create the instance of
+        # this metaclass.
+        new_type = super(SingletonType, meta).__new__(
+            meta, name, bases, dct)
+
+        module_path = '.'.join((new_type.__module__, new_type.__name__))
+        new_module_name.append(module_path)
+
+        if module_path in meta.__instance_names:
+            log.debug(
+                'Overwriting existing class at %s, check this is using the '
+                'six module', module_path)
+            st = extract_stack()
+            for frame in st[::-1]:
+                if 'six.py' in frame[0] and 'wrapper' in frame[2]:
+                    break
+            else:
+                raise RuntimeError(
+                    'Unexpected double creation of type %s inheriting from '
+                    '\'singleton.Singleton\'. Creating two types with the '
+                    'same name in the same module that both inherit from '
+                    'Singleton is not supported.' % module_path)
+
+        meta.__instance_names[module_path] = new_type
+
+        log.debug('New %r instance %s - FINISHED', meta.__name__, module_path)
+        return new_type
+
+
+@add_metaclass(SingletonType)
 class Singleton(object):
     """Classes inheriting from this will only have one instance."""
 
-    _St_SharedInstances = WeakValueDictionary()
-    _St_SingletonNameKey = 'singleton'
+    UseStrongReferences = False
+    _St_SharedInstances = None
 
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls, singleton=None, *args, **kwargs):
         log.detail("Singleton.__new__(%r, %r)", args, kwargs)
-        skey = cls._St_SingletonNameKey
-        if skey in kwargs:
-            name = kwargs[skey]
-            del kwargs[skey]
+        if singleton is not None:
+            name = singleton
         else:
-            name = ''
+            name = cls.__name__
 
-        log.debug("New with class %r, name %r", cls, name)
-        existing_inst = (
-            None
-            if name not in cls._St_SharedInstances else
-            cls._St_SharedInstances[name])
+        log.debug("Get singleton for class %r, name %r", cls, name)
+
+        insts = cls._St_SharedInstances
+        if insts is None:
+            if cls.UseStrongReferences:
+                insts = {}
+            else:
+                insts = WeakValueDictionary()
+            cls._St_SharedInstances = insts
+
+        existing_inst = insts.get(name, None)
 
         if existing_inst is not None:
-            log.debug("  Return Existing instance")
-            log.detail("  %r", existing_inst)
+            log.debug("Return Existing instance")
+            log.detail("%r", existing_inst)
             return existing_inst
 
-        log.debug("  New instance required args:%r, kwargs:%r", args, kwargs)
-        ns = super(Singleton, cls).__new__(cls, *args, **kwargs)
-        cls._St_SharedInstances[name] = ns
-
-        return ns
-
-    @property
-    def singletonInited(self):
-        return "_st_inited" in self.__dict__
-
-    def __init__(self, *args, **kwargs):
-        if self.singletonInited:
-            return
-        self.__dict__["_st_inited"] = True
-
-        if self._St_SingletonNameKey in kwargs:
-            del kwargs[self._St_SingletonNameKey]
-
-        log.debug("Init Singleton args:%r, kwargs:%r", args, kwargs)
-        super(Singleton, self).__init__(*args, **kwargs)
+        log.info(
+            "New instance called %s required args:%r, kwargs:%r", name, args,
+            kwargs)
+        ni = super(Singleton, cls).__new__(cls, *args, **kwargs)
+        insts[name] = ni
+        ni.singleton_name = name
+        return ni
 
 
 @add_metaclass(ABCMeta)
@@ -759,11 +911,25 @@ class TupleRepresentable(object):
     """Semi-abstract base class for objects that can be represented
     by Tuples, providing equality and hash function."""
 
+    #
+    # =================== ABC INTERFACE =======================================
+    #
     @abstractmethod
     def tupleRepr(self):
         raise AttributeError(
             "%r needs to implement 'tupleRepr' itself to inherit from "
             "TupleRepresentable" % (self.__class__.__name__,))
+
+    #
+    # =================== INTERNAL METHODS ====================================
+    #
+    def __get_check_tuple_repr(self):
+        mytr = self.tupleRepr()
+        if not isinstance(mytr, tuple):
+            raise TypeError(
+                '%r instance tupleRepr method returned a value that was not a '
+                'tuple: %r' % (self.__class__.__name__, mytr))
+        return mytr
 
     #
     # =================== MAGIC METHODS =======================================
@@ -774,10 +940,11 @@ class TupleRepresentable(object):
     def __eq__(self, other):
         if not isinstance(other, TupleRepresentable):
             return False
-        return self.tupleRepr() == other.tupleRepr()
+        mytr = self.__get_check_tuple_repr()
+        return mytr == other.tupleRepr()
 
     def __hash__(self):
-        return hash(self.tupleRepr())
+        return hash(self.__get_check_tuple_repr())
 
 
 @TwoCompatibleThree
@@ -849,7 +1016,117 @@ if PY2:
     astr = abytes
 else:
     def abytes(x):
-        return bytes(x, encoding='ascii')
+        if x is None:
+            return None
+        if isinstance(x, bytes):
+            return x
+        try:
+            return bytes(x, encoding='ascii')
+        except TypeError as exc:
+            raise type(exc)(
+                'Bad type %r for argument %r to abytes (not str).' % (
+                    type(x).__name__, x))
 
     def astr(x):
+        if x is None:
+            return None
         return str(x, encoding='ascii')
+
+
+class DelegateProperty(object):
+
+    _sentinel = type('DelegatePropertySentinel', (), {})()
+
+    def __init__(self, delegate_attribute, attribute):
+        self.__delegate_attribute = delegate_attribute
+        self.__attribute = attribute
+
+    def __get__(self, obj, cls):
+        if obj is None:
+            return self
+
+        delegate = getattr(obj, self.__delegate_attribute, self._sentinel)
+        if delegate is self._sentinel:
+            raise AttributeError(
+                '%r has no delegate at %r.', obj, self.__delegate_attribute)
+
+        val = getattr(delegate, self.__attribute, self._sentinel)
+        if val is self._sentinel:
+            raise AttributeError(
+                '%r delegate %r at attribute %r has no attribute %r', obj,
+                delegate, self.__delegate_attribute, self.__attribute)
+
+        return val
+
+    def __set__(self, obj, val):
+
+        delegate = getattr(obj, self.__delegate_attribute, self._sentinel)
+        if delegate is self._sentinel:
+            raise AttributeError(
+                '%r has no delegate at %r.', obj, self.__delegate_attribute)
+
+        setattr(delegate, self.__attribute, val)
+
+
+class Retainable(object):
+
+    def __init__(self):
+        super(Retainable, self).__init__()
+        self.__retain_count = 0
+
+    @property
+    def is_retained(self):
+        return self.__retain_count != 0
+
+    def retain(self):
+        self.__retain_count += 1
+        log.debug('retain count now %d', self.__retain_count)
+
+    def release(self):
+        self.__retain_count -= 1
+        log.debug('retain count now %d', self.__retain_count)
+
+
+class WeakProperty(object):
+
+    def __init__(self, pname):
+        self.__pname = '__weakref_' + pname
+
+    def __get__(self, obj, cls):
+        if obj is None:
+            return self
+
+        wr = getattr(obj, self.__pname, None)
+        if wr is None:
+            return None
+
+        return wr()
+
+    def __set__(self, obj, val):
+        wr = weakref(val)
+        setattr(obj, self.__pname, wr)
+
+
+class FallbackProperty(object):
+
+    def __init__(self, pname, fallbacks):
+        self._fp_prop_name = pname
+        self._fp_fallbacks = fallbacks
+
+    def __get__(self, obj, owner):
+        if obj is None:
+            return self
+
+        obj_val = getattr(obj, self._fp_prop_name, None)
+        if obj_val is not None:
+            return obj_val
+
+        for fallback in self._fp_fallbacks:
+            if isinstance(fallback, str):
+                obj_val = getattr(self, fallback, None)
+                if obj_val is not None:
+                    return obj_val
+                continue
+
+            raise TypeError(
+                'Bad object %r used for fallback attribute' % fallback)

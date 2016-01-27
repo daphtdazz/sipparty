@@ -33,10 +33,9 @@ limitations under the License.
 """
 import logging
 import select
-import socket
+from socket import socketpair
 import sys
 import threading
-import time
 from ..util import (Clock, OnlyWhenLocked)
 
 log = logging.getLogger(__name__)
@@ -69,14 +68,20 @@ class _FDSource(object):
         try:
             self._fds_action(self._fds_selectable)
             self._fds_exceptionCount = 0
-        except Exception as exc:
+        except Exception:
             if self._fds_exceptionCount >= self._fds_maxExceptions:
                 raise
 
-            log.exception(
-                "Exception %d processing new data for selectable %r (fd %d):",
-                self._fds_exceptionCount, self._fds_selectable, self._fds_int)
             self._fds_exceptionCount += 1
+            log.exception(
+                "Exception (%d%s) processing new data for selectable %r "
+                "(fd %d):", self._fds_exceptionCount,
+                'st' if self._fds_exceptionCount == 1 else
+                'nd' if self._fds_exceptionCount == 2 else
+                'rd' if self._fds_exceptionCount == 3 else
+                'th',
+                self._fds_selectable,
+                self._fds_int)
 
 
 class RetryThread(threading.Thread):
@@ -99,7 +104,7 @@ class RetryThread(threading.Thread):
         weak reference in Action.
         """
         super(RetryThread, self).__init__(**kwargs)
-        log.debug("RetryThread.__init__")
+        log.debug("%s.__init__ %s", self.__class__.__name__, self.name)
         self._rthr_action = action
         self._rthr_cancelled = False
         self._rthr_retryTimes = []
@@ -114,7 +119,8 @@ class RetryThread(threading.Thread):
         self._rthr_masterThread = master_thread
 
         # Set up the trigger mechanism.
-        self._rthr_triggerRunFD, output = socket.socketpair()
+        self._rthr_triggerRunFD, output = socketpair()
+        self._rthr_trigger_run_read_fd = output
         self.addInputFD(output, lambda selectable: selectable.recv(1))
 
         # Initialize support for util.OnlyWhenLocked
@@ -207,7 +213,7 @@ class RetryThread(threading.Thread):
             if action is not None:
                 try:
                     action()
-                except Exception as exc:
+                except Exception:
                     log.exception(
                         "%s exception doing action %r:", self, action)
 
@@ -275,12 +281,20 @@ class RetryThread(threading.Thread):
         self._rthr_triggerSpin()
 
     def cancel(self):
-        log.debug("Cancel retrythread")
+        log.debug("Cancel retrythread %s", self.name)
         self._rthr_cancelled = True
         self._rthr_triggerSpin()
 
     #
-    # INTERNAL METHODS
+    # =================== MAGIC METHODS =======================================
+    #
+    def __del__(self):
+        log.info('__del__ %s %s', self.name, self.__class__.__name__)
+        for sock in (self._rthr_trigger_run_read_fd, self._rthr_triggerRunFD):
+            sock.close()
+
+    #
+    # =================== INTERNAL METHODS ====================================
     #
     def _rthr_processSelectedReadFDs(self, rfds, rsrcs):
         for rfd in rfds:

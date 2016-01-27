@@ -17,9 +17,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-from six import (add_metaclass, next, PY2)
-import unittest
-from .. import util
+from six import (add_metaclass, exec_, next, PY2)
+from weakref import ref
+from ..util import (
+    AsciiBytesEnum, bglobals_g, CCPropsFor, class_or_instance_method, Enum,
+    FirstListItemProxy, Singleton, SingletonType, WeakMethod, WeakProperty)
 from .setup import SIPPartyTestCase
 
 log = logging.getLogger(__name__)
@@ -28,7 +30,7 @@ log = logging.getLogger(__name__)
 class TestUtil(SIPPartyTestCase):
 
     def testEnum(self):
-        en = util.Enum(("cat", "dog", "aardvark", "mouse"))
+        en = Enum(("cat", "dog", "aardvark", "mouse"))
 
         aniter = en.__iter__()
         self.assertEqual(next(aniter), "cat")
@@ -52,11 +54,11 @@ class TestUtil(SIPPartyTestCase):
     def testBytesEnum(self):
 
         if not PY2:
-            self.assertRaises(TypeError, lambda: util.AsciiBytesEnum(('cat',)))
+            self.assertRaises(TypeError, lambda: AsciiBytesEnum(('cat',)))
             self.assertRaises(
-                TypeError, lambda: util.AsciiBytesEnum(
+                TypeError, lambda: AsciiBytesEnum(
                     (b'cat',), aliases={'cat': b'cat'}))
-        be = util.AsciiBytesEnum(
+        be = AsciiBytesEnum(
             (b'cat', b'dog'), aliases={b'CAT': b'cat'})
         self.assertTrue(b'cat' in be)
         self.assertEqual(b'cat', be.cat)
@@ -65,12 +67,12 @@ class TestUtil(SIPPartyTestCase):
 
     def testb_globals(self):
 
-        a_ascii_enum = util.AsciiBytesEnum((b'a', b'c'))
-        a_normal_enum = util.Enum(('a', 'b'))
+        a_ascii_enum = AsciiBytesEnum((b'a', b'c'))
+        a_normal_enum = Enum(('a', 'b'))
         a_normal_bytes_var = b'bytes'
         a_normal_string_var = 'string'
 
-        gdict = util.bglobals_g(locals())
+        gdict = bglobals_g(locals())
         self.assertTrue(b'a_ascii_enum.a' in gdict, gdict)
         self.assertTrue(b'a_ascii_enum.c' in gdict, gdict)
         self.assertTrue('a_normal_enum.a' in gdict, gdict)
@@ -81,37 +83,91 @@ class TestUtil(SIPPartyTestCase):
 
     def testSingleton(self):
 
-        # self.pushLogLevel('util', logging.DETAIL)
-        s1 = util.Singleton(singleton='a')
-        s2 = util.Singleton(singleton='a')
+        s1 = Singleton(singleton='a')
+        s2 = Singleton(singleton='a')
         self.assertTrue(s1 is s2)
 
-        s3 = util.Singleton()
-        s4 = util.Singleton()
+        s3 = Singleton()
+        s4 = Singleton()
         self.assertTrue(s3 is s4)
         self.assertFalse(s3 is s1)
 
+        log.info('Check that a Singleton subclass with no __init__ works.')
+
+        class SingletonSubclass(Singleton):
+            pass
+
+        ss1 = SingletonSubclass()
+        ss2 = SingletonSubclass()
+        self.assertIs(ss1, ss2)
+
+        log.info(
+            'Check we get a TypeError if attempting to use an unrelated '
+            'metaclass on a subclass of Singleton (standard python behaviour)')
+
+        class NewBadMetaclass(type):
+            pass
+
+        self.assertRaises(
+            TypeError, NewBadMetaclass, 'BadSingletonSubclass', (Singleton,),
+            {})
+
+        log.info('Can we make a metaclass that is OK with Singleton, with six')
+
+        class SubMetaclass(SingletonType):
+            pass
+
+        @add_metaclass(SubMetaclass)
+        class SingletonSubclass1(Singleton):
+            pass
+
+        sing = SingletonSubclass1()
+        sing1 = SingletonSubclass1()
+        self.assertIs(sing, sing1)
+        self.assertIsNot(sing, ss1)
+
+        # Because six uses a class decorator, the SingletonSubclass1 above is
+        # actually created twice. The first time before the decorator is
+        # called, i.e. the class SingletonSubclass1() line. This is created by
+        # a call to the SingletonType.__new__ method because the metaclass is
+        # inherited from SingletonSubclass1's base Singleton. However, then six
+        # creates a new version of SingletonSubclass1 by calling
+        # SubMetaclass.__new__() and passes in info it scraped from the initial
+        # creation. SingletonType doesn't really support this, which we test
+        # below, but there's an exception when this is triggered by six as that
+        # will be common! In this case the initial creation is deleted.
+        log.info('Check attempting to create the same type fails.')
+        cmd = ("""
+class SingletonSubclass1(Singleton):
+    __metaclass__ = SingletonType
+""" if PY2 else """
+class SingletonSubclass1(Singleton, metaclass=SingletonType):
+    pass
+""")
+        with self.assertRaises(RuntimeError):
+            exec_(cmd)
+
     def testCumulativeProperties(self):
 
-        @add_metaclass(util.CCPropsFor(("CPs", "CPList", "CPDict")))
+        @add_metaclass(CCPropsFor(("CPs", "CPList", "CPDict")))
         class CCPTestA(object):
-            CPs = util.Enum((1, 2))
+            CPs = Enum((1, 2))
             CPList = [1, 2]
             CPDict = {1: 1, 2: 2}
 
         class CCPTestB(CCPTestA):
-            CPs = util.Enum((4, 5))
+            CPs = Enum((4, 5))
             CPList = [4, 5]
             CPDict = {4: 4, 3: 3}
 
         class CCPTest1(CCPTestB):
-            CPs = util.Enum((3, 2))
+            CPs = Enum((3, 2))
             CPList = [3, 2]
             CPDict = {2: 2, 3: 5}
 
-        self.assertEqual(CCPTestA.CPs, util.Enum((1, 2)))
-        self.assertEqual(CCPTestB.CPs, util.Enum((1, 2, 4, 5)))
-        self.assertEqual(CCPTest1.CPs, util.Enum((1, 2, 3, 4, 5)))
+        self.assertEqual(CCPTestA.CPs, Enum((1, 2)))
+        self.assertEqual(CCPTestB.CPs, Enum((1, 2, 4, 5)))
+        self.assertEqual(CCPTest1.CPs, Enum((1, 2, 3, 4, 5)))
 
         self.assertEqual(CCPTestA.CPDict, {1: 1, 2: 2})
         self.assertEqual(CCPTestB.CPDict, {1: 1, 2: 2, 3: 3, 4: 4})
@@ -125,7 +181,7 @@ class TestUtil(SIPPartyTestCase):
 
         class MyClass(object):
 
-            @util.class_or_instance_method
+            @class_or_instance_method
             def AddProperty(cls_or_self, prop, val):
                 setattr(cls_or_self, prop, val)
 
@@ -136,3 +192,72 @@ class TestUtil(SIPPartyTestCase):
         self.assertRaises(AttributeError, lambda: MyClass.b)
         self.assertEqual(inst.a, 1)
         self.assertEqual(inst.b, 2)
+
+    def test_list_attribute(self):
+        for bad_attr_name in (1, None):
+            log.info(
+                'Check bad list attribute for FirstListItemProxy %r',
+                bad_attr_name)
+            self.assertRaises(TypeError, FirstListItemProxy, bad_attr_name)
+
+        if not PY2:
+            for bad_attr_name in (b'hi',):
+                log.info(
+                    'Check bad list attribute for FirstListItemProxy %r',
+                    bad_attr_name)
+                self.assertRaises(TypeError, FirstListItemProxy, bad_attr_name)
+
+        class ClassWithListAndFirstListItemProps(object):
+            first_of_my_list = FirstListItemProxy('my_list')
+
+        obj = ClassWithListAndFirstListItemProps()
+
+        log.info('Check AttributeError raised for None and missing lists')
+        self.assertRaises(AttributeError, getattr, obj, 'first_of_my_list')
+        for attr_error_obj in ([], None):
+            obj.my_list = attr_error_obj
+            self.assertRaises(AttributeError, getattr, obj, 'first_of_my_list')
+
+        log.info('Check TypeError when attempting to use a non-list list.')
+        for bad_type_object in (1, {'a:': 1}):
+            obj.my_list = bad_type_object
+            self.assertRaises(TypeError, getattr, obj, 'first_of_my_list')
+
+        log.info('Check first item in some lists')
+        for list_obj in ([1, 2, 3], [{'a': 2, 'c': 3}, None, None], [None]):
+            obj.my_list = list_obj
+            self.assertIs(obj.first_of_my_list, list_obj[0])
+
+    def test_weak_property(self):
+
+        class Parent(object):
+            pass
+
+        class Child(object):
+            parent = WeakProperty('parent')
+
+        pp = Parent()
+        cc = Child()
+        cc.parent = pp
+        self.assertIs(cc.parent, pp)
+        del pp
+        self.assertIs(cc.parent, None)
+
+    def test_weak_method(self):
+
+        results = []
+
+        class MyClass(object):
+            def do_something(self):
+                results.append(1)
+
+        myc = MyClass()
+        wmth = WeakMethod(myc, 'do_something')
+        wc = ref(myc)
+        self.assertIsNotNone(wc())
+        wmth()
+        self.assertEqual(results, [1])
+        del myc
+        self.assertIsNone(wc())
+        wmth()
+        self.assertEqual(results, [1])

@@ -17,19 +17,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-from six import PY2
 import socket
-import sys
 import threading
 from time import sleep
-import timeit
+from weakref import ref
 from ..fsm import (
-    AsyncFSM, FSM, FSMTimeout, InitialStateKey, LockedFSM, RetryThread, Timer,
-    TransitionKeys,
-    UnexpectedInput)
+    AsyncFSM, FSM, FSMTimeout, InitialStateKey, LockedFSM, Timer,
+    TransitionKeys, UnexpectedInput)
 from ..fsm import fsmtimer
 from ..fsm import retrythread
-from ..util import (Clock, Enum, WaitFor)
+from ..util import (Enum, WaitFor)
 from .setup import (MagicMock, patch, SIPPartyTestCase)
 
 log = logging.getLogger(__name__)
@@ -389,9 +386,9 @@ class TestFSM(SIPPartyTestCase):
 
         badFSM = FSMTestBadSubclass()
         badFSM.hit(badFSM.Inputs.go)
-        # We get a ValueError when we check the timer because the
+        # We get an error when we check the timer because the
         # 'not-a-method' method is not a method!
-        self.assertRaises(ValueError, badFSM.checkTimers)
+        self.assertRaises(AttributeError, badFSM.checkTimers)
 
     def testFDSources(self):
 
@@ -438,8 +435,6 @@ class TestFSM(SIPPartyTestCase):
                 thr_res[0] += 1
 
         nf = ThreadFSM()
-
-        bgthread = threading.Thread(name="bgthread", target=runthread)
 
         log.debug("Check that if we fail to add a transition the transition "
                   "configuration is not updated.")
@@ -512,3 +507,38 @@ class TestFSM(SIPPartyTestCase):
             self.assertRaises(UnexpectedInput,
                               lambda: fsm1.hit("bad input"))
         log.info("END EXPECT EXCEPTION IN ASYNC MODE")
+
+    def test_lifetimes(self):
+
+        start_calls = []
+
+        class TFSM(AsyncFSM):
+            FSMDefinitions = {
+                InitialStateKey: {
+                    "input": {
+                        TransitionKeys.NewState: "in progress 1",
+                        TransitionKeys.Action: lambda: start_calls.append(1)
+                    },
+                },
+                "in progress 1": {
+                    "input": {
+                        TransitionKeys.NewState: "in progress 2",
+                    }
+                },
+                'in progress 2': {
+
+                }
+            }
+
+        self.pushLogLevel('retrythread', logging.DEBUG)
+
+        for level in range(2):
+            del start_calls[:]
+            afsm1 = TFSM()
+            wptr = ref(afsm1)
+            if level > 0:
+                afsm1.hit('input')
+                self.assertEqual(start_calls, [1])
+
+            del afsm1
+            self.assertIsNone(wptr())

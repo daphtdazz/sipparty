@@ -17,16 +17,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-from six import (binary_type as bytes, itervalues)
-import socket
-from weakref import (WeakValueDictionary, ref as weakref)
+from six import (binary_type as bytes)
+from socket import SOCK_DGRAM
+from weakref import (WeakValueDictionary)
 from ..parse import ParseError
-from ..transport import (Transport, SockTypeFromName)
-from ..util import (DerivedProperty, WeakMethod)
+from ..transport import (
+    IsValidTransportName, Transport, SockTypeFromName,
+    UnregisteredPortGenerator)
+from ..util import (abytes, DerivedProperty, WeakMethod)
 from . import prot
 from .components import Host
 from .message import Message
-from .transform import (TransformKeys,)
 
 log = logging.getLogger(__name__)
 prot_log = logging.getLogger("messages")
@@ -34,12 +35,19 @@ prot_log.setLevel(logging.INFO)
 
 
 class SIPTransport(Transport):
-    """SIP specific subclass of Transport."""
+    """SIPTransport."""
 
     #
     # =================== CLASS INTERFACE =====================================
     #
     DefaultPort = 5060
+    DefaultType = SOCK_DGRAM
+
+    @classmethod
+    def port_generator(cls):
+        yield 5060
+        for port in UnregisteredPortGenerator():
+            yield port
 
     #
     # =================== INSTANCE INTERFACE ==================================
@@ -52,8 +60,6 @@ class SIPTransport(Transport):
     establishedDialogs = DerivedProperty("_sptr_establishedDialogs")
 
     def __init__(self):
-        if self.singletonInited:
-            return
         super(SIPTransport, self).__init__()
         self._sptr_messageConsumer = None
         self._sptr_messages = []
@@ -62,13 +68,22 @@ class SIPTransport(Transport):
         # Dialog handler is keyed by AOR.
         self._sptr_dialogHandlers = {}
 
-        self.byteConsumer = WeakMethod(self, "sipByteConsumer")
+    def listen_for_me(self, **kwargs):
+
+        for val, default in (
+                ('sock_type', self.DefaultType),
+                ('port', self.DefaultPort)):
+            if val not in kwargs or kwargs[val] is None:
+                kwargs[val] = default
+        return super(
+            SIPTransport, self).listen_for_me(
+                WeakMethod(self, 'sipByteConsumer'), **kwargs)
 
     def addDialogHandlerForAOR(self, aor, handler):
         """Register a handler to call """
 
         hdlrs = self._sptr_dialogHandlers
-        if handler in hdlrs:
+        if aor in hdlrs:
             raise KeyError(
                 "Handler already registered for AOR %r" % bytes(aor))
 
@@ -78,35 +93,45 @@ class SIPTransport(Transport):
     def removeDialogHandlerForAOR(self, aor):
 
         hdlrs = self._sptr_dialogHandlers
-        if handler not in hdlrs:
+        if aor not in hdlrs:
             raise KeyError(
                 "AOR handler not registered for AOR %r" % bytes(aor))
 
         log.debug("Remove handler for AOR %r", aor)
         del hdlrs[aor]
 
-    def sendMessage(self, msg, toAddr, fromAddr=None):
-        log.debug("Send message %r -> %r type %s", fromAddr, toAddr, msg.type)
+    def sendMessage(self, msg, name, port):
+        log.debug("Send message -> %r type %s", (name, port), msg.type)
 
-        toAddr = self.fixTargetAddress(toAddr)
-        fromAddr = self.fixTargetAddress(fromAddr)
+        if not IsValidTransportName(name):
+            raise TypeError(
+                'remote_name %r is not a valid transport name (special name '
+                'or string)' % name)
 
-        sockType = SockTypeFromName(msg.viaheader.transport)
+        sock_type = SockTypeFromName(msg.viaheader.transport)
 
-        log.debug("Normalized addresses: %r -> %r type", fromAddr, toAddr)
+        sp = super(SIPTransport, self).get_send_from_address(
+            sock_type=sock_type, remote_name=name,
+            remote_port=port,
+            data_callback=WeakMethod(self, 'sipByteConsumer'))
 
-        super(SIPTransport, self).sendMessage(
-            bytes(msg), toAddr, sockType=sockType, fromAddr=fromAddr)
+        vh = msg.viaheader
+        if not vh.address:
+            vh.address = abytes(sp.local_address.name)
+
+        if not vh.port:
+            vh.port = sp.local_address.port
+        sp.send(bytes(msg))
 
     def fixTargetAddress(self, addr):
         if addr is None:
             return (None, 0)
 
         if isinstance(addr, Host):
-            return self.resolveHost(addr.address, addr.port)
+            return self.resolve_host(addr.address, addr.port)
 
         if isinstance(addr, bytes):
-            return self.resolveHost(addr)
+            return self.resolve_host(addr)
 
         if addr[1] is None:
             return (addr[0], self.DefaultPort)
@@ -135,10 +160,9 @@ class SIPTransport(Transport):
         except ParseError as pe:
             log.error("Parse errror %s parsing message.", pe)
             return 0
-
         try:
             self.consumeMessage(msg)
-        except Exception as exc:
+        except Exception:
             log.exception(
                 "Consuming %r message raised exception.", msg)
 
@@ -173,10 +197,10 @@ class SIPTransport(Transport):
             log.info("Message for unregistered AOR %r discarded.", toAOR)
             return
 
-        hdlrs[toAOR](msg)
+        hdlr = hdlrs[toAOR]
+        hdlr(msg)
 
     def consumeInDialogMessage(self, msg):
-        toAOR = msg.ToHeader.field.value.uri.aor
         estDs = self.establishedDialogs
 
         if msg.isresponse():
@@ -195,6 +219,8 @@ class SIPTransport(Transport):
             log.debug("Found established dialog for %r", did)
             return estDs[did].receiveMessage(msg)
 
+        # Couldn't find an established dialog, so perhaps this is the
+        # establishing response for a provisional dialog we started before.
         pdid = prot.ProvisionalDialogIDFromEstablishedID(did)
         provDs = self.provisionalDialogs
         log.detail("Is provisional dialog %r in %r?", pdid, provDs)
@@ -237,21 +263,8 @@ class SIPTransport(Transport):
 
         try:
             did = dlg.dialogID
-            eds = tp.establishedDialogs
+            eds = self.establishedDialogs
             if did in eds:
                 del eds[did]
         except AttributeError:
             pass
-
-    #
-    # =================== MAGIC METHODS =======================================
-    #
-    def __new__(cls, *args, **kwargs):
-        if "singleton" not in kwargs:
-            kwargs["singleton"] = "SIPTransport"
-        inst = super(SIPTransport, cls).__new__(cls, *args, **kwargs)
-        return inst
-
-    #
-    # =================== INTERNAL METHODS ====================================
-    #

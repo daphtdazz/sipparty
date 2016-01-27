@@ -17,11 +17,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-import os
 import re
-from six import (add_metaclass, binary_type as bytes, iteritems, PY2)
-import sys
-import unittest
+from six import (binary_type as bytes, iteritems, PY2)
 from ..parse import ParseError
 from ..sdp import sdpsyntax
 from ..sip import (prot, components, Message, Header)
@@ -30,7 +27,7 @@ from ..sip.components import URI
 from ..sip.header import ContactHeader
 from ..sip.prot import (Incomplete)
 from ..sip.request import Request
-from ..util import (Singleton, bglobals_g)
+from ..util import (bglobals_g)
 from .setup import SIPPartyTestCase
 
 log = logging.getLogger(__name__)
@@ -60,7 +57,7 @@ class TestProtocol(SIPPartyTestCase):
 
         self.assertRaises(AttributeError, lambda: Request.notareq)
 
-        inviteRequest = Request.invite(uri_aor=bobAOR)
+        inviteRequest = Request.invite(uri__aor=bobAOR)
         self.assertEqual(
             bytes(inviteRequest), b"INVITE sip:bob@baltimore.com SIP/2.0")
 
@@ -120,7 +117,6 @@ class TestProtocol(SIPPartyTestCase):
         # the same object as the To URI.
         self.assertIsNotNone(invite.startline.uri)
         self.assertTrue(invite.startline.uri is invite.toheader.uri)
-        turi = invite.toheader.uri
         nuri = URI()
         log.info("Set startline URI to something new.")
         invite.startline.uri = nuri
@@ -167,7 +163,8 @@ class TestProtocol(SIPPartyTestCase):
             Body(type=sdpsyntax.SIPBodyType, content=b"This is a message"))
 
         new_inv_bytes = bytes(new_inv)
-        self.assertTrue(re.match(
+        self.assertMatchesPattern(
+            new_inv_bytes,
             b"INVITE sip:bill@biloxi.com SIP/2.0\r\n"
             b"From: <sip:alice@atlanta.com>;%(tag_pattern)s\r\n"
             # Note that the To: URI hasn't changed because when the parse
@@ -185,8 +182,8 @@ class TestProtocol(SIPPartyTestCase):
             b"Content-Type: %(SIPBodyType)s\r\n"
             b"\r\n"
             b"This is a message$"
-            b"" % self.message_patterns,
-            new_inv_bytes), repr(new_inv_bytes))
+            b"" % self.message_patterns
+        )
 
     def testProt(self):
         for name, obj in iteritems(prot.__dict__):

@@ -23,7 +23,6 @@ import logging
 from six import (iteritems, add_metaclass)
 from six.moves import queue
 import time
-import timeit
 import threading
 import weakref
 from ..util import (CCPropsFor, class_or_instance_method, Enum, OnlyWhenLocked)
@@ -240,7 +239,7 @@ class FSM(object):
 
             for timer_name in timer_names:
                 if timer_name not in timrs_dict:
-                    raise ValueError("No such timer %r." % (timer_name))
+                    raise KeyError("No such timer %r." % (timer_name))
                 timers.append(timrs_dict[timer_name])
 
         # No exceptions, so update state.
@@ -423,6 +422,17 @@ class FSM(object):
         weak_self = weakref.ref(self)
 
         def weak_action(*args, **kwargs):
+            """Finds the action to run if self has not been released yet and
+            runs it. Lookup order is:
+
+            If self has a method with the correct name, it is run.
+            If the delegate exists and has a method with the correct name, it
+            is run too.
+            If both were run, the result of the self method is returned.
+            If just one was run, then the result of just that one is returned.
+
+            Otherwise AttributeError is raised.
+            """
             log.debug("Weak action %r.", action)
             self = weak_self()
             if self is None:
@@ -454,7 +464,7 @@ class FSM(object):
                 return drv
 
             # Else the action could not be resolved.
-            raise ValueError(
+            raise AttributeError(
                 "Action %r is not a callable or a method on %r object or "
                 "its delegate %r." %
                 (action, self.__class__.__name__,
@@ -486,7 +496,7 @@ class FSM(object):
                 del self
                 try:
                     wait = weak_method()
-                except Exception as exc:
+                except Exception:
                     log.exception("Exception in %r thread.", cthr.name)
                     break
 
@@ -656,7 +666,8 @@ class AsyncFSM(LockedFSM):
             self.__backgroundTimerPop()
 
         self._fsm_thread = retrythread.RetryThread(
-            action=check_weak_self_timers)
+            action=check_weak_self_timers,
+            name=self._fsm_name + '.retry_thread')
         self._fsm_thread.start()
 
     def start_timer(self, timer):

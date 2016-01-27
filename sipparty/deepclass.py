@@ -18,7 +18,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 from collections import Callable
-import inspect
+from contextlib import contextmanager
 import logging
 from six import (iteritems, iterkeys)
 from .util import (Enum, DerivedProperty)
@@ -51,22 +51,24 @@ def DCProperty(tlp, name, attrDesc):
     return DerivedProperty(internalName, **dpdict)
 
 
-def DeepClass(topLevelPrepend, topLevelAttributeDescs):
+def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
     """Creates a deep class type which
     """
 
     class DeepClass(object):
 
-        for name, attrDescGen in iteritems(topLevelAttributeDescs):
-            attrDesc = DCProperty(topLevelPrepend, name, attrDescGen)
-            if attrDesc is None:
+        for __dc_attr_name, __dc_attr_desc_gen in iteritems(
+                topLevelAttributeDescs):
+            __dc_attr_desc = DCProperty(
+                topLevelPrepend, __dc_attr_name, __dc_attr_desc_gen)
+            if __dc_attr_desc is None:
                 continue
-            locals()[name] = attrDesc
+            locals()[__dc_attr_name] = __dc_attr_desc
 
         # Careful that these don't become class attributes!
-        del attrDescGen
-        del attrDesc
-        del name
+        del __dc_attr_desc_gen
+        del __dc_attr_desc
+        del __dc_attr_name
 
         def __init__(self, **kwargs):
 
@@ -78,6 +80,7 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
             # dictionary.
             topLevelAttrArgs = {}
             sd = self.__dict__
+            sd['_dc_in_repr'] = False
             for tlName in iterkeys(topLevelAttributeDescs):
                 sd[topLevelPrepend + tlName] = None
                 topLevelAttrArgs[tlName] = [None, {}]
@@ -101,7 +104,7 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
                 superKwargs = dict(kwargs)
 
                 for kwName, kwVal in iteritems(kwargs):
-                    topLevelAttrName, _, subAttr = kwName.partition("_")
+                    topLevelAttrName, _, subAttr = kwName.partition("__")
                     if topLevelAttrName not in topLevelAttributeDescs:
                         log.detail("Super kwarg %r", kwName)
                         continue
@@ -152,7 +155,15 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
 
             # Call super init.
             log.detail("super init dict: %r", superKwargs)
-            super(DeepClass, self).__init__(**superKwargs)
+            try:
+                super(DeepClass, self).__init__(**superKwargs)
+            except TypeError as terr:
+                if 'takes no parameters' in str(terr):
+                    raise TypeError(
+                        'Unrecognised key-word arguments passed to %r '
+                        'constructor: %r' % (
+                            self.__class__.__name__, list(superKwargs.keys())))
+                raise
 
             # Do descriptor properties after other properties, as they may
             # depend on them.
@@ -219,10 +230,6 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
             for attr in iterkeys(topLevelAttributeDescs):
                 yield "%s=%r" % (attr, getattr(self, attr))
             return
-            sp = super(DeepClass, self)
-            if hasattr(sp, "_dc_kvReprGen"):
-                for kvp in sp._dc_kvReprGen():
-                    yield kvp
 
         def _dck_genTopLevelValueFromTLDict(self, tlad, tlsvals):
             """:param tlad: The Top-Level-Attribute Dictionary, which describes
@@ -240,8 +247,25 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs):
 
             return gen(**tlsvals)
 
+        @contextmanager
+        def _dc_enter_repr(self):
+            self._dc_in_repr = True
+            yield
+            self._dc_in_repr = False
+
         def __repr__(self):
-            return("%s(%s)" % (
-                self.__class__.__name__, ", ".join(self._dc_kvReprGen())))
+            if self._dc_in_repr:
+                return '<DC %x>' % id(self)
+
+            with self._dc_enter_repr():
+                myattrs = [attr_line for attr_line in self._dc_kvReprGen()]
+                if (recurse_repr and
+                        hasattr(super(DeepClass, self), '_dc_kvReprGen')):
+
+                    myattrs.extend([
+                        sattr
+                        for sattr in super(DeepClass, self)._dc_kvReprGen()])
+
+            return("%s(%s)" % (self.__class__.__name__, ", ".join(myattrs)))
 
     return DeepClass

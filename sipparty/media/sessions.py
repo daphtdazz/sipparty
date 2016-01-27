@@ -17,14 +17,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 from ..sdp.sdpsyntax import (MediaTypes, MediaProtocols)
-from ..media import (Session, MediaSession)
+from ..media.session import (Session, MediaSession)
+from ..util import astr
 
 
 class SingleRTPSession(Session):
     def __init__(self, **kwargs):
         super(SingleRTPSession, self).__init__(**kwargs)
         ms = RTPPCMUMediaSession()
-        ms.address = self.address
         self.addMediaSession(ms)
 
 
@@ -32,5 +32,5 @@ class RTPPCMUMediaSession(MediaSession):
     def __init__(self, **kwargs):
         super(RTPPCMUMediaSession, self).__init__(**kwargs)
         self.mediaType = MediaTypes.audio
-        self.transProto = MediaProtocols.RTP_AVP
+        self.transProto = astr(MediaProtocols.RTP_AVP)
         self.fmts = [0]

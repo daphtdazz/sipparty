@@ -17,12 +17,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-import re
 from ..parse import Parser
 from ..util import (DerivedProperty, TwoCompatibleThree)
 from ..vb import ValueBinder
 from . import defaults
-from . import prot
 from .prot import (bdict, ProtocolError, ResponseCodeMessages)
 
 log = logging.getLogger(__name__)

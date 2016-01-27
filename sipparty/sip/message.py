@@ -21,6 +21,7 @@ from six.moves import reduce
 import re
 import logging
 from numbers import (Integral)
+from time import time
 from .. import (util,)
 from ..deepclass import (DeepClass, dck)
 from ..parse import (ParseError,)
@@ -31,7 +32,7 @@ from ..vb import (KeyTransformer, ValueBinder)
 from .body import Body
 from .header import Header
 from .param import Param
-from .prot import (bdict, Incomplete)
+from .prot import bdict
 from .request import Request
 from .response import Response
 
@@ -128,7 +129,6 @@ class Message(
         line_iter = iter(lines)
         startline = next(line_iter)
         used_bytes = len(startline)
-
         if cls.ResponseRE.match(startline):
             log.debug("Attempt Message Parse of %r as a response.", startline)
             reqline = Response.Parse(startline)
@@ -164,10 +164,13 @@ class Message(
         for hname, hcontents, bytes_used in HNameContentsGen(line_iter):
             log.debug("Add header %r", hname)
             log.detail("Contents: %r", hcontents)
-            newh = getattr(Header, astr(hname)).Parse(hcontents)
+            hclass = getattr(Header, astr(hname))
+            newh = hclass.Parse(hcontents)
             log.detail("Header parsed as: %r", newh)
+
             message.addHeader(newh)
             used_bytes += bytes_used
+            log.info(time())
 
         # We haven't yet counted the eol eol at the end of the headers.
         used_bytes += 4
@@ -375,7 +378,7 @@ class Message(
         reqmo = self.reqattrre.match(attr)
         if reqmo is not None:
             sl = self.startline
-            if sl.type == mo.group(1):
+            if sl.type == reqmo.group(1):
                 return sl
 
         hmo = self.headerattrre.match(attr)

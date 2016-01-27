@@ -17,19 +17,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-import unittest
 from six import (iteritems, PY2)
 import sys
+import unittest
+from ..util import TestCaseREMixin
 if PY2:
-    from mock import (MagicMock, patch)
+    from mock import (MagicMock, patch)  # noqa
 else:
-    from unittest.mock import (MagicMock, patch)
+    from unittest.mock import (MagicMock, patch)  # noqa
 
 log = logging.getLogger(__name__)
 sipparty = sys.modules['sipparty']
 
 
-class SIPPartyTestCase(unittest.TestCase):
+class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
         super(SIPPartyTestCase, self).__init__(*args, **kwargs)

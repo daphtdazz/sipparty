@@ -16,11 +16,27 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+from six import itervalues
 from .sip.dialogs import SimpleCall
-from .media import SingleRTPSession
+from .media.sessions import SingleRTPSession
 from .party import Party
+
+
+class NoMediaSimpleCallsParty(Party):
+    """This Party type has no media session, so is basically useless, except
+    for testing that the signaling works.
+    """
+    MediaSession = None
+    InviteDialog = SimpleCall
 
 
 class SingleRTPSessionSimplenParty(Party):
     InviteDialog = SimpleCall
     MediaSession = SingleRTPSession
+
+AllPartyTypes = [
+    _lval for _lval in itervalues(dict(locals()))
+    if isinstance(_lval, type)
+    if issubclass(_lval, Party)
+    if _lval is not Party
+]

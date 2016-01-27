@@ -256,7 +256,6 @@ class Parser(object):
             mo = cls.SimpleParse(string)
 
             if Parser.Constructor in pi:
-
                 constructor_tuple = pi[Parser.Constructor]
                 log.debug("  constructor: %r.", constructor_tuple)
 

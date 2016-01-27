@@ -17,20 +17,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-import socket
 from six import (binary_type as bytes, itervalues)
 from .deepclass import (DeepClass, dck)
-from .media import (Session, MediaSession)
 from .parse import (ParsedPropertyOfClass)
-from .sdp import sdpsyntax
 from .sip import (
-    SIPTransport, Incomplete, DNameURI, AOR, URI, Host, Request, Message,
-    Body, defaults)
-from .transport import (SockTypeName, IPaddress_re)
-from .util import (abytes, DerivedProperty, WeakMethod)
+    SIPTransport, DNameURI, URI, Host, Request, Message, defaults)
+from .transport import (IPaddress_re, IsSpecialName)
+from .util import (abytes, WeakMethod)
 from .vb import ValueBinder
-
-__all__ = ('Party', 'PartySubclass')
 
 log = logging.getLogger(__name__)
 
@@ -67,7 +61,7 @@ class Party(
                 dck.descriptor: ParsedPropertyOfClass(URI),
                 dck.gen: URI},
             "mediaAddress": {
-                dck.check: lambda x: IPaddress_re.match(x),
+                dck.check: lambda x: IsSpecialName(x) or IPaddress_re.match(x),
                 dck.get: lambda self, underlying: (
                     underlying if underlying is not None else
                     self.contactURI.address)
@@ -83,6 +77,7 @@ class Party(
     #
     InviteDialog = None
     MediaSession = None
+    DefaultMediaAddress = None
 
     vb_dependencies = (
         ("dnameURI", ("uri", "aor")),)
@@ -111,7 +106,7 @@ class Party(
                 if invD.state == invD.States.InDialog]
         except AttributeError as exc:
             log.debug(exc, exc_info=True)
-            raise exc
+            raise
         return icds
 
     def __init__(self, dnameURI=None, **kwargs):
@@ -137,42 +132,29 @@ class Party(
             tp = SIPTransport()
             self.transport = tp
 
-        if self.contactURI.address is None:
-            self.contactURI.address = abytes(socket.gethostname())
+        if self.mediaAddress is None:
+            self.mediaAddress = self.DefaultMediaAddress
 
         return
 
-    def listen(self, address_name=None):
+    def listen(self, name=None, port=None, sock_type=None, media_name=None):
 
-        if address_name is not None:
-            self.contactURI.address = abytes(address_name)
-
-        uriHost = self.contactURI.aor.host
-
-        contactAddress = uriHost.address
-        contactPort = uriHost.port
-
-        if not contactAddress:
-            raise ValueError(
-                "%r instance has no contact address so cannot listen." % (
-                    self.__class__.__name__,))
-
-        uri = self.uri
-
-        log.debug("Listen on %r:%r", contactAddress, contactPort)
-
+        cURI_host = self.contactURI.host
         tp = self.transport
-        lAddr = tp.listen(lHostName=contactAddress, port=contactPort)
-        assert lAddr[1] != 0
-        log.info("Party listening on %r", lAddr)
-        self._pt_listenAddress = lAddr
-        uriHost.address = abytes(lAddr[0])
-        uriHost.port = lAddr[1]
+        l_desc = tp.listen_for_me(
+            name=name, port=port, sock_type=sock_type)
+
+        cURI_host.address = abytes(l_desc.name)
+        cURI_host.port = l_desc.port
 
         tp.addDialogHandlerForAOR(
             self.uri.aor, WeakMethod(self, "newDialogHandler"))
 
-    def invite(self, target, proxy=None):
+    def invite(self, target, proxy=None, media_session=None):
+
+        if media_session is not None:
+            raise NotImplementedError(
+                "Passing a 'media_session' to 'invite' is not yet supported.")
 
         log.debug("Invite %r proxy %r", target, proxy)
         if not hasattr(self, "uri"):
@@ -184,12 +166,12 @@ class Party(
         if proxy is not None:
             assert 0
         else:
-            remoteAddress = self._pt_resolveProxyAddress(target)
+            remote_name, remote_port = self._pt_resolveProxyAddress(target)
 
         invD = self.newInviteDialog(toURI)
 
-        log.debug("Initialize dialog to %r", proxy)
-        invD.initiate(remoteAddress=remoteAddress)
+        log.debug("Initialize dialog to %r", ((remote_name, remote_port,)))
+        invD.initiate(remote_name=remote_name, remote_port=remote_port)
         return invD
 
     def newInviteDialog(self, toURI):
@@ -203,7 +185,8 @@ class Party(
             fromURI=self.uri, toURI=toURI, contactURI=self.contactURI,
             transport=self.transport)
         invD.localSession = self.newSession()
-        invD.localSession.listen()
+        if invD.localSession is not None:
+            invD.localSession.listen()
 
         ids = self._pt_inviteDialogs
         if toURI not in ids:
@@ -223,8 +206,7 @@ class Party(
                 self.__class__.__name__)
             return None
 
-        ma = self.mediaAddress
-        ms = self.__class__.MediaSession(username=b'-', address=ma)
+        ms = self.__class__.MediaSession(username=b'-')
         return ms
 
     #

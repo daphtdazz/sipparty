@@ -19,6 +19,10 @@ limitations under the License.
 from ..transport import SOCK_TYPE_IP_NAMES
 from .prot import protocols
 
+# Enable useports to ensure that the otherwise implicit 5060 port is always
+# explicitly sent in messages.
+#
+# useports = False
 port = 5060
 sipprotocol = getattr(protocols, 'SIP/2.0')
 

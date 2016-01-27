@@ -17,7 +17,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-from six import (binary_type as bytes, itervalues)
 from ..transport import Transport
 from ..util import WeakMethod
 
@@ -25,11 +24,6 @@ log = logging.getLogger(__name__)
 
 
 class MediaTransport(Transport):
-
-    def __new__(cls, *args, **kwargs):
-        if "singleton" not in kwargs:
-            kwargs["singleton"] = "Media"
-        return super(MediaTransport, cls).__new__(cls, *args, **kwargs)
 
     def __init__(self):
         super(MediaTransport, self).__init__()

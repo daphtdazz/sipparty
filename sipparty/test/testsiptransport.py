@@ -17,16 +17,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-import os
-import re
-import sys
-import unittest
+from socket import (AF_INET, SOCK_DGRAM)
 from .. import (sip, transport)
-from ..fsm import (retrythread, fsm)
-from ..sip import (siptransport, field)
-from ..sip.components import AOR
 from ..sip.siptransport import SIPTransport
-from ..util import (abytes, WaitFor)
+from ..util import WaitFor
 from .setup import (MagicMock, patch, SIPPartyTestCase)
 
 log = logging.getLogger(__name__)
@@ -35,9 +29,6 @@ log = logging.getLogger(__name__)
 class TestSIPTransport(SIPPartyTestCase):
 
     def setUp(self):
-        # self.pushLogLevel('siptransport', logging.DETAIL)
-        # self.pushLogLevel('transport', logging.DETAIL)
-
         self.def_hname_mock = MagicMock()
         self.def_hname_mock.return_value = 'localhost'
         self.hostname_patch = patch.object(
@@ -49,31 +40,37 @@ class TestSIPTransport(SIPPartyTestCase):
         self.hostname_patch.stop()
         super(TestSIPTransport, self).tearDown()
 
-    def testGeneral(self):
+    def test_general(self):
 
-        global rcvd_message
-        rcvd_message = None
+        sock_family = AF_INET
+        sock_type = SOCK_DGRAM
+
+        rcvd_messages = []
 
         def newDialogHandler(message):
-            global rcvd_message
-            rcvd_message = message
+            rcvd_messages.append(message)
             log.debug("NewDialogHandler consumed the message.")
 
         log.info('Make SIPTransport object')
         tp = SIPTransport()
-        laddr = tp.listen(lHostName="127.0.0.1")
+        tp1 = SIPTransport()
+        self.assertIs(tp, tp1)
+
+        l_desc = tp.listen_for_me(sock_type=sock_type, sock_family=sock_family)
 
         log.info('Make INVITE message')
         msg = sip.Message.invite()
         msg.ToHeader.aor = b"alice@atlanta.com"
         msg.FromHeader.aor = b"bob@biloxi.com"
-        msg.ContactHeader.field.value.uri.aor.host.address = abytes(laddr[0])
-        msg.ContactHeader.field.value.uri.aor.host.port = laddr[1]
+        msg.ContactHeader.field.value.uri.aor.host.address = b'127.0.0.1'
+        msg.ContactHeader.field.value.uri.aor.host.port = l_desc.port
 
         log.info('Add Dialog Handler for our AOR')
         tp.addDialogHandlerForAOR(msg.ToHeader.aor, newDialogHandler)
         log.info('Send the message')
-        tp.sendMessage(msg, laddr)
+        tp.sendMessage(msg, '127.0.0.1', l_desc.port)
 
         log.info('Receive the message.')
-        WaitFor(lambda: rcvd_message is not None, 1)
+        WaitFor(lambda: len(rcvd_messages) > 0, 1)
+        rmsg = rcvd_messages.pop()
+        self.assertEqual(msg.type, rmsg.type, rmsg)

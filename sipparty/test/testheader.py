@@ -20,6 +20,7 @@ import logging
 from six import (binary_type as bytes)
 from ..sip import (prot, Header)
 from ..sip.components import (Host)
+from ..sip.header import ContactHeader
 from ..vb import ValueBinder
 from .setup import SIPPartyTestCase
 
@@ -51,7 +52,8 @@ class TestHeaders(SIPPartyTestCase):
             bytes(ch),
             b"Contact: <sip:bill@billland.com>")
 
-        nh = Header.Parse(bytes(ch))
+        nh = ContactHeader.Parse(bytes(ch))
+        self.assertFalse(nh.isStar)
         self.assertEqual(
             bytes(ch),
             b"Contact: <sip:bill@billland.com>")

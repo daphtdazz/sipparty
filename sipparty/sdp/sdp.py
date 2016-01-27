@@ -16,18 +16,17 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import six
-import logging
-import re
 import datetime
+import logging
 from numbers import Integral
-from .. import (util, parse)
+import re
+from .. import (parse)
+from ..util import (abytes, TwoCompatibleThree)
 from ..vb import (KeyTransformer, KeyIgnoredExceptions, ValueBinder)
 from ..deepclass import (DeepClass, dck)
-from . import sdpsyntax
 from .sdpsyntax import (
-    NetTypes, AddrTypes, LineTypes, MediaTypes, username_re, fmt_space_re,
-    AddressToSDPAddrType, bdict)
+    NetTypes, AddrTypes, LineTypes, MediaTypes, fmt_space_re,
+    AddressToSDPAddrType, bdict, sdp_username_is_ok)
 
 log = logging.getLogger(__name__)
 AddrAddrTypeBinding = (
@@ -44,7 +43,7 @@ class SDPIncomplete(SDPException):
     "Raised when trying to format SDP that is incomplete."
 
 
-@util.TwoCompatibleThree
+@TwoCompatibleThree
 class SDPSection(parse.Parser, ValueBinder):
 
     @staticmethod
@@ -149,8 +148,8 @@ class MediaDescription(
                 dck.check: lambda x: (
                     isinstance(x, Integral) and 0 < x <= 0xffff)},
             "transProto": {},
-            "fmts": {
-                dck.gen: list
+            "formats": {
+                dck.gen: dict
             },
             "connectionDescription": {
                 dck.check: lambda x: isinstance(x, ConnectionDescription),
@@ -178,7 +177,7 @@ class MediaDescription(
              ("transProto",),
              # The standard values for formats are defined in
              # https://tools.ietf.org/html/rfc3551#section-6
-             ("fmts", lambda fmtstr: [
+             ("formats", lambda fmtstr: [
                 int(fmt) for fmt in fmt_space_re.split(fmtstr)]),
              ("connectionDescription", ConnectionDescription)],
         parse.Parser.Repeats: True
@@ -194,19 +193,19 @@ class MediaDescription(
     #
     @property
     def isComplete(self):
-        for attr in ("mediaType", "port", "transProto", "fmts"):
+        for attr in ("mediaType", "port", "transProto", "formats"):
             if getattr(self, attr) is None:
                 return False
         return True
 
     def mediaLine(self):
-        fmts = b' '.join([b'%d' % fmt for fmt in self.fmts])
-        if len(fmts) == 0:
+        formats = b' '.join([b'%d' % fmt for fmt in self.formats])
+        if len(formats) == 0:
             raise SDPIncomplete(
                 "Media description has no format numbers.")
         return self.Line(
             LineTypes.media, b"%s %d %s %s" % (
-                self.mediaType, self.port, self.transProto, fmts))
+                self.mediaType, self.port, self.transProto, formats))
 
     def lineGen(self):
         """m=<media> <port> <transProto> <fmt> ..."""
@@ -223,7 +222,7 @@ class MediaDescription(
 class SessionDescription(
         DeepClass("_sdsc_", {
             "username": {
-                dck.check: lambda x: username_re.match(x)},
+                dck.check: sdp_username_is_ok},
             "sessionID": {
                 dck.check: lambda x: isinstance(x, Integral),
                 dck.gen: "ID"},
@@ -234,8 +233,11 @@ class SessionDescription(
                 dck.check: lambda x: x in NetTypes,
                 dck.gen: lambda: NetTypes.IN},
             "addressType": {
-                dck.check: lambda x: x is None or x in AddrTypes},
-            "address": {dck.check: lambda x: isinstance(x, bytes)},
+                dck.check: lambda x: x is None or x in AddrTypes,
+                dck.get: 'get_address_type'},
+            "address": {
+                dck.check: lambda x: isinstance(x, bytes),
+                dck.get: 'get_address'},
             "sessionName": {
                 dck.check: lambda x: isinstance(x, bytes),
                 dck.gen: lambda: b" "},
@@ -322,7 +324,15 @@ class SessionDescription(
     #
     @classmethod
     def EmptyLine(cls):
-        return b""
+        return b''
+
+    def get_address_type(self, underlying):
+        if underlying is None:
+            try:
+                return AddressToSDPAddrType(self.address)
+            except ValueError:
+                return None
+        return underlying
 
     def addMediaDescription(self, md=None, **kwargs):
 
@@ -341,12 +351,12 @@ class SessionDescription(
         un = self.username
         if un is None:
             raise SDPIncomplete("No username specified.")
-        at = self.addressType
-        if at is None:
-            raise SDPIncomplete("No address type specified.")
         ad = self.address
         if ad is None:
             raise SDPIncomplete("No address specified.")
+        at = self.addressType
+        if at is None:
+            raise SDPIncomplete("No address type specified.")
         return self.Line(
             LineTypes.origin,
             b"%s %d %d %s %s %s" % (
@@ -354,6 +364,14 @@ class SessionDescription(
 
     def sessionNameLine(self):
         return self.Line(LineTypes.sessionname, self.sessionName)
+
+    def get_address(self, underlying):
+        if underlying is None:
+            if self.mediaDescriptions:
+                md = self.mediaDescriptions[0]
+                return abytes(md.address)
+
+        return underlying
 
     def lineGen(self):
         """v=0

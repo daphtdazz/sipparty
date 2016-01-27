@@ -17,13 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-import os
-import re
-import six
-import sys
-import unittest
-from .. import vb
-from ..util import DerivedProperty
+from ..vb import (BindingAlreadyExists, NoSuchBinding, ValueBinder)
 from .setup import SIPPartyTestCase
 
 log = logging.getLogger(__name__)
@@ -31,12 +25,8 @@ log = logging.getLogger(__name__)
 
 class TestVB(SIPPartyTestCase):
 
-    def setUp(self):
-        super(TestVB, self).setUp()
-        # self.pushLogLevel("vb", logging.DETAIL)
-
     def testBindings(self):
-        VB = vb.ValueBinder
+        VB = ValueBinder
 
         a, b, c, d, D = [VB() for ii in range(5)]
 
@@ -76,8 +66,8 @@ class TestVB(SIPPartyTestCase):
         b.x = 7
         self.assertEqual(a.b.x, 7)
         self.assertEqual(c.x, 7)
-        self.assertRaises(vb.NoSuchBinding, lambda: a.unbind("b", "b.x"))
-        self.assertRaises(vb.BindingAlreadyExists,
+        self.assertRaises(NoSuchBinding, lambda: a.unbind("b", "b.x"))
+        self.assertRaises(BindingAlreadyExists,
                           lambda: a.bind("b.x", "b.c.x"))
         a.unbind("b.x", "b.c.x")
 
@@ -107,7 +97,7 @@ class TestVB(SIPPartyTestCase):
 
     def testDependentBindings(self):
 
-        class A(vb.ValueBinder):
+        class A(ValueBinder):
             vb_dependencies = [
                 ("b", ["c"])
             ]
@@ -118,7 +108,7 @@ class TestVB(SIPPartyTestCase):
                 return super(A, self).__setattr__(attr, val)
 
         a = A()
-        b = vb.ValueBinder()
+        b = ValueBinder()
         a.b = b
         b.c = 2
         self.assertEqual(a.c, 2)
@@ -127,7 +117,7 @@ class TestVB(SIPPartyTestCase):
         self.assertEqual(a.d, 2)
 
         # But now we change b, and d should be changed.
-        bb = vb.ValueBinder()
+        bb = ValueBinder()
         bb.c = 5
         a.b = bb
         self.assertEqual(a.d, 5)
@@ -166,7 +156,7 @@ class TestVB(SIPPartyTestCase):
             self.assertEqual(len(ivb._vb_forwardbindings), 0)
 
         a = A()
-        a.b = vb.ValueBinder()
+        a.b = ValueBinder()
         a.bind("d", "c")
         a.d = 1
         self.assertEqual(a.b.c, 1)
@@ -186,7 +176,7 @@ class TestVB(SIPPartyTestCase):
     def testOrphans(self):
         """Test that when a parent is deleted, the children can be rebound.
         """
-        a, b, c = [vb.ValueBinder() for ii in range(3)]
+        a, b, c = [ValueBinder() for ii in range(3)]
 
         a.bind("b.val", "val")
         c.bind("b.val", "val")
@@ -207,7 +197,7 @@ class TestVB(SIPPartyTestCase):
 
     def testMultipleBindings(self):
         """Test that we can bind something to more than one thing."""
-        a = vb.ValueBinder()
+        a = ValueBinder()
 
         a.bind("val", "val1")
         a.bind("val", "val2")
@@ -218,7 +208,7 @@ class TestVB(SIPPartyTestCase):
 
     def testRefreshBindings(self):
 
-        a, ab = [vb.ValueBinder() for _ in range(2)]
+        a, ab = [ValueBinder() for _ in range(2)]
         a.bind("a", "c", lambda x: x * 2 if x is not None else None)
         a.bind("b.d", "d")
         a.b = ab
@@ -238,7 +228,7 @@ class TestVB(SIPPartyTestCase):
         self.assertEqual(a.d, 5)
 
     def testBoundThroughBindings(self):
-        a, aa, ab, aaa, aba = [vb.ValueBinder() for _ in range(5)]
+        a, aa, ab, aaa, aba = [ValueBinder() for _ in range(5)]
 
         a.bind("a.a.a", "c")
         a.a = aa
@@ -254,7 +244,7 @@ class TestVB(SIPPartyTestCase):
 
     def testValuesWithDifferentParentsAreNotUnlinked(self):
 
-        a, aa, ab, aaa, aba = [vb.ValueBinder() for _ in range(5)]
+        a, aa, ab, aaa, aba = [ValueBinder() for _ in range(5)]
 
         a.bind("a", "b.a")
         a.a = aa
@@ -268,7 +258,7 @@ class TestVB(SIPPartyTestCase):
         self.assertEqual(len(aa._vb_forwardbindings), 1)
 
     def testExceptionsInBindings(self):
-        a, aa, ab, aaa, aba = [vb.ValueBinder() for _ in range(5)]
+        a, aa, ab, aaa, aba = [ValueBinder() for _ in range(5)]
 
         a.bind(
             "b", "c", transformer=lambda x: int(x),
@@ -278,3 +268,33 @@ class TestVB(SIPPartyTestCase):
         a.b = "not"
         self.assertEqual(a.b, "not")
         self.assertEqual(a.c, 2)
+
+    def test_binding_to_non_vb(self):
+        NonVBType = type('NonVB', (), {})
+
+        a = ValueBinder()
+        b = ValueBinder()
+        a.b = b
+        log.info(
+            'Check binding through a non-VB type raises and doesn\'t update '
+            'bindings.')
+        a.b.c = NonVBType()
+        self.assertRaises(TypeError, a.bind, 'b.c.d', 'b1')
+        self.assertIsNone(a.b.vb_parent)
+
+        log.info('Check we can bind to it after removing the offending entry.')
+        a.b.c = None
+        a.bind('b.c.d', 'b1')
+
+    def test_inserting_non_vb(self):
+        self.skipTest(
+            'Raising TypeError on setting bad type instance in the binding '
+            'path not yet supported.')
+        NonVBType = type('NonVB', (), {})
+
+        a = ValueBinder()
+        b = ValueBinder()
+        a.b = b
+        log.info('Check inserting a non-VB object raises.')
+        a.bind('b.c.d', 'b1')
+        self.assertRaises(TypeError, setattr, a, 'b', NonVBType())

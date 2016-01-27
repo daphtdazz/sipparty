@@ -21,11 +21,10 @@ from numbers import Integral
 from six import binary_type as bytes
 import socket
 from . import defaults
-from .prot import Incomplete
 from .prot import (bdict as abnf_name_bdict, Incomplete)
 from ..deepclass import (DeepClass, dck)
 from ..parse import (Parser, ParsedProperty, ParsedPropertyOfClass)
-from ..util import TwoCompatibleThree, TupleRepresentable
+from ..util import (astr, TwoCompatibleThree, TupleRepresentable)
 from ..vb import ValueBinder
 
 log = logging.getLogger(__name__)
@@ -37,7 +36,9 @@ class Host(
             "address": {dck.check: lambda x: isinstance(x, bytes)},
             "port": {
                 dck.check: (
-                    lambda x: isinstance(x, Integral) and 0 <= x <= 0xffff)}}),
+                    lambda x: isinstance(x, Integral) and 0 <= x <= 0xffff),
+            }
+        }),
         Parser, TupleRepresentable, ValueBinder):
 
     parseinfo = {
@@ -205,12 +206,17 @@ class URI(
     vb_dependencies = [
         ["aor", ["address", "port", "username", "host"]]]
 
+    significant_attributes = ('scheme', 'aor', 'parameters', 'headers')
+
     def __init__(self, **kwargs):
         super(URI, self).__init__(**kwargs)
 
         # If it wasn't a SIP/SIPS URL, this contains the body of the URL (the
         # bit after the scheme).
 
+    #
+    # =================== MAGIC METHODS =======================================
+    #
     def __bytes__(self):
         if not self.scheme:
             raise Incomplete("URI %r does not have a scheme." % self)
@@ -226,6 +232,18 @@ class URI(
             raise Incomplete("URI %r has an empty aor." % self)
         return b'%s:%s%s%s' % (
             self.scheme, self.aor, self.parameters, self.headers)
+
+    def __eq__(self, other):
+
+        return all([
+            hasattr(other, component) and
+            getattr(self, component) == getattr(other, component)
+            for component in self.significant_attributes
+        ])
+
+    def __hash__(self):
+        return hash(
+            tuple(getattr(self, attr) for attr in self.significant_attributes))
 
 
 @TwoCompatibleThree

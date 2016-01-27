@@ -3,13 +3,12 @@
 ## List. ##
 
 1. Example scripts.
-2. Resource Warnings under python3.
 4. REGISTER dialogues.
 6. TCP support. 
 8. UDP transport retrying. 
 9. Smarter ACK than simply "ACK all 200s" in dialog.py
-9. Continuous Integration.
-10. Pumba integration.
+11. Refactor singleton out of util.
+13. Make util a package with sub-modules.
 10. Get rid of "delegateattributes", use "vb_dependencies". -- ?? semi done?
 12. Move sipheader out of util and probably into prot.
 15. Document and fixing attribute naming convention in vb.py.
@@ -26,6 +25,7 @@
 27. Disable checking on deepclass attributes.
 28. Allow the DeepClass attribute dictionary to be a list / tuple of (key, value) tuples to enforce ordering.
 29. OnlyWhenLocked decorator should allow the lock attribute name to be specified in its constructor.
+30. SIPTransport could allow force override to get a new listen socket.
 
 ## Done list. ##
 
@@ -48,6 +48,8 @@
 9. Fix slow UT termination time (weak reference needed somewhere?) -- done 05/09/2015
 10. Proper python3 support.
     a. 'bytes' does not support % and .format(), so need to use BytesGenner and str instead where appropriate.
+11. Resource Warnings under python3.
+12. Continuous Integration - using travis 31/10/2015.
 
 ## Changelog ##
 

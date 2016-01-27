@@ -1,7 +1,5 @@
 from __future__ import print_function
 from cProfile import run
-from sipparty.sip import Message
-from sipparty import deepclass
 from sipparty.vb import ValueBinder
 
 
