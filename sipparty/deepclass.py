@@ -19,7 +19,6 @@ limitations under the License.
 """
 from collections import Callable
 from contextlib import contextmanager
-import inspect
 import logging
 from six import (iteritems, iterkeys)
 from .util import (Enum, DerivedProperty)

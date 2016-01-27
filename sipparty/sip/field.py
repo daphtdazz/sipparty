@@ -17,9 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-from numbers import Integral
-import random
-from six import (binary_type as bytes, itervalues, add_metaclass)
+from six import (binary_type as bytes, add_metaclass)
 from ..deepclass import (DeepClass, dck)
 from ..parse import (Parser, ParsedPropertyOfClass)
 from ..util import (BytesGenner, CCPropsFor, TwoCompatibleThree)
@@ -29,7 +27,6 @@ from .components import (DNameURI, Host)
 from . import defaults
 from .param import (Parameters, Param)
 from .prot import (bdict, Incomplete, protocols)
-from .request import Request
 
 log = logging.getLogger(__name__)
 

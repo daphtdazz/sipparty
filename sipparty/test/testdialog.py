@@ -16,18 +16,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import sys
-import os
-import re
-import timeit
-import time
 import logging
-import weakref
-import unittest
-import socket
 from .setup import SIPPartyTestCase
-from .. import (fsm, sip, util)
-from ..sip import (Dialog)
 from ..sip.components import (AOR, Host, URI)
 from ..sip.dialogs import SimpleCall
 

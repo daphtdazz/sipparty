@@ -15,7 +15,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-from six import (binary_type as bytes, iteritems)
+from six import iteritems
 from weakref import (ref as wref)
 
 log = logging.getLogger(__name__)
@@ -454,14 +454,14 @@ class ValueBinder(object):
                 raise AttributeError(
                     "Attribute %r of %r instance cannot be deleted as the "
                     "delegate attribute %r is None." % (
-                        attr, cn, deleattr))
+                        attr, self.__class__.__name__, deleattr))
             return delattr(dele, attr)
 
         existing_val = getattr(self, attr, sentinel)
         if existing_val is sentinel:
             raise AttributeError(
                     "Attribute %r of %r instance cannot be deleted as it does "
-                    "not exist." % (attr, cn))
+                    "not exist." % (attr, self.__class__.__name__))
 
         self.vb_updateAttributeBindings(attr, existing_val, None)
 
@@ -696,14 +696,8 @@ class ValueBinder(object):
             # >> self.a.bindforward("b", ".c")
             log.debug("indirect %s binding %r -> %r", direction, frompath,
                       resolvedtopath)
-            if len(fromattr) == 0:
-                # Parent in the from path.
-                log.debug("  parent in frompath")
-                fromattr_resolved = "vb_parent"
-                subobj = parent
-            else:
-                fromattr_resolved = fromattr
-                subobj = getattr(self, fromattr_resolved, None)
+            fromattr_resolved = fromattr
+            subobj = getattr(self, fromattr_resolved, None)
 
             if isinstance(subobj, ValueBinder):
                 log.debug("  child is VB compatible.")

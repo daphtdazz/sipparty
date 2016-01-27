@@ -21,7 +21,6 @@ limitations under the License.
 """
 import re
 from socket import (AF_INET, AF_INET6)
-from .. import util
 from ..transport import (IPv4address_only_re, IPv6address_only_re)
 from ..util import (abytes, AsciiBytesEnum, bglobals_g)
 

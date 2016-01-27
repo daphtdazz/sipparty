@@ -209,50 +209,51 @@ class Enum(set):
         return name
 
 
-class AsciiBytesEnum(Enum):
+if not PY2:
+    class AsciiBytesEnum(Enum):
 
-    def __init__(self, vals=None, normalize=None, aliases=None):
-        def bad_val_type(val):
-            raise TypeError(
-                '%r instance %r cannot be used in %r instance as it is not a '
-                'bytes-like type.' % (
-                    val.__class__.__name__, val, self.__class__.__name__))
+        def __init__(self, vals=None, normalize=None, aliases=None):
+            def bad_val_type(val):
+                raise TypeError(
+                    '%r instance %r cannot be used in %r instance as it is '
+                    'not a bytes-like type.' % (
+                        val.__class__.__name__, val, self.__class__.__name__))
 
-        if vals:
-            for vv in [
-                    _vv
-                    for _vl in (vals, aliases) if _vl is not None
-                    for _vv in _vl]:
-                if not isinstance(vv, bytes):
-                    bad_val_type(vv)
-        super(AsciiBytesEnum, self).__init__(
-            vals=vals, normalize=normalize, aliases=aliases)
+            if vals:
+                for vv in [
+                        _vv
+                        for _vl in (vals, aliases) if _vl is not None
+                        for _vv in _vl]:
+                    if not isinstance(vv, bytes):
+                        bad_val_type(vv)
+            super(AsciiBytesEnum, self).__init__(
+                vals=vals, normalize=normalize, aliases=aliases)
 
-    def add(self, item):
-        if not isinstance(item, bytes):
-            raise TypeError(
-                'New %r instance is inconsistent with enum %r containing '
-                'only instances of %r' % (
-                    item.__class__.__name__, self, self._en_type.__name__))
-        super(AsciiBytesEnum, self).add(item)
+        def add(self, item):
+            if not isinstance(item, bytes):
+                raise TypeError(
+                    'New %r instance is inconsistent with enum %r containing '
+                    'only instances of %r' % (
+                        item.__class__.__name__, self, self._en_type.__name__))
+            super(AsciiBytesEnum, self).add(item)
 
-    def REPattern(self):
-        return b"(?:%s)" % b"|".join(self)
+        def REPattern(self):
+            return b"(?:%s)" % b"|".join(self)
 
-    def enum(self):
-        return Enum(
-            [astr(val) for val in self._en_list],
-            aliases=self._en_aliases, normalize=self._en_normalize)
+        def enum(self):
+            return Enum(
+                [astr(val) for val in self._en_list],
+                aliases=self._en_aliases, normalize=self._en_normalize)
 
-    def _en_fixAttr(self, name):
-        if isinstance(name, str):
-            log.detail('Convert %r to ascii bytes', name)
-            name = abytes(name)
+        def _en_fixAttr(self, name):
+            if isinstance(name, str):
+                log.detail('Convert %r to ascii bytes', name)
+                name = abytes(name)
 
-        fixedStrAttr = super(AsciiBytesEnum, self)._en_fixAttr(name)
-        return fixedStrAttr
+            fixedStrAttr = super(AsciiBytesEnum, self)._en_fixAttr(name)
+            return fixedStrAttr
 
-if PY2:
+else:
     AsciiBytesEnum = Enum
 
 
@@ -268,7 +269,7 @@ class ClassType(object):
         class_short_name = class_name.replace(capp, "")
         try:
             return getattr(owner.types, class_short_name)
-        except AttributeError as exc:
+        except AttributeError:
             raise AttributeError(
                 "No such known header class type %r" % (class_short_name,))
 
@@ -336,10 +337,6 @@ class FirstListItemProxy(object):
         attr_err()
 
     def __set__(self, instance, val):
-        if instance is None:
-            raise AttributeError(
-                "Class %r does not support FirstListItemProxy descriptors. "
-                "List attribute name: %r." % (owner, self._flip_attrName))
 
         # Use a slice which works for the first addition as well.
         list_attr = getattr(instance, self._flip_attrName)
@@ -546,6 +543,7 @@ def OnlyWhenLocked(method):
     if so locks it before calling method, releasing it after."""
 
     log = logging.getLogger('OnlyWhenLocked')
+
     def maybeGetLock(self, *args, **kwargs):
 
         obj_name = (
@@ -685,7 +683,7 @@ class DerivedProperty(object):
                 raise ValueError(
                     "Setter attribute %r of %r object is not callable." % (
                         st, obj.__class__.__name__))
-            val = meth(value)
+            meth(value)
         else:
             st(obj, value)
 
@@ -873,13 +871,10 @@ class Singleton(object):
     """Classes inheriting from this will only have one instance."""
 
     UseStrongReferences = False
-
     _St_SharedInstances = None
-    _St_SingletonNameKey = 'singleton'
 
     def __new__(cls, singleton=None, *args, **kwargs):
         log.detail("Singleton.__new__(%r, %r)", args, kwargs)
-        skey = cls._St_SingletonNameKey
         if singleton is not None:
             name = singleton
         else:
@@ -1031,7 +1026,6 @@ else:
             raise type(exc)(
                 'Bad type %r for argument %r to abytes (not str).' % (
                     type(x).__name__, x))
-
 
     def astr(x):
         if x is None:

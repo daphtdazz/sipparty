@@ -16,15 +16,13 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from abc import (ABCMeta, abstractmethod, abstractproperty)
+from abc import (abstractmethod, abstractproperty)
 from collections import Mapping
 import logging
 from six import add_metaclass
 from weakref import ref
 from .util import Singleton
-from ._adapter import (
-    AdapterError, AdapterAlreadyExistsError, NoSuchAdapterError,
-    _AdapterManager, _AdapterMeta, _DefaultFormat)
+from ._adapter import (_AdapterManager, _AdapterMeta, _DefaultFormat)
 
 log = logging.getLogger(__name__)
 
@@ -159,8 +157,8 @@ class ProxyAdapter(SelfRegisteringAdapter):
             exposed_attr = adaptation[0]
             if not isinstance(exposed_attr, str):
                 raise TypeError(
-                    'Bad type for an attribute declared for adapter adapting %s '
-                    'to %s: %r' % (
+                    'Bad type for an attribute declared for adapter adapting '
+                    '%s to %s: %r' % (
                         self.from_class.__name__, self.to_class.__name__,
                         exposed_attr))
 
@@ -195,7 +193,7 @@ class ProxyProperty(object):
         elif not isinstance(options, Mapping):
             raise TypeError(
                 'Bad type %r for options of %r attribute (must be a '
-                    'Mapping)' % (options.__class__, attr_to_adapt))
+                'Mapping)' % (options.__class__, attr_to_adapt))
 
         self.__adapt_to_class = options.get(AdapterOptionKeyClass, None)
         if (self.__adapt_to_class is not None and

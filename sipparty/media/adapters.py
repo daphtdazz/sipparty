@@ -75,7 +75,6 @@ class SessionToSDPAdapter(ProxyAdapter):
     )
 
 
-
 class SessionToConnectionDescriptionAdapter(ProxyAdapter):
     from_class = Session
     to_class = ConnectionDescription

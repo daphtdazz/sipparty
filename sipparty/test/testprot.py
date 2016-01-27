@@ -17,11 +17,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-import os
 import re
-from six import (add_metaclass, binary_type as bytes, iteritems, PY2)
-import sys
-import unittest
+from six import (binary_type as bytes, iteritems, PY2)
 from ..parse import ParseError
 from ..sdp import sdpsyntax
 from ..sip import (prot, components, Message, Header)
@@ -120,7 +117,6 @@ class TestProtocol(SIPPartyTestCase):
         # the same object as the To URI.
         self.assertIsNotNone(invite.startline.uri)
         self.assertTrue(invite.startline.uri is invite.toheader.uri)
-        turi = invite.toheader.uri
         nuri = URI()
         log.info("Set startline URI to something new.")
         invite.startline.uri = nuri

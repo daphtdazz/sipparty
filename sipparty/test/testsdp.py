@@ -20,7 +20,6 @@ import logging
 from six import (binary_type as bytes)
 from ..sdp import (
     AddrTypes, LineTypes, MediaTypes, SessionDescription, SDPIncomplete)
-from ..util import (TestCaseREMixin)
 from .setup import SIPPartyTestCase
 
 log = logging.getLogger(__name__)

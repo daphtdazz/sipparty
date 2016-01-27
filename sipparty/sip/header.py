@@ -21,7 +21,6 @@ from collections import OrderedDict
 import logging
 from numbers import Integral
 from random import randint
-import re
 from six import (add_metaclass, binary_type as bytes, PY2)
 from ..deepclass import (DeepClass, dck)
 from ..parse import (Parser,)

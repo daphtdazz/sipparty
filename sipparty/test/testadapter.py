@@ -18,11 +18,11 @@ limitations under the License.
 """
 import logging
 from ..adapter import (
-    AdaptToClass, AdapterOptionKeyClass, AdapterOptionKeyConversion,
+    AdapterOptionKeyClass, AdapterOptionKeyConversion,
     AdapterProperty, ListConverter,
-    NoSuchAdapterError, ProxyAdapter, ProxyProperty)
+    ProxyAdapter, ProxyProperty)
 from .._adapter import (_AdapterManager)
-from .setup import (MagicMock, patch, SIPPartyTestCase)
+from .setup import SIPPartyTestCase
 
 log = logging.getLogger(__name__)
 
@@ -49,7 +49,6 @@ class TestAdapter(SIPPartyTestCase):
             pass
 
         self.assertRaises(TypeError, ProxyProperty, 'this_attribute')
-        pp = ProxyProperty('this_attribute', Class1)
         self.assertRaises(TypeError, ProxyProperty, Class1, Class2, 'notamap')
 
     def test_adapter_property(self):
@@ -75,6 +74,7 @@ class TestAdapter(SIPPartyTestCase):
                 self.class1_children = []
 
         log.info('Register the adapters (just by creating the class).')
+
         class Class1ToClass2Adapter(ProxyAdapter):
             from_class = Class1
             to_class = Class2
@@ -108,7 +108,6 @@ class TestAdapter(SIPPartyTestCase):
         self.assertEqual(alist, [1])
 
         log.info('Show that a adapting a list was easy.')
-        c1_1 = Class1()
         c1.class1_children = [Class1() for _ in range(3)]
         c1.class1_children[1].class1_attr1 = 2
         c1.class1_children[2].class1_attr1 = 3

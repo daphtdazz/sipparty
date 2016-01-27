@@ -23,7 +23,6 @@ import logging
 from six import (iteritems, add_metaclass)
 from six.moves import queue
 import time
-import timeit
 import threading
 import weakref
 from ..util import (CCPropsFor, class_or_instance_method, Enum, OnlyWhenLocked)
@@ -497,7 +496,7 @@ class FSM(object):
                 del self
                 try:
                     wait = weak_method()
-                except Exception as exc:
+                except Exception:
                     log.exception("Exception in %r thread.", cthr.name)
                     break
 
@@ -667,7 +666,8 @@ class AsyncFSM(LockedFSM):
             self.__backgroundTimerPop()
 
         self._fsm_thread = retrythread.RetryThread(
-            action=check_weak_self_timers, name=self._fsm_name + '.retry_thread')
+            action=check_weak_self_timers,
+            name=self._fsm_name + '.retry_thread')
         self._fsm_thread.start()
 
     def start_timer(self, timer):

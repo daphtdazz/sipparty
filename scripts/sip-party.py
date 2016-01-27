@@ -17,6 +17,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+from __future__ import print_function
 import argparse
 from collections import Callable
 import logging
@@ -69,7 +70,6 @@ class SIPPartyRunLoop(object):
 
     def _fix_commands(self):
         command_method_prepend = 'command_'
-        commands = []
         for attr in dir(self):
             if attr.startswith(command_method_prepend):
                 log.debug('Adding command method %r', attr)
@@ -133,7 +133,7 @@ class SIPPartyRunLoop(object):
             raise BadArgumentException(
                 'Argument to sleep command %r is not a number.' % arg)
 
-        sleep(arg)
+        sleep(time_to_sleep)
 
     #
     # =================== Interactions with the user ==========================

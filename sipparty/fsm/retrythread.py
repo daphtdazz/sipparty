@@ -33,10 +33,9 @@ limitations under the License.
 """
 import logging
 import select
-from socket import (SHUT_RDWR, socketpair)
+from socket import socketpair
 import sys
 import threading
-import time
 from ..util import (Clock, OnlyWhenLocked)
 
 log = logging.getLogger(__name__)
@@ -69,7 +68,7 @@ class _FDSource(object):
         try:
             self._fds_action(self._fds_selectable)
             self._fds_exceptionCount = 0
-        except Exception as exc:
+        except Exception:
             if self._fds_exceptionCount >= self._fds_maxExceptions:
                 raise
 
@@ -214,7 +213,7 @@ class RetryThread(threading.Thread):
             if action is not None:
                 try:
                     action()
-                except Exception as exc:
+                except Exception:
                     log.exception(
                         "%s exception doing action %r:", self, action)
 

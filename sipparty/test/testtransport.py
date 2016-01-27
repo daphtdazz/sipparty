@@ -17,13 +17,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-from socket import (SOCK_STREAM, SOCK_DGRAM, AF_INET, AF_INET6)
+from socket import (SOCK_STREAM, AF_INET, AF_INET6)
 from ..transport import (
-    ConnectedAddressDescription, ListenDescription, SocketInUseError,
-    SocketProxy, Transport, IPv4address_re, IPv6address_re,
+    ConnectedAddressDescription, ListenDescription,
+    SocketProxy, Transport, IPv6address_re,
     IPv6address_only_re)
 from ..util import WaitFor
-from .setup import (MagicMock, patch, SIPPartyTestCase)
+from .setup import (SIPPartyTestCase)
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)

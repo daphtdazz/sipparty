@@ -21,7 +21,7 @@ from six.moves import reduce
 import re
 import logging
 from numbers import (Integral)
-from time import (sleep, time)
+from time import time
 from .. import (util,)
 from ..deepclass import (DeepClass, dck)
 from ..parse import (ParseError,)
@@ -32,7 +32,7 @@ from ..vb import (KeyTransformer, ValueBinder)
 from .body import Body
 from .header import Header
 from .param import Param
-from .prot import (bdict, Incomplete)
+from .prot import bdict
 from .request import Request
 from .response import Response
 
@@ -161,24 +161,16 @@ class Message(
             except StopIteration:
                 assert 0, "Bug: Unexpected end of lines in message."
 
-        now = time()
-        if False and string[:11] == b'SIP/2.0 200':
-            sleep(0.1)
-            assert 0
-        log.info(time())
         for hname, hcontents, bytes_used in HNameContentsGen(line_iter):
             log.debug("Add header %r", hname)
             log.detail("Contents: %r", hcontents)
             hclass = getattr(Header, astr(hname))
             newh = hclass.Parse(hcontents)
-            if False and string[:11] == b'SIP/2.0 200':
-                assert 0, (hcontents[:10], newh.type)
             log.detail("Header parsed as: %r", newh)
 
             message.addHeader(newh)
             used_bytes += bytes_used
             log.info(time())
-        #assert string[:11] != b'SIP/2.0 200'
 
         # We haven't yet counted the eol eol at the end of the headers.
         used_bytes += 4
@@ -386,7 +378,7 @@ class Message(
         reqmo = self.reqattrre.match(attr)
         if reqmo is not None:
             sl = self.startline
-            if sl.type == mo.group(1):
+            if sl.type == reqmo.group(1):
                 return sl
 
         hmo = self.headerattrre.match(attr)

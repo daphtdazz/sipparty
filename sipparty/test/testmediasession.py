@@ -18,16 +18,14 @@ limitations under the License.
 """
 import gc
 import logging
-from six import (binary_type as bytes)
 from socket import AF_INET6
-from weakref import ref
 from ..media.session import (MediaSession, NoMediaSessions, Session)
 from ..sdp import SDPIncomplete
 from ..sdp.sdpsyntax import (
-    AddrTypes, AddressToSDPAddrType, MediaTypes, NetTypes)
+    AddressToSDPAddrType, MediaTypes)
 from ..transport import (
     IPAddressFamilyFromName, IsValidPortNum, SOCK_FAMILIES)
-from ..util import (abytes, TestCaseREMixin, WaitFor, WeakProperty)
+from ..util import abytes
 from .setup import SIPPartyTestCase
 
 log = logging.getLogger(__name__)
@@ -110,7 +108,7 @@ class TestSession(SIPPartyTestCase):
 
         log.info('Listening allocates us a port.')
         ss.addMediaSession(
-            media_type=MediaTypes.audio, transProto = "RTP/AVP",
+            media_type=MediaTypes.audio, transProto="RTP/AVP",
             formats={123: {}})
         ms = ss.mediaSession
         self.assertIsNone(ms.name)

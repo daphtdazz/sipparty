@@ -17,20 +17,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-from six import PY2
 import socket
-import sys
 import threading
 from time import sleep
-import timeit
 from weakref import ref
 from ..fsm import (
-    AsyncFSM, FSM, FSMTimeout, InitialStateKey, LockedFSM, RetryThread, Timer,
-    TransitionKeys,
-    UnexpectedInput)
+    AsyncFSM, FSM, FSMTimeout, InitialStateKey, LockedFSM, Timer,
+    TransitionKeys, UnexpectedInput)
 from ..fsm import fsmtimer
 from ..fsm import retrythread
-from ..util import (Clock, Enum, WaitFor)
+from ..util import (Enum, WaitFor)
 from .setup import (MagicMock, patch, SIPPartyTestCase)
 
 log = logging.getLogger(__name__)
@@ -439,8 +435,6 @@ class TestFSM(SIPPartyTestCase):
                 thr_res[0] += 1
 
         nf = ThreadFSM()
-
-        bgthread = threading.Thread(name="bgthread", target=runthread)
 
         log.debug("Check that if we fail to add a transition the transition "
                   "configuration is not updated.")

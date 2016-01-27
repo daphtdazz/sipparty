@@ -17,7 +17,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-from six import (binary_type as bytes, itervalues)
 from ..transport import Transport
 from ..util import WeakMethod
 

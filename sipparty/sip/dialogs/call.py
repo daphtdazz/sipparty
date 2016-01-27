@@ -36,8 +36,8 @@ I = Enum((
 
 for transitionKey in TransitionKeys:
     locals()[transitionKey] = transitionKey
-for transformKey in TransformKeys:
-    locals()[transformKey] = transformKey
+tsk = TransitionKeys
+tfk = TransformKeys
 
 
 class SimpleCall(Dialog):
@@ -45,42 +45,42 @@ class SimpleCall(Dialog):
     FSMDefinitions = {
         S.Initial: {
             I.initiate: {
-                NewState: S.InitiatingDialog,
-                Action: A.sendRequestINVITE
+                tsk.NewState: S.InitiatingDialog,
+                tsk.Action: A.sendRequestINVITE
             },
             I.receiveRequestINVITE: {
-                NewState: S.InDialog,
-                Action: A.sendResponse200
+                tsk.NewState: S.InDialog,
+                tsk.Action: A.sendResponse200
             }
         },
         S.InitiatingDialog: {
             I.receiveResponse18: {
-                NewState: S.InitiatingDialog
+                tsk.NewState: S.InitiatingDialog
             },
             I.receiveResponse2: {
-                NewState: S.InDialog
+                tsk.NewState: S.InDialog
             },
             I.receiveResponse4: {
-                NewState: S.Error,
-                Action: A.errorResponse
+                tsk.NewState: S.Error,
+                tsk.Action: A.errorResponse
             }
         },
         S.InDialog: {
             I.receiveResponse2: {
-                NewState: S.InDialog
+                tsk.NewState: S.InDialog
             },
             I.terminate: {
-                NewState: S.TerminatingDialog,
-                Action: A.sendRequestBYE
+                tsk.NewState: S.TerminatingDialog,
+                tsk.Action: A.sendRequestBYE
             },
             I.receiveRequestBYE: {
-                NewState: S.Terminated,
-                Action: A.sendResponse200,
+                tsk.NewState: S.Terminated,
+                tsk.Action: A.sendResponse200,
             }
         },
         S.TerminatingDialog: {
             I.receiveResponse2: {
-                NewState: S.Terminated
+                tsk.NewState: S.Terminated
             }
         },
         S.Error: {},
@@ -90,23 +90,24 @@ class SimpleCall(Dialog):
     Transforms = {
         "INVITE": {
             2: [
-                (Copy, "FromHeader",),
-                (Copy, "ToHeader",),
-                (Copy, "ViaHeader",),
-                (Copy, "Call_IdHeader",),
-                (Copy, "CseqHeader",),
-                (Copy, "startline.protocol",),
-                (Add, "ToHeader.field.parameters.tag", lambda _: Param.tag())
+                (tfk.Copy, "FromHeader",),
+                (tfk.Copy, "ToHeader",),
+                (tfk.Copy, "ViaHeader",),
+                (tfk.Copy, "Call_IdHeader",),
+                (tfk.Copy, "CseqHeader",),
+                (tfk.Copy, "startline.protocol",),
+                (tfk.Add, "ToHeader.field.parameters.tag",
+                 lambda _: Param.tag())
             ]
         },
         "BYE": {
             2: [
-                (Copy, "FromHeader",),
-                (Copy, "ToHeader",),
-                (Copy, "ViaHeader",),
-                (Copy, "Call_IdHeader",),
-                (Copy, "CseqHeader",),
-                (Copy, "startline.protocol",)
+                (tfk.Copy, "FromHeader",),
+                (tfk.Copy, "ToHeader",),
+                (tfk.Copy, "ViaHeader",),
+                (tfk.Copy, "Call_IdHeader",),
+                (tfk.Copy, "CseqHeader",),
+                (tfk.Copy, "startline.protocol",)
             ]
         },
     }

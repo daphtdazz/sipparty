@@ -21,11 +21,10 @@ from six import (iteritems, PY2)
 import sys
 import unittest
 from ..util import TestCaseREMixin
-
 if PY2:
-    from mock import (MagicMock, patch)
+    from mock import (MagicMock, patch)  # noqa
 else:
-    from unittest.mock import (MagicMock, patch)
+    from unittest.mock import (MagicMock, patch)  # noqa
 
 log = logging.getLogger(__name__)
 sipparty = sys.modules['sipparty']

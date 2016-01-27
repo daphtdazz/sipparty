@@ -16,12 +16,10 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import abc
 import logging
 import numbers
 import re
-from six import binary_type as bytes
-from .. import (vb, fsm)
+from .. import vb
 from ..fsm import (AsyncFSM, InitialStateKey, UnexpectedInput)
 from ..deepclass import DeepClass, dck
 from ..parse import ParsedPropertyOfClass
@@ -29,7 +27,7 @@ from ..sdp import (sdpsyntax, SDPIncomplete)
 from ..transport import IsValidPortNum
 from ..util import (abytes, astr, Enum, WeakMethod)
 from .transform import (Transform, TransformKeys)
-from .components import (AOR, URI)
+from .components import URI
 from .header import Call_IdHeader
 from .request import Request
 from .message import Message, MessageResponse
@@ -44,19 +42,17 @@ States = Enum((
     "SuccessCompletion", "ErrorCompletion"))
 Inputs = Enum(("initiate", "receiveRequest", "terminate"))
 
-for tk in TransformKeys:
-    locals()[tk] = tk
-del tk
+tfk = TransformKeys
 
 AckTransforms = {
     200: {
         b"ACK": (
-            (CopyFrom, "request", "FromHeader"),
-            (CopyFrom, "request", "Call_IDHeader"),
-            (CopyFrom, "request", "startline.uri"),
-            (CopyFrom, "request", "viaheader"),
-            (Copy, "startline.protocol",),
-            (Copy, "ToHeader"),
+            (tfk.CopyFrom, "request", "FromHeader"),
+            (tfk.CopyFrom, "request", "Call_IDHeader"),
+            (tfk.CopyFrom, "request", "startline.uri"),
+            (tfk.CopyFrom, "request", "viaheader"),
+            (tfk.Copy, "startline.protocol",),
+            (tfk.Copy, "ToHeader"),
         )
     }
 }
@@ -137,7 +133,7 @@ class Dialog(
 
         if mtype in (200,):
             log.debug("ACKing %r message", mtype)
-            #self.ackMessage(msg)
+            self.ackMessage(msg)
 
         def RaiseBadInput(msg=b""):
             raise(UnexpectedInput(
@@ -232,9 +228,7 @@ class Dialog(
 
         req.FromHeader.parameters.tag = self.localTag
         req.ToHeader.parameters.tag = self.remoteTag
-        cid = req.Call_IdHeader
         req.Call_IdHeader = self._dlg_callIDHeader
-        cid2 = req.Call_IdHeader
 
         log.debug("send request of type %r", req.type)
 

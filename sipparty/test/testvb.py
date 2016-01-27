@@ -17,14 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-import os
-import re
-import six
-import sys
-import unittest
-from .. import vb
 from ..vb import (BindingAlreadyExists, NoSuchBinding, ValueBinder)
-from ..util import DerivedProperty
 from .setup import SIPPartyTestCase
 
 log = logging.getLogger(__name__)
@@ -305,5 +298,3 @@ class TestVB(SIPPartyTestCase):
         log.info('Check inserting a non-VB object raises.')
         a.bind('b.c.d', 'b1')
         self.assertRaises(TypeError, setattr, a, 'b', NonVBType())
-
-

@@ -17,12 +17,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-from six import (binary_type as bytes, iteritems, add_metaclass)
+from numbers import Integral
 from ..deepclass import (DeepClass, dck)
-from ..parse import ParseError
-from ..sip import (prot, components)
-from ..sip.components import URI
-from ..sip.request import Request
 from ..vb import ValueBinder
 from .setup import SIPPartyTestCase
 
@@ -106,3 +102,6 @@ class TestDeepClass(SIPPartyTestCase):
         dc1.attr1 = dc2
         dc2.attr1 = dc1
         dc1_repr = repr(dc1)
+        self.assertRegexpMatches(
+            dc1_repr,
+            'TestDeepClass\(attr1=TestDeepClass\(attr1=<DC [0-9a-f]+>\)\)')

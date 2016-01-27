@@ -21,9 +21,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 from six import PY2
-from ..transport import (
-    digitrange, DIGIT, hexrange, HEXDIG, hex4, IPv4address,
-    IPv6address, port)
+# Various things are used via %(keyword)s style format strings but to avoid
+# flake8 moans need noqa.
+from ..transport import (  # noqa
+    DIGIT, digitrange, HEXDIG, IPv4address, IPv6address, port)
 from ..util import (AsciiBytesEnum, astr, bglobals_g, Enum, sipheader)
 
 

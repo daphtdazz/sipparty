@@ -18,14 +18,13 @@ limitations under the License.
 """
 import logging
 from six import (binary_type as bytes)
-from socket import (AF_INET, SOCK_DGRAM)
-import sys
+from socket import SOCK_DGRAM
 from weakref import (WeakValueDictionary)
 from ..parse import ParseError
 from ..transport import (
     IsValidTransportName, Transport, SockTypeFromName,
     UnregisteredPortGenerator)
-from ..util import (abytes, DerivedProperty, Singleton, WeakMethod)
+from ..util import (abytes, DerivedProperty, WeakMethod)
 from . import prot
 from .components import Host
 from .message import Message
@@ -166,7 +165,6 @@ class SIPTransport(Transport):
         except Exception:
             log.exception(
                 "Consuming %r message raised exception.", msg)
-            #sys.exc_clear()
 
         return msg.parsedBytes
 

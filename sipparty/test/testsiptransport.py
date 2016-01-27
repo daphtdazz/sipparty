@@ -17,17 +17,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-import os
-import re
-from socket import (AF_INET, AF_INET6, SOCK_DGRAM, SOCK_STREAM)
-import sys
-import unittest
+from socket import (AF_INET, SOCK_DGRAM)
 from .. import (sip, transport)
-from ..fsm import (retrythread, fsm)
-from ..sip import (siptransport, field)
-from ..sip.components import AOR
 from ..sip.siptransport import SIPTransport
-from ..util import (abytes, WaitFor)
+from ..util import WaitFor
 from .setup import (MagicMock, patch, SIPPartyTestCase)
 
 log = logging.getLogger(__name__)
@@ -63,7 +56,7 @@ class TestSIPTransport(SIPPartyTestCase):
         tp1 = SIPTransport()
         self.assertIs(tp, tp1)
 
-        l_desc = tp.listen_for_me()
+        l_desc = tp.listen_for_me(sock_type=sock_type, sock_family=sock_family)
 
         log.info('Make INVITE message')
         msg = sip.Message.invite()

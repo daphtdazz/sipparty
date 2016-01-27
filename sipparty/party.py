@@ -17,20 +17,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-import socket
 from six import (binary_type as bytes, itervalues)
 from .deepclass import (DeepClass, dck)
-from .media.session import (Session, MediaSession)
 from .parse import (ParsedPropertyOfClass)
-from .sdp import sdpsyntax
 from .sip import (
-    SIPTransport, Incomplete, DNameURI, AOR, URI, Host, Request, Message,
-    Body, defaults)
-from .transport import (SockTypeName, IPaddress_re, IsSpecialName)
-from .util import (abytes, DerivedProperty, WeakMethod)
+    SIPTransport, DNameURI, URI, Host, Request, Message, defaults)
+from .transport import (IPaddress_re, IsSpecialName)
+from .util import (abytes, WeakMethod)
 from .vb import ValueBinder
-
-__all__ = ('Party', 'PartySubclass')
 
 log = logging.getLogger(__name__)
 

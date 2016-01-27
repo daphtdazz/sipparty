@@ -18,7 +18,6 @@ limitations under the License.
 """
 import logging
 from six import (add_metaclass, exec_, next, PY2)
-import unittest
 from weakref import ref
 from ..util import (
     AsciiBytesEnum, bglobals_g, CCPropsFor, class_or_instance_method, Enum,
@@ -105,6 +104,7 @@ class TestUtil(SIPPartyTestCase):
         log.info(
             'Check we get a TypeError if attempting to use an unrelated '
             'metaclass on a subclass of Singleton (standard python behaviour)')
+
         class NewBadMetaclass(type):
             pass
 
@@ -113,6 +113,7 @@ class TestUtil(SIPPartyTestCase):
             {})
 
         log.info('Can we make a metaclass that is OK with Singleton, with six')
+
         class SubMetaclass(SingletonType):
             pass
 
@@ -223,7 +224,7 @@ class SingletonSubclass1(Singleton, metaclass=SingletonType):
             self.assertRaises(TypeError, getattr, obj, 'first_of_my_list')
 
         log.info('Check first item in some lists')
-        for list_obj in ([1, 2, 3], [{'a':2, 'c':3}, None, None], [None]):
+        for list_obj in ([1, 2, 3], [{'a': 2, 'c': 3}, None, None], [None]):
             obj.my_list = list_obj
             self.assertIs(obj.first_of_my_list, list_obj[0])
 
@@ -260,4 +261,3 @@ class SingletonSubclass1(Singleton, metaclass=SingletonType):
         self.assertIsNone(wc())
         wmth()
         self.assertEqual(results, [1])
-

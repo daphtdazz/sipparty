@@ -21,10 +21,7 @@ limitations under the License.
 import argparse
 import logging
 import time
-import socket
-
 import sipparty
-from sipparty.util import WaitFor
 from sipparty.sip.components import URI
 from sipparty.parse import ParseError
 from sipparty.sip.siptransport import prot_log
@@ -62,9 +59,9 @@ class SipCallArgs(argparse.ArgumentParser):
 #
 args = SipCallArgs().args
 
-sipparty.sip.siptransport.prot_log.setLevel(logging.ERROR)
+prot_log.setLevel(logging.ERROR)
 if args.debug < logging.INFO:
-    sipparty.sip.siptransport.prot_log.setLevel(logging.INFO)
+    prot_log.setLevel(logging.INFO)
     log.setLevel(args.debug)
     sipparty.util.log.setLevel(logging.INFO)
     sipparty.fsm.retrythread.log.setLevel(logging.INFO)
@@ -77,7 +74,7 @@ log.info("Call beginning...")
 
 dlg.waitForStateCondition(
     lambda state: state not in (
-        dlg.States.Initial, dlg.States.InitiatingDialog))
+        dlg.States.Initial, dlg.States.InitiatingDialog))  # noqa
 
 pause_secs = 30
 log.info("Call up, wait for %r seconds, or Ctrl-C", pause_secs)
@@ -90,7 +87,7 @@ dlg.hit(dlg.Inputs.terminate)
 log.info("Call terminating...")
 
 dlg.waitForStateCondition(
-    lambda state: state in (dlg.States.Terminated, dlg.States.Error))
+    lambda state: state in (dlg.States.Terminated, dlg.States.Error))  # noqa
 
 log.info("Finished.")
 

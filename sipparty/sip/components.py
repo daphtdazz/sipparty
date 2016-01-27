@@ -21,11 +21,10 @@ from numbers import Integral
 from six import binary_type as bytes
 import socket
 from . import defaults
-from .prot import Incomplete
 from .prot import (bdict as abnf_name_bdict, Incomplete)
 from ..deepclass import (DeepClass, dck)
 from ..parse import (Parser, ParsedProperty, ParsedPropertyOfClass)
-from ..util import TwoCompatibleThree, TupleRepresentable
+from ..util import (astr, TwoCompatibleThree, TupleRepresentable)
 from ..vb import ValueBinder
 
 log = logging.getLogger(__name__)
@@ -38,8 +37,6 @@ class Host(
             "port": {
                 dck.check: (
                     lambda x: isinstance(x, Integral) and 0 <= x <= 0xffff),
-                #dck.get: lambda self, val:
-                #    val if val is not None else defaults.port
             }
         }),
         Parser, TupleRepresentable, ValueBinder):

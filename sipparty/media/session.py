@@ -16,20 +16,18 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import datetime
 import logging
-import re
 from six import (binary_type as bytes, iteritems)
 from ..adapter import AdapterProperty
 from ..deepclass import (DeepClass, dck)
 from ..sdp import (SessionDescription, MediaDescription)
 from ..sdp.mediatransport import MediaTransport
-from ..sdp.sdpsyntax import (AddrTypes, MediaTypes, sdp_username_is_ok)
+from ..sdp.sdpsyntax import (MediaTypes, sdp_username_is_ok)
 from ..transport import (
-    IsValidPortNum, IsValidTransportName, ListenDescription, NameLANHostname,
+    IsValidTransportName, ListenDescription, NameLANHostname,
     SOCK_FAMILIES)
-from ..util import (abytes, FirstListItemProxy, WeakMethod, WeakProperty)
-from ..vb import (KeyTransformer, ValueBinder)
+from ..util import (FirstListItemProxy, WeakMethod, WeakProperty)
+from ..vb import ValueBinder
 
 
 log = logging.getLogger(__name__)

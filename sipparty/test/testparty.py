@@ -19,8 +19,6 @@ limitations under the License.
 import gc
 import logging
 from socket import SOCK_STREAM, SOCK_DGRAM
-from time import sleep
-import unittest
 from weakref import ref
 from ..media.sessions import SingleRTPSession
 from ..party import (Party)
@@ -141,10 +139,10 @@ class TestParty(SIPPartyTestCase):
 
         log.info('Create two new no-media parties.')
         p1 = NoMediaSimpleCallsParty()
-        p2 = NoMediaSimpleCallsParty()
 
         p1.listen()
         self.assertTrue(IsValidPortNum(p1.contactURI.port))
+
 
 class TestPartyWeakReferences(SIPPartyTestCase):
     def test_weak_references(self):
@@ -177,7 +175,6 @@ class TestPartyWeakReferences(SIPPartyTestCase):
         self.assertIsNone(wp1())
         del tp
         self.assertIsNone(w_tp())
-
 
         log.info('Check listening party deletes cleanly')
         p1 = NoMediaSimpleCallsParty()
@@ -215,7 +212,7 @@ class TestPartyWeakReferences(SIPPartyTestCase):
         gc.collect()
         self.assertIsNone(wp1())
         self.assertIsNone(wp2())
-        self.assertIsNone(w_inv())
+        WaitFor(lambda: w_inv() is None)
 
         # The transport should have been deleted, but this is only because we
         # checked above that the dialog was established. If there was work
@@ -223,4 +220,3 @@ class TestPartyWeakReferences(SIPPartyTestCase):
         # been released immediately.
         WaitFor(lambda: wtp1() is None, 20)
         self.assertIsNone(wtp1())
-

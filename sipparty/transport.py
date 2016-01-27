@@ -21,19 +21,17 @@ from copy import copy
 import logging
 from numbers import Integral
 import re
-from six import (binary_type as bytes, iteritems, itervalues)
+from six import iteritems
 import socket  # TODO: should remove and rely on from socket import ... below.
 from socket import (
     AF_INET, AF_INET6, getaddrinfo, gethostname, SHUT_RDWR,
     socket as socket_class,
     SOCK_STREAM, SOCK_DGRAM)
-import traceback
-from weakref import (ref, WeakValueDictionary)
 from .deepclass import (dck, DeepClass)
 from .fsm import (RetryThread)
 from .vb import ValueBinder
 from .util import (
-    abytes, AsciiBytesEnum, astr, bglobals_g, DelegateProperty,
+    abytes, AsciiBytesEnum, astr, bglobals_g,
     DerivedProperty, Enum, Singleton, Retainable,
     TupleRepresentable, TwoCompatibleThree, WeakMethod, WeakProperty)
 
@@ -350,7 +348,6 @@ def GetBoundSocket(family, socktype, address, port_filter=None):
             log.error('Hit max retries: %d', max_retries)
             break
 
-
     if socketError is not None:
         raise BadNetwork(
             "Couldn't bind to address %r (request was for %r), tried %d "
@@ -362,7 +359,6 @@ def GetBoundSocket(family, socktype, address, port_filter=None):
     return ssocket
 
 
-#Change to AddressDescription
 class ListenDescription(
         DeepClass('_laddr_', {
             'port': {dck.check: lambda x: x == 0 or IsValidPortNum(x)},
@@ -499,8 +495,9 @@ class SocketProxy(
         DeepClass('_sck_', {
             'local_address': {dck.check: lambda x: isinstance(
                 x, ListenDescription)},
-            'socket': {dck.check: lambda x:
-                isinstance(x, socket_class) or hasattr(x, 'socket')},
+            'socket': {
+                dck.check: lambda x:
+                    isinstance(x, socket_class) or hasattr(x, 'socket')},
             'data_callback': {dck.check: lambda x: isinstance(x, Callable)},
             'is_connected': {dck.gen: lambda: False},
             'transport': {dck.descriptor: WeakProperty}
@@ -646,12 +643,6 @@ class Transport(Singleton):
         self._tp_listen_sockets = {}
         self._tp_connected_sockets = {}
 
-        # Keyed by (lAddr, rAddr) independent of type.
-        #self._tp_connBuffers = {}
-        # Keyed by local address tuple.
-        #self._tp_dGramSockets = {}
-
-    # bind_listen_address
     def listen_for_me(self, callback, sock_type=None, sock_family=None,
                       name=NameAll, port=0, port_filter=None, flowinfo=None,
                       scopeid=None, listen_description=None):
@@ -788,8 +779,8 @@ class Transport(Singleton):
         log.debug('Release %r', listen_address)
         if not isinstance(listen_address, ListenDescription):
             raise TypeError(
-                'Cannot release something which is not a ListenDescription: %r' % (
-                    listen_address))
+                'Cannot release something which is not a ListenDescription: '
+                '%r' % (listen_address,))
 
         path, lsck = self.find_cached_object(
             self._tp_listen_sockets,
@@ -877,6 +868,7 @@ class Transport(Singleton):
     def convert_listen_description_into_find_tuple(listen_address):
 
         pfilter = listen_address.port_filter
+
         def find_suitable_port(pdict, port):
             if port != 0:
                 return None, None
@@ -899,7 +891,8 @@ class Transport(Singleton):
 
         def find_suitable_flowinfo_or_scopeid(pdict, val):
             log.debug(
-                'Find flowinfo or scopeid for %r in keys %r', val, pdict.keys())
+                'Find flowinfo or scopeid for %r in keys %r', val,
+                pdict.keys())
             if val is not None:
                 return None, None
 
@@ -908,7 +901,6 @@ class Transport(Singleton):
 
             return None, None
 
-        #assert listen_address.sock_family is not None, listen_address
         rtup = (
             (listen_address.sock_family, lambda _dict, key: (key, {})),
             (listen_address.sock_type, lambda _dict, key: (key, {})),
@@ -934,6 +926,7 @@ class Transport(Singleton):
             ladtuple[2:])
 
     _yield_sentinel = type('YieldDictPathSentinel', (), {})()
+
     @classmethod
     def yield_dict_path(cls, root_dict, lookups):
         next_dict = root_dict
@@ -973,9 +966,6 @@ class Transport(Singleton):
             path_so_far.pop()
 
     def fix_sock_family(self, sock_family):
-        #if sock_family is None:
-        #    raise NotImplementedError(
-        #        'Currently you must specify an IP family.')
         if sock_family not in (None,) + tuple(SOCK_FAMILIES):
             raise TypeError(
                 'Invalid socket family: %s' % SockFamilyName(sock_family))
@@ -1000,137 +990,3 @@ class Transport(Singleton):
             for path in self.yield_vals(sock_dicts):
                 sock = path[-1]
                 assert sock is not None
-
-    #
-    # =================== OLD DEPRECATED METHOD ===============================
-    #
-    #
-    # =================== SOCKET INTERFACE ====================================
-    #
-    def new_connection(self, connection_proxy):
-        assert 0
-        callback
-
-    def addDgramSocket(self, sck):
-        assert 0
-        self._tp_dGramSockets[sck.getsockname()] = sck
-        log.debug("%r Dgram sockets now: %r", self, self._tp_dGramSockets)
-
-    def _sendDgramMessageFrom(self, msg, toAddr, fromAddr):
-        """:param msg: The message (a bytes-able) to send.
-        :param toAddr: The place to send to. This should be *post* address
-        resolution, so this must be either a 2 (IPv4) or a 4 (IPv6) tuple.
-        """
-        assert 0
-        log.debug("Send %r -> %r", fromAddr, toAddr)
-
-        assert isinstance(toAddr, tuple)
-        assert len(toAddr) in (2, 4)
-
-        family = AF_INET if len(toAddr) == 2 else AF_INET6
-
-        fromName, fromPort = fromAddr[:2]
-
-        if fromName is not None and IPv6address_re.match(
-                abytes(fromName)):
-            if len(fromAddr) == 2:
-                fromAddr = (fromAddr[0], fromAddr[1], 0, 0)
-            else:
-                assert len(fromAddr) == 4
-
-        if fromAddr not in self._tp_dGramSockets:
-            sck = GetBoundSocket(family, SOCK_DGRAM, fromAddr)
-            self.addDgramSocket(sck)
-        else:
-            sck = self._tp_dGramSockets[fromAddr]
-        sck.sendto(msg, toAddr)
-
-    def listenDgram(self, lAddrName, port, port_filter):
-        assert 0
-        sock = GetBoundSocket(None, SOCK_DGRAM, (lAddrName, port), port_filter)
-        rt = self._tp_retryThread
-        rt.addInputFD(sock, WeakMethod(self, "dgramDataAvailable"))
-        self.addDgramSocket(sock)
-        return sock.getsockname()
-
-    def sendMessage(self, msg, toAddr, fromAddr=None, sockType=None):
-        assert 0
-        sockType = self.fix_sock_type(sockType)
-        if sockType == SOCK_DGRAM:
-            return self._sendDgramMessage(msg, toAddr, fromAddr)
-
-        return self.sendStreamMessage(msg, toAddr, fromAddr)
-
-    def _sendDgramMessage(self, msg, toAddr, fromAddr):
-        assert 0
-        assert isinstance(msg, bytes)
-
-        if fromAddr is not None:
-            try:
-                return self._sendDgramMessageFrom(msg, toAddr, fromAddr)
-            except BadNetwork:
-                log.error(
-                    "Bad network, currently have sockets: %r",
-                    self._tp_dGramSockets)
-                raise
-
-        # TODO: cache sockets used for particular toAddresses so we can re-use
-        # them faster.
-
-        # Try and find a socket we can route through.
-        log.debug("Send msg to %r from anywhere", toAddr)
-        for sck in itervalues(self._tp_dGramSockets):
-            sname = sck.getsockname()
-            try:
-                if len(toAddr) != len(sname):
-                    log.debug("Different socket family type skipped.")
-                    continue
-                sck.sendto(msg, toAddr)
-
-                return
-            except socket.error as exc:
-                log.debug(
-                    "Could not sendto %r from %r: %s", toAddr,
-                    sname, exc)
-        else:
-            raise exc
-
-    def dgramDataAvailable(self, sck):
-        assert 0
-        data, address = sck.recvfrom(4096)
-        self.receivedData(sck.getsockname(), address, data)
-
-    def receivedData(self, lAddr, rAddr, data):
-        assert 0
-
-        connkey = (lAddr, rAddr)
-        bufs = self._tp_connBuffers
-        if connkey not in bufs:
-            buf = bytearray()
-            bufs[connkey] = buf
-        else:
-            buf = bufs[connkey]
-
-        buf.extend(data)
-
-        while len(buf) > 0:
-            len_used = self.processReceivedData(lAddr, rAddr, buf)
-            if len_used == 0:
-                log.debug("Consumer stopped consuming")
-                break
-            log.debug("Consumer consumed another %d bytes", len_used)
-            del buf[:len_used]
-
-    def processReceivedData(self, lAddr, rAddr, data):
-        assert 0
-        bc = self.byteConsumer
-        if bc is None:
-            log.debug("No consumer; dumping data: %r.", data)
-            return len(data)
-
-        data_consumed = bc(lAddr, rAddr, bytes(data))
-        if not isinstance(data_consumed, Integral):
-            raise ValueError(
-                "byteConsumer returned %r: must return an integer." % (
-                    data_consumed,))
-        return data_consumed

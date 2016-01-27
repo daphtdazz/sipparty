@@ -16,16 +16,14 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import six
-import logging
-import re
 import datetime
+import logging
 from numbers import Integral
+import re
 from .. import (parse)
 from ..util import (abytes, TwoCompatibleThree)
 from ..vb import (KeyTransformer, KeyIgnoredExceptions, ValueBinder)
 from ..deepclass import (DeepClass, dck)
-from . import sdpsyntax
 from .sdpsyntax import (
     NetTypes, AddrTypes, LineTypes, MediaTypes, fmt_space_re,
     AddressToSDPAddrType, bdict, sdp_username_is_ok)
