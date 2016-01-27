@@ -16,10 +16,12 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+import gc
 import logging
 from socket import SOCK_STREAM, SOCK_DGRAM
+from time import sleep
 import unittest
-import weakref
+from weakref import ref
 from ..media.sessions import SingleRTPSession
 from ..party import (Party)
 from ..parties import (NoMediaSimpleCallsParty)
@@ -30,6 +32,7 @@ from ..util import (abytes, WaitFor)
 from .setup import SIPPartyTestCase
 
 log = logging.getLogger()
+log.setLevel(logging.INFO)
 
 
 class TestParty(SIPPartyTestCase):
@@ -50,7 +53,12 @@ class TestParty(SIPPartyTestCase):
         self.tp = SIPTransport()
 
     def tearDown(self):
+        log.info('Delete transport')
+        wtp = ref(self.tp)
         del self.tp
+        gc.collect()
+        WaitFor(lambda: wtp() is None)
+        log.info('Transport deleted')
 
     def testBasicPartyTCP(self):
         self.skipTest('TCP not yet implemented')
@@ -64,9 +72,9 @@ class TestParty(SIPPartyTestCase):
 
     def subTestBasicParty(self, sock_type, contact_name):
 
-        # self.pushLogLevel('transport', logging.DEBUG)
-        # self.pushLogLevel('party', logging.DEBUG)
-        # self.pushLogLevel('dialog', logging.DEBUG)
+        self.pushLogLevel('retrythread', logging.DEBUG)
+        self.pushLogLevel('transport', logging.DEBUG)
+        self.pushLogLevel('util', logging.INFO)
 
         assert sock_type == SOCK_DGRAM
 
@@ -89,13 +97,14 @@ class TestParty(SIPPartyTestCase):
         p2 = BasicParty(aor=b'bob@biloxi.com')
 
         log.info('p1 listens')
-        #self.pushLogLevel('transport', logging.DEBUG)
         p1.listen(name=contact_name, sock_type=sock_type)
 
         log.info('p2 invites p1')
         invD = p2.invite(p1)
 
         WaitFor(lambda: invD.state == invD.States.InDialog, 1)
+
+        return
 
         self.assertEqual(len(p1.inCallDialogs), 1)
         self.assertEqual(len(p2.inCallDialogs), 1)
@@ -136,3 +145,82 @@ class TestParty(SIPPartyTestCase):
 
         p1.listen()
         self.assertTrue(IsValidPortNum(p1.contactURI.port))
+
+class TestPartyWeakReferences(SIPPartyTestCase):
+    def test_weak_references(self):
+        self.pushLogLevel('retrythread', logging.DEBUG)
+        owllog = logging.getLogger('OnlyWhenLocked')
+        owllog.setLevel(logging.DEBUG)
+
+        log.info('Check SIPTransport deletes cleanly')
+        tp = SIPTransport()
+        tp2 = SIPTransport('other_transport')
+        self.assertIsNot(tp, tp2)
+        w_tp2 = ref(tp2)
+        w_tp = ref(tp)
+        self.assertIs(w_tp(), tp)
+        del tp
+        gc.collect()
+        self.assertIsNone(w_tp())
+        del tp2
+        gc.collect()
+        self.assertIsNone(w_tp2())
+
+        log.info('Check SIPTransport + Party delete cleanly')
+        tp = SIPTransport()
+        w_tp = ref(tp)
+        self.assertIs(w_tp(), tp)
+        p1 = NoMediaSimpleCallsParty()
+        wp1 = ref(p1)
+        self.assertIs(tp, p1.transport)
+        del p1
+        self.assertIsNone(wp1())
+        del tp
+        self.assertIsNone(w_tp())
+
+
+        log.info('Check listening party deletes cleanly')
+        p1 = NoMediaSimpleCallsParty()
+        p1.listen()
+        w_p1 = ref(p1)
+        w_tp = ref(p1.transport)
+        self.assertIs(w_p1(), p1)
+        self.assertIs(w_tp(), p1.transport)
+        del p1
+        self.assertIsNone(w_p1())
+        self.assertIsNone(w_tp())
+
+        log.info('Check connected party deletes cleanly.')
+        p1 = NoMediaSimpleCallsParty(aor=b'alice@atlanta.com')
+        wp1 = ref(p1)
+        p1.listen()
+        wtp1 = ref(p1.transport)
+        p2 = NoMediaSimpleCallsParty(aor=b'bob@biloxi.com')
+        wtp2 = ref(p2.transport)
+        self.assertIs(wtp1(), wtp2())
+        self.assertIsNotNone(wtp1())
+
+        invD = p2.invite(p1)
+        w_inv = ref(invD)
+        WaitFor(lambda: len(wp1().inCallDialogs) > 0)
+
+        self.assertIsNotNone(w_inv())
+        self.assertIs(w_inv(), invD)
+
+        wp1 = ref(p1)
+        wp2 = ref(p2)
+        del p1
+        del p2
+        del invD
+        gc.collect()
+        self.assertIsNone(wp1())
+        self.assertIsNone(wp2())
+        self.assertIsNone(w_inv())
+
+        # The transport should have been deleted, but this is only because we
+        # checked above that the dialog was established. If there was work
+        # going on then we wouldn't have been guaranteed that this would have
+        # been released immediately.
+        WaitFor(lambda: wtp1() is None, 20)
+        self.assertIsNone(wtp1())
+

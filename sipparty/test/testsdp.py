@@ -50,7 +50,7 @@ class TestSDP(SIPPartyTestCase):
         sd.addressType = AddrTypes.IP4
         sd.addMediaDescription(
             mediaType=MediaTypes.audio, port=1815,
-            transProto=b"RTP/AVP", fmts=[0])
+            transProto=b"RTP/AVP", formats=[0])
         sd.mediaDescriptions[0].address = b"media.atlanta.com"
         sd.mediaDescriptions[0].addressType = AddrTypes.IP4
 

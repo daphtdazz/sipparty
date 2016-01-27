@@ -19,9 +19,10 @@ limitations under the License.
 import logging
 from six import (add_metaclass, exec_, next, PY2)
 import unittest
+from weakref import ref
 from ..util import (
     AsciiBytesEnum, bglobals_g, CCPropsFor, class_or_instance_method, Enum,
-    FirstListItemProxy, Singleton, SingletonType, WeakProperty)
+    FirstListItemProxy, Singleton, SingletonType, WeakMethod, WeakProperty)
 from .setup import SIPPartyTestCase
 
 log = logging.getLogger(__name__)
@@ -240,4 +241,23 @@ class SingletonSubclass1(Singleton, metaclass=SingletonType):
         self.assertIs(cc.parent, pp)
         del pp
         self.assertIs(cc.parent, None)
+
+    def test_weak_method(self):
+
+        results = []
+
+        class MyClass(object):
+            def do_something(self):
+                results.append(1)
+
+        myc = MyClass()
+        wmth = WeakMethod(myc, 'do_something')
+        wc = ref(myc)
+        self.assertIsNotNone(wc())
+        wmth()
+        self.assertEqual(results, [1])
+        del myc
+        self.assertIsNone(wc())
+        wmth()
+        self.assertEqual(results, [1])
 

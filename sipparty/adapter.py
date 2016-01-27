@@ -89,6 +89,9 @@ class AdapterProperty(object):
 @add_metaclass(_AdapterMeta)
 class BaseAdapter(Singleton):
 
+    # Tell singleton we want it to remember our references.
+    UseStrongReferences = True
+
     @abstractproperty
     def from_class(self):
         raise AttributeError(

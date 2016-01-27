@@ -50,7 +50,7 @@ class TestTransport(SIPPartyTestCase):
             self.assertIsNotNone(mo)
             self.assertEqual(mo.group(0), ip6_string)
 
-            # Should get the same results with an exact match.
+            # Should get the same results with an exact match.
             mo = IPv6address_only_re.match(ip6_string)
             self.assertIsNotNone(mo)
             self.assertEqual(mo.group(0), ip6_string)

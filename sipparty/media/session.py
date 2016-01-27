@@ -30,7 +30,7 @@ from ..transport import (
     SOCK_FAMILIES)
 from ..util import (abytes, FirstListItemProxy, WeakMethod, WeakProperty)
 from ..vb import (KeyTransformer, ValueBinder)
-from . import adapters
+
 
 log = logging.getLogger(__name__)
 

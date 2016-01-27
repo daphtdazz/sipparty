@@ -26,11 +26,6 @@ log = logging.getLogger(__name__)
 
 class MediaTransport(Transport):
 
-    def __new__(cls, *args, **kwargs):
-        if "singleton" not in kwargs:
-            kwargs["singleton"] = "Media"
-        return super(MediaTransport, cls).__new__(cls, *args, **kwargs)
-
     def __init__(self):
         super(MediaTransport, self).__init__()
         self.byteConsumer = WeakMethod(self, "mediaByteConsumer")

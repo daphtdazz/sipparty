@@ -666,7 +666,7 @@ class ValueBinder(object):
             "from its current %r instance one." % (
                 cn, parent.__class__.__name__, currparent.__class__.__name__))
         if currparent is None:
-            # Else is currparent is parent, so nothing to do.
+            # Else is currparent is parent, so nothing to do.
             self.vb_parent = parent
 
         try:
@@ -678,7 +678,7 @@ class ValueBinder(object):
             self.vb_parent = currparent
             raise
 
-        # Seemed to work. Update dictionary.
+        # Seemed to work. Update dictionary.
         bds[resolvedtopath] = bd
 
         log.detail(

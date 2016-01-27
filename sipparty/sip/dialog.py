@@ -93,9 +93,6 @@ class Dialog(
     # =================== CLASS INTERFACE =====================================
     #
     States = States
-    #vb_dependencies = [
-    #    ("transport", ["sendMessage"])
-    #]
     Transforms = None
 
     #
@@ -136,12 +133,11 @@ class Dialog(
 
         log.debug("Dialog receiving message")
         log.detail("%r", msg)
-
         mtype = msg.type
 
         if mtype in (200,):
             log.debug("ACKing %r message", mtype)
-            self.ackMessage(msg)
+            #self.ackMessage(msg)
 
         def RaiseBadInput(msg=b""):
             raise(UnexpectedInput(
@@ -162,7 +158,7 @@ class Dialog(
             self.remoteTag = rtag
             tp = self.transport
             if tp is not None:
-                self.transport.updateDialogGrouping(self)
+                tp.updateDialogGrouping(self)
 
         if self.contactURI is None:
             cURI = msg.ContactHeader.uri
@@ -182,6 +178,7 @@ class Dialog(
             if attr in self.Inputs:
                 log.debug("Response input found: %d", mtype)
                 return self.hit(attr, msg)
+
             mtype /= 10
 
         RaiseBadInput()
@@ -256,8 +253,7 @@ class Dialog(
                 "request." % (self.__class__.__name__,))
 
         try:
-            tp.sendMessage(
-                req, self.remote_name, self.remote_port)
+            tp.sendMessage(req, self.remote_name, self.remote_port)
         except prot.Incomplete:
             log.error("Incomplete message: %r", req)
             raise
@@ -271,7 +267,6 @@ class Dialog(
         log.debug("Send response type %r.", response)
 
         resp = MessageResponse(response)
-
         self.configureResponse(resp, req)
         vh = req.viaheader
         self.transport.sendMessage(resp, astr(vh.address), vh.port)

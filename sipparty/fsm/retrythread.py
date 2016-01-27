@@ -105,7 +105,7 @@ class RetryThread(threading.Thread):
         weak reference in Action.
         """
         super(RetryThread, self).__init__(**kwargs)
-        log.debug("RetryThread.__init__")
+        log.debug("%s.__init__ %s", self.__class__.__name__, self.name)
         self._rthr_action = action
         self._rthr_cancelled = False
         self._rthr_retryTimes = []
@@ -282,7 +282,7 @@ class RetryThread(threading.Thread):
         self._rthr_triggerSpin()
 
     def cancel(self):
-        log.debug("Cancel retrythread")
+        log.debug("Cancel retrythread %s", self.name)
         self._rthr_cancelled = True
         self._rthr_triggerSpin()
 
@@ -290,6 +290,7 @@ class RetryThread(threading.Thread):
     # =================== MAGIC METHODS =======================================
     #
     def __del__(self):
+        log.info('__del__ %s %s', self.name, self.__class__.__name__)
         for sock in (self._rthr_trigger_run_read_fd, self._rthr_triggerRunFD):
             sock.close()
 

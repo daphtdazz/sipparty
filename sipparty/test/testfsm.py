@@ -23,6 +23,7 @@ import sys
 import threading
 from time import sleep
 import timeit
+from weakref import ref
 from ..fsm import (
     AsyncFSM, FSM, FSMTimeout, InitialStateKey, LockedFSM, RetryThread, Timer,
     TransitionKeys,
@@ -389,9 +390,9 @@ class TestFSM(SIPPartyTestCase):
 
         badFSM = FSMTestBadSubclass()
         badFSM.hit(badFSM.Inputs.go)
-        # We get a ValueError when we check the timer because the
+        # We get an error when we check the timer because the
         # 'not-a-method' method is not a method!
-        self.assertRaises(ValueError, badFSM.checkTimers)
+        self.assertRaises(AttributeError, badFSM.checkTimers)
 
     def testFDSources(self):
 
@@ -512,3 +513,38 @@ class TestFSM(SIPPartyTestCase):
             self.assertRaises(UnexpectedInput,
                               lambda: fsm1.hit("bad input"))
         log.info("END EXPECT EXCEPTION IN ASYNC MODE")
+
+    def test_lifetimes(self):
+
+        start_calls = []
+
+        class TFSM(AsyncFSM):
+            FSMDefinitions = {
+                InitialStateKey: {
+                    "input": {
+                        TransitionKeys.NewState: "in progress 1",
+                        TransitionKeys.Action: lambda: start_calls.append(1)
+                    },
+                },
+                "in progress 1": {
+                    "input": {
+                        TransitionKeys.NewState: "in progress 2",
+                    }
+                },
+                'in progress 2': {
+
+                }
+            }
+
+        self.pushLogLevel('retrythread', logging.DEBUG)
+
+        for level in range(2):
+            del start_calls[:]
+            afsm1 = TFSM()
+            wptr = ref(afsm1)
+            if level > 0:
+                afsm1.hit('input')
+                self.assertEqual(start_calls, [1])
+
+            del afsm1
+            self.assertIsNone(wptr())

@@ -256,7 +256,6 @@ class Parser(object):
             mo = cls.SimpleParse(string)
 
             if Parser.Constructor in pi:
-
                 constructor_tuple = pi[Parser.Constructor]
                 log.debug("  constructor: %r.", constructor_tuple)
 
@@ -286,6 +285,8 @@ class Parser(object):
             string = string[len(mo.group(0)):]
 
         log.debug("Parse result %r", result)
+        #if getattr(cls, 'type', None) == 'From' and string[:10] == b'<sip:bob@b':
+        #    assert 0, (result.__class__, result,)
         return result
 
     def parse(self, string, mo=None):

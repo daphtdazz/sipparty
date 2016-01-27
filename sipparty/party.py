@@ -191,7 +191,8 @@ class Party(
             fromURI=self.uri, toURI=toURI, contactURI=self.contactURI,
             transport=self.transport)
         invD.localSession = self.newSession()
-        invD.localSession.listen()
+        if invD.localSession is not None:
+            invD.localSession.listen()
 
         ids = self._pt_inviteDialogs
         if toURI not in ids:

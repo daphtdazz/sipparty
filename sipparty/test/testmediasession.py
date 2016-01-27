@@ -16,9 +16,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+import gc
 import logging
 from six import (binary_type as bytes)
 from socket import AF_INET6
+from weakref import ref
 from ..media.session import (MediaSession, NoMediaSessions, Session)
 from ..sdp import SDPIncomplete
 from ..sdp.sdpsyntax import (
@@ -83,11 +85,12 @@ class TestSession(SIPPartyTestCase):
     def test_media_session_parent(self):
 
         ss = Session()
+        ss2 = Session()
         ms = MediaSession()
 
         log.info('Show that we can\'t add a media session and create one.')
         with self.assertRaises(TypeError):
-            ss.addMediaSession(mediaSession=ms, mediaType=MediaTypes.audio)
+            ss2.addMediaSession(mediaSession=ms, mediaType=MediaTypes.audio)
 
         ss.addMediaSession(ms)
         log.info(
@@ -95,7 +98,8 @@ class TestSession(SIPPartyTestCase):
             'parent.')
         self.assertIs(ms.parent_session, ss)
         del ss
-        WaitFor(lambda: ms.parent_session is None)
+        gc.collect()
+        self.assertIsNone(ms.parent_session)
         self.assertIs(ms.parent_session, None)
 
     def test_on_demand_port_allocation(self):
@@ -154,7 +158,6 @@ class TestSession(SIPPartyTestCase):
             b't=0 0\r\n$')
 
         log.info('We can set both still.')
-        self.pushLogLevel('vb', logging.DEBUG)
         ms.address = '1.2.3.4'
         ms.sock_family = None
 

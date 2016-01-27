@@ -545,39 +545,50 @@ def OnlyWhenLocked(method):
     """This decorator sees if the owner of method has a _lock attribute, and
     if so locks it before calling method, releasing it after."""
 
+    log = logging.getLogger('OnlyWhenLocked')
     def maybeGetLock(self, *args, **kwargs):
+
+        obj_name = (
+            getattr(self, 'name', None) or
+            getattr(self, '_fsm_name', None) or
+            self)
+
         if not hasattr(self, "_lock") or not self._lock:
-            log.debug("No locking in this object.")
+            log.debug(
+                "No locking in %s instance %s.", self.__class__.__name__,
+                obj_name)
             return method(self, *args, **kwargs)
 
         if not hasattr(self, "_lock_holdingThread"):
             raise AttributeError(
-                "Object %r of type %r uses OnlyWhenLocked but has no "
+                "%s instance % uses OnlyWhenLocked but has no "
                 "attribute _lock_holdingThread which is required." %
-                (self, self.__class__))
+                (self.__class__.__name__, obj_name))
 
         cthr = threading.currentThread()
         hthr = self._lock_holdingThread
 
         if cthr is hthr:
             raise RuntimeError(
-                "Thread %r attempting to get FSM lock when it already has "
-                "it." % cthr)
+                "Thread %s attempting to get FSM lock when it already has "
+                "it." % cthr.name)
 
-        log.debug("Thread %r get FSM %r lock for %r (held by %r).",
-                  cthr, self, method, hthr)
+        log.debug("Thread %s get lock for %s instance (held by %s).",
+                  cthr.name, self.__class__.__name__,
+                  hthr.name if hthr is not None else None)
 
         with self._lock:
-            log.debug("Thread %r got FSM %r lock for %r.",
-                      cthr, self, method)
+            log.debug("Thread %s GOT lock for %s.%s",
+                      cthr.name, obj_name, method.__name__)
             self._lock_holdingThread = cthr
             try:
                 result = method(self, *args, **kwargs)
             finally:
                 self._lock_holdingThread = None
 
-        log.debug("Thread %r released FSM %r lock.",
-                  cthr, self)
+        log.debug(
+            "Thread %s RELEASED lock for %s.%s", cthr.name, obj_name,
+            method.__name__)
         return result
 
     return maybeGetLock
@@ -649,6 +660,7 @@ class DerivedProperty(object):
                 if not checker(value):
                     raise ValueError()
             except (ValueError, TypeError) as exc:
+                log.error(exc.__class__.__name__)
                 exc_type = type(exc)
                 exc_class = (
                     ValueError if issubclass(exc_type, ValueError) else
@@ -773,7 +785,7 @@ class SingletonType(type):
 
         # Create a wrapper for the init. This is to prevent the init of the
         # underlying class from being called twice.
-        def singleton_init_wrapper(self, *args, **kwargs):
+        def singleton_init_wrapper(self, singleton=None, *args, **kwargs):
 
             assert len(new_module_name) == 1
             singleton_subclass = meta.__instance_names[new_module_name[0]]
@@ -860,40 +872,43 @@ class SingletonType(type):
 class Singleton(object):
     """Classes inheriting from this will only have one instance."""
 
-    _St_SharedInstances = WeakValueDictionary()
+    UseStrongReferences = False
+
+    _St_SharedInstances = None
     _St_SingletonNameKey = 'singleton'
 
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls, singleton=None, *args, **kwargs):
         log.detail("Singleton.__new__(%r, %r)", args, kwargs)
         skey = cls._St_SingletonNameKey
-        if skey in kwargs:
-            name = kwargs[skey]
-            del kwargs[skey]
+        if singleton is not None:
+            name = singleton
         else:
             name = cls.__name__
 
         log.debug("Get singleton for class %r, name %r", cls, name)
-        existing_inst = cls._St_SharedInstances.get(name, None)
+
+        insts = cls._St_SharedInstances
+        if insts is None:
+            if cls.UseStrongReferences:
+                insts = {}
+            else:
+                insts = WeakValueDictionary()
+            cls._St_SharedInstances = insts
+
+        existing_inst = insts.get(name, None)
 
         if existing_inst is not None:
-            log.debug("  Return Existing instance")
-            log.detail("  %r", existing_inst)
+            log.debug("Return Existing instance")
+            log.detail("%r", existing_inst)
             return existing_inst
 
-        log.debug("  New instance required args:%r, kwargs:%r", args, kwargs)
-        ns = super(Singleton, cls).__new__(cls, *args, **kwargs)
-        cls._St_SharedInstances[name] = ns
-
-        return ns
-
-    def __init__(self, *args, **kwargs):
-        assert(not hasattr(self, 'singleton_inited'))
-
-        if self._St_SingletonNameKey in kwargs:
-            del kwargs[self._St_SingletonNameKey]
-
-        log.debug("Init Singleton args:%r, kwargs:%r", args, kwargs)
-        super(Singleton, self).__init__(*args, **kwargs)
+        log.info(
+            "New instance called %s required args:%r, kwargs:%r", name, args,
+            kwargs)
+        ni = super(Singleton, cls).__new__(cls, *args, **kwargs)
+        insts[name] = ni
+        ni.singleton_name = name
+        return ni
 
 
 @add_metaclass(ABCMeta)

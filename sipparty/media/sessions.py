@@ -18,6 +18,7 @@ limitations under the License.
 """
 from ..sdp.sdpsyntax import (MediaTypes, MediaProtocols)
 from ..media.session import (Session, MediaSession)
+from ..util import astr
 
 
 class SingleRTPSession(Session):
@@ -31,5 +32,5 @@ class RTPPCMUMediaSession(MediaSession):
     def __init__(self, **kwargs):
         super(RTPPCMUMediaSession, self).__init__(**kwargs)
         self.mediaType = MediaTypes.audio
-        self.transProto = MediaProtocols.RTP_AVP
+        self.transProto = astr(MediaProtocols.RTP_AVP)
         self.fmts = [0]

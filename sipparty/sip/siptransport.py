@@ -19,6 +19,7 @@ limitations under the License.
 import logging
 from six import (binary_type as bytes)
 from socket import (AF_INET, SOCK_DGRAM)
+import sys
 from weakref import (WeakValueDictionary)
 from ..parse import ParseError
 from ..transport import (
@@ -83,7 +84,7 @@ class SIPTransport(Transport):
         """Register a handler to call """
 
         hdlrs = self._sptr_dialogHandlers
-        if handler in hdlrs:
+        if aor in hdlrs:
             raise KeyError(
                 "Handler already registered for AOR %r" % bytes(aor))
 
@@ -121,7 +122,6 @@ class SIPTransport(Transport):
 
         if not vh.port:
             vh.port = sp.local_address.port
-
         sp.send(bytes(msg))
 
     def fixTargetAddress(self, addr):
@@ -161,12 +161,12 @@ class SIPTransport(Transport):
         except ParseError as pe:
             log.error("Parse errror %s parsing message.", pe)
             return 0
-
         try:
             self.consumeMessage(msg)
         except Exception:
             log.exception(
                 "Consuming %r message raised exception.", msg)
+            #sys.exc_clear()
 
         return msg.parsedBytes
 
@@ -199,7 +199,8 @@ class SIPTransport(Transport):
             log.info("Message for unregistered AOR %r discarded.", toAOR)
             return
 
-        hdlrs[toAOR](msg)
+        hdlr = hdlrs[toAOR]
+        hdlr(msg)
 
     def consumeInDialogMessage(self, msg):
         estDs = self.establishedDialogs
@@ -220,6 +221,8 @@ class SIPTransport(Transport):
             log.debug("Found established dialog for %r", did)
             return estDs[did].receiveMessage(msg)
 
+        # Couldn't find an established dialog, so perhaps this is the
+        # establishing response for a provisional dialog we started before.
         pdid = prot.ProvisionalDialogIDFromEstablishedID(did)
         provDs = self.provisionalDialogs
         log.detail("Is provisional dialog %r in %r?", pdid, provDs)
@@ -267,16 +270,3 @@ class SIPTransport(Transport):
                 del eds[did]
         except AttributeError:
             pass
-
-    #
-    # =================== MAGIC METHODS =======================================
-    #
-    def __new__(cls, *args, **kwargs):
-        if "singleton" not in kwargs:
-            kwargs["singleton"] = "SIPTransport"
-        inst = super(SIPTransport, cls).__new__(cls, *args, **kwargs)
-        return inst
-
-    #
-    # =================== INTERNAL METHODS ====================================
-    #

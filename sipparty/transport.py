@@ -27,7 +27,8 @@ from socket import (
     AF_INET, AF_INET6, getaddrinfo, gethostname, SHUT_RDWR,
     socket as socket_class,
     SOCK_STREAM, SOCK_DGRAM)
-from weakref import ref
+import traceback
+from weakref import (ref, WeakValueDictionary)
 from .deepclass import (dck, DeepClass)
 from .fsm import (RetryThread)
 from .vb import ValueBinder
@@ -64,7 +65,7 @@ col_hex4 = b':%(hex4)s' % bglobals()
 col_hex4_gp = b'(?:%(col_hex4)s)' % bglobals()
 IPv6address = (
     # May start with double colon such as ::, ::1, ::fe80:1:2 etc.
-    b'(?:::(?:%(hex4)s%(col_hex4_gp)s{,6})?|'  # Net one '('...
+    b'(?:::(?:%(hex4)s%(col_hex4_gp)s{,6})?|'  # Net one '('...
     # Or there is a double colon somewhere inside... but we want to make sure
     # we match the double colon immediately, without the regex engine having to
     # track back, so do each option explicitly.
@@ -187,6 +188,10 @@ def default_hostname():
 
 
 def IsValidPortNum(port):
+    if not isinstance(port, Integral):
+        # We only have to do this for python 2.7, python 3 doesn't allow
+        # comparison of arbitrary objects with numbers.
+        raise TypeError('Port %r is not Integral', port)
     return 0 < port <= 0xffff
 
 
@@ -496,13 +501,16 @@ class SocketProxy(
                 x, ListenDescription)},
             'socket': {dck.check: lambda x:
                 isinstance(x, socket_class) or hasattr(x, 'socket')},
-            # dc(socket_description, data)
             'data_callback': {dck.check: lambda x: isinstance(x, Callable)},
             'is_connected': {dck.gen: lambda: False},
             'transport': {dck.descriptor: WeakProperty}
         }), Retainable):
 
+    socket_proxies = []
+    socket_info = {}
+
     def send(self, data):
+
         sck = self.socket
 
         def log_send(sname, pname, data):
@@ -626,7 +634,8 @@ class Transport(Singleton):
     def __init__(self):
         super(Transport, self).__init__()
         self._tp_byteConsumer = None
-        self._tp_retryThread = RetryThread()
+        self._tp_retryThread = RetryThread(
+            name=self.singleton_name + '.retryThread')
         self._tp_retryThread.start()
 
         # Series of dictionaries keyed by (in order):
@@ -638,9 +647,9 @@ class Transport(Singleton):
         self._tp_connected_sockets = {}
 
         # Keyed by (lAddr, rAddr) independent of type.
-        self._tp_connBuffers = {}
+        #self._tp_connBuffers = {}
         # Keyed by local address tuple.
-        self._tp_dGramSockets = {}
+        #self._tp_dGramSockets = {}
 
     # bind_listen_address
     def listen_for_me(self, callback, sock_type=None, sock_family=None,
@@ -826,22 +835,14 @@ class Transport(Singleton):
         raise(UnresolvableAddress(address=host, port=port))
 
     #
-    # =================== SOCKET INTERFACE ====================================
-    #
-    def new_connection(self, connection_proxy):
-        assert 0
-        callback
-
-    #
     # =================== MAGIC METHODS =======================================
     #
-    def __new__(cls, *args, **kwargs):
-        if "singleton" not in kwargs:
-            kwargs["singleton"] = "Transport"
-        return super(Transport, cls).__new__(cls, *args, **kwargs)
-
     def __del__(self):
+        log.debug('__del__ %s instance', self.__class__.__name__)
         self._tp_retryThread.cancel()
+
+        self._tp_close_all()
+
         sp = super(Transport, self)
         if hasattr(sp, "__del__"):
             sp.__del__()
@@ -907,6 +908,7 @@ class Transport(Singleton):
 
             return None, None
 
+        #assert listen_address.sock_family is not None, listen_address
         rtup = (
             (listen_address.sock_family, lambda _dict, key: (key, {})),
             (listen_address.sock_type, lambda _dict, key: (key, {})),
@@ -937,7 +939,6 @@ class Transport(Singleton):
         next_dict = root_dict
         sentinel = cls._yield_sentinel
         for key, finder in lookups:
-            assert not isinstance(key, bytes)
             log.debug('Find next key %r from keys %r', key, next_dict.keys())
             obj = next_dict.get(key, sentinel)
             if obj is sentinel:
@@ -952,18 +953,24 @@ class Transport(Singleton):
             next_dict = obj
 
     @classmethod
-    def yield_vals(cls, root_dict):
+    def yield_vals(cls, root_dict, path_so_far=None):
+        """Yields all vals in the dictionary passed in with the
+        """
+        if path_so_far is None:
+            path_so_far = []
 
         for key, val in iteritems(root_dict):
             if val is None:
                 continue
 
+            path_so_far.append((key, val))
             if isinstance(val, dict):
-                for sock in cls.yield_vals(val):
-                    yield sock
+                for path in cls.yield_vals(val, path_so_far):
+                    yield path
                 continue
-
-            yield val
+            else:
+                yield tuple(path_so_far)
+            path_so_far.pop()
 
     def fix_sock_family(self, sock_family):
         #if sock_family is None:
@@ -985,9 +992,24 @@ class Transport(Singleton):
 
         return sock_type
 
+    def _tp_close_all(self):
+
+        log.info('Closing all sockets.')
+        for sock_dicts in (
+                self._tp_listen_sockets, self._tp_connected_sockets):
+            for path in self.yield_vals(sock_dicts):
+                sock = path[-1]
+                assert sock is not None
+
     #
     # =================== OLD DEPRECATED METHOD ===============================
     #
+    #
+    # =================== SOCKET INTERFACE ====================================
+    #
+    def new_connection(self, connection_proxy):
+        assert 0
+        callback
 
     def addDgramSocket(self, sck):
         assert 0
