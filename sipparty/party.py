@@ -21,9 +21,9 @@ from six import (binary_type as bytes, itervalues)
 from .deepclass import (DeepClass, dck)
 from .parse import (ParsedPropertyOfClass)
 from .sip import (
-    SIPTransport, DNameURI, URI, Host, Request, Message, defaults)
+    SIPTransport, DNameURI, URI, Host, Incomplete, Request, Message, defaults)
 from .transport import (IPaddress_re, IsSpecialName)
-from .util import (abytes, WeakMethod)
+from .util import (abytes,  WeakMethod)
 from .vb import ValueBinder
 
 log = logging.getLogger(__name__)
@@ -66,7 +66,7 @@ class Party(
                     underlying if underlying is not None else
                     self.contactURI.address)
             },
-            "transport": {dck.gen: lambda: None}
+            "transport": {dck.gen: SIPTransport}
         }),
         ValueBinder):
     """A party in a sip call, aka an endpoint, caller or callee etc.
@@ -127,11 +127,6 @@ class Party(
         self._pt_inviteDialogs = {}
         self._pt_listenAddress = None
 
-        if self.transport is None:
-            log.debug("Create new transport for")
-            tp = SIPTransport()
-            self.transport = tp
-
         if self.mediaAddress is None:
             self.mediaAddress = self.DefaultMediaAddress
 
@@ -139,15 +134,24 @@ class Party(
 
     def listen(self, **kwargs):
 
-        cURI_host = self.contactURI.host
+        aor = self.uri.aor
+        try:
+            bytes(aor)
+        except Incomplete as exc:
+            exc.args = (
+                "Party instance can't listen as it has an incomplete uri",
+            )
+            raise
+
         tp = self.transport
+        tp.addDialogHandlerForAOR(
+            self.uri.aor, WeakMethod(self, 'newDialogHandler'))
+
+        cURI_host = self.contactURI.host
         l_desc = tp.listen_for_me(**kwargs)
 
         cURI_host.address = abytes(l_desc.name)
         cURI_host.port = l_desc.port
-
-        tp.addDialogHandlerForAOR(
-            self.uri.aor, WeakMethod(self, "newDialogHandler"))
 
     def invite(self, target, proxy=None, media_session=None):
 

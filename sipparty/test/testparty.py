@@ -90,9 +90,10 @@ class TestParty(SIPPartyTestCase):
         log.info('..and p2')
         p2 = BasicParty(aor=b'bob@biloxi.com')
 
+        self.assertIs(p1.transport, p2.transport)
+
         log.info('p1 listens')
         p1.listen(name=contact_name, sock_type=sock_type)
-
         log.info('p2 invites p1')
         invD = p2.invite(p1)
 
@@ -129,17 +130,29 @@ class TestParty(SIPPartyTestCase):
 
         return
 
+    def test_double_listen(self):
+        p1 = NoMediaSimpleCallsParty()
+        self.assertRaises(Incomplete, p1.listen)
+
+        p1.uri = 'sip:p1@test.com'
+        p1.listen()
+        self.assertEqual(p1.contactURI.port, 5060)
+
+        p2 = NoMediaSimpleCallsParty()
+        p2.uri = 'sip:p2@test.com'
+        p2.listen()
+        self.assertEqual(p1.contactURI.port, 5060)
+
     def test_no_media_party(self):
 
         log.info('Create two new no-media parties.')
-        p1 = NoMediaSimpleCallsParty()
-
+        p1 = NoMediaSimpleCallsParty(uri='sip:p1@test.com')
         p1.listen()
         self.assertTrue(IsValidPortNum(p1.contactURI.port))
 
     def test_aor_bindings(self):
 
-        p1 = NoMediaSimpleCallsParty()
+        p1 = NoMediaSimpleCallsParty(uri='sip:p1@test.com')
         p2 = NoMediaSimpleCallsParty()
 
         self.assertRaises(ValueError, p1.invite, p2)
@@ -152,9 +165,6 @@ class TestParty(SIPPartyTestCase):
 
         log.info('Set an AOR on p2')
         p2.aor = 'p2@test.com'
-        self.assertRaises(Incomplete, p2.invite, p1)
-
-        p1.aor = 'p1@test.com'
         inv1 = p2.invite(p1)
         inv2 = p2.invite(p1)
 
@@ -201,7 +211,7 @@ class TestPartyWeakReferences(SIPPartyTestCase):
         self.assertIsNone(w_tp())
 
         log.info('Check listening party deletes cleanly')
-        p1 = NoMediaSimpleCallsParty()
+        p1 = NoMediaSimpleCallsParty(aor='p1@test.com')
         p1.listen()
         w_p1 = ref(p1)
         w_tp = ref(p1.transport)
@@ -221,19 +231,5 @@ class TestPartyWeakReferences(SIPPartyTestCase):
         self.assertIs(self.wtp(), wtp2())
         self.assertIsNotNone(self.wtp())
 
-        invD = p2.invite(p1)
-        w_inv = ref(invD)
+        p2.invite(p1)
         WaitFor(lambda: len(wp1().inCallDialogs) > 0)
-
-        self.assertIsNotNone(w_inv())
-        self.assertIs(w_inv(), invD)
-
-        wp1 = ref(p1)
-        wp2 = ref(p2)
-        del p1
-        del p2
-        del invD
-        gc.collect()
-        self.assertIsNone(wp1())
-        self.assertIsNone(wp2())
-        WaitFor(lambda: w_inv() is None)

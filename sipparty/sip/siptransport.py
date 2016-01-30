@@ -65,7 +65,11 @@ class SIPTransport(Transport):
         self._sptr_messages = []
         self._sptr_provisionalDialogs = WeakValueDictionary()
         self._sptr_establishedDialogs = WeakValueDictionary()
-        # Dialog handler is keyed by AOR.
+
+        # Dialog handler is keyed by AOR. This can't be a WeakValueDictionary
+        # because generally methods are transient objects which will get
+        # released if we don't store strong references to them. Therefore if
+        # you want a weak reference, use WeakMethod.
         self._sptr_dialogHandlers = {}
 
     def listen_for_me(self, **kwargs):
@@ -89,6 +93,8 @@ class SIPTransport(Transport):
 
         log.debug("Adding handler %r for AOR %r", handler, aor)
         hdlrs[aor] = handler
+        log.detail('All aors to handle now: %s', ', '.join(
+            [str(key) for key in self._sptr_dialogHandlers.keys()]))
 
     def removeDialogHandlerForAOR(self, aor):
 
@@ -195,7 +201,7 @@ class SIPTransport(Transport):
         toAOR = msg.ToHeader.field.value.uri.aor
         hdlrs = self._sptr_dialogHandlers
 
-        log.debug("Is %r in %r?", toAOR, hdlrs)
+        log.debug("Find handler for %r", toAOR)
         if toAOR not in hdlrs:
             log.info("Message for unregistered AOR %r discarded.", toAOR)
             return
