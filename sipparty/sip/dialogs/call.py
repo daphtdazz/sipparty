@@ -19,6 +19,7 @@ limitations under the License.
 from ...util import Enum
 from ...fsm import (InitialStateKey as InitialState, TransitionKeys)
 from ..dialog import Dialog
+from ..header import ContactHeader
 from ..param import Param
 from ..transform import TransformKeys
 
@@ -97,7 +98,8 @@ class SimpleCall(Dialog):
                 (tfk.Copy, "CseqHeader",),
                 (tfk.Copy, "startline.protocol",),
                 (tfk.Add, "ToHeader.field.parameters.tag",
-                 lambda _: Param.tag())
+                 lambda _: Param.tag()),
+                (tfk.Add, 'ContactHeader', lambda _: ContactHeader())
             ]
         },
         "BYE": {
@@ -107,7 +109,8 @@ class SimpleCall(Dialog):
                 (tfk.Copy, "ViaHeader",),
                 (tfk.Copy, "Call_IdHeader",),
                 (tfk.Copy, "CseqHeader",),
-                (tfk.Copy, "startline.protocol",)
+                (tfk.Copy, "startline.protocol",),
+                (tfk.Add, 'ContactHeader', lambda _: ContactHeader())
             ]
         },
     }

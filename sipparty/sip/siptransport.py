@@ -115,12 +115,12 @@ class SIPTransport(Transport):
             remote_port=port,
             data_callback=WeakMethod(self, 'sipByteConsumer'))
 
-        vh = msg.viaheader
-        if not vh.address:
-            vh.address = abytes(sp.local_address.name)
+        ch = msg.contactheader
+        if not ch.address:
+            ch.address = abytes(sp.local_address.name)
 
-        if not vh.port:
-            vh.port = sp.local_address.port
+        if not ch.port:
+            ch.port = sp.local_address.port
         sp.send(bytes(msg))
 
     def fixTargetAddress(self, addr):
@@ -170,6 +170,9 @@ class SIPTransport(Transport):
 
     def consumeMessage(self, msg):
         self._sptr_messages.append(msg)
+
+        if msg.type == 'ACK':
+            return
 
         if not hasattr(msg.FromHeader.parameters, "tag"):
             log.debug("FromHeader: %r", msg.FromHeader)

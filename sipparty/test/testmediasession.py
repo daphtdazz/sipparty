@@ -35,7 +35,6 @@ class TestSession(SIPPartyTestCase):
 
     def test_basic_session(self):
 
-        self.pushLogLevel('adapter', logging.DEBUG)
         log.info("Create new Session and check it produces SDP when ready.")
         sess = Session(username=b"alice")
         self.assertRaises(SDPIncomplete, sess.sdp)

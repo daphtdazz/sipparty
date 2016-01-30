@@ -181,7 +181,8 @@ class Party(
                 "with a Dialog Type to use!")
 
         invD = InviteDialog(
-            fromURI=self.uri, toURI=toURI, contactURI=self.contactURI,
+            fromURI=self.uri, toURI=toURI,
+            contactURI=self.contactURI,
             transport=self.transport)
         invD.localSession = self.newSession()
         if invD.localSession is not None:

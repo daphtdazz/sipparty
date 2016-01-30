@@ -21,7 +21,6 @@ from six.moves import reduce
 import re
 import logging
 from numbers import (Integral)
-from time import time
 from .. import (util,)
 from ..deepclass import (DeepClass, dck)
 from ..parse import (ParseError,)
@@ -170,7 +169,6 @@ class Message(
 
             message.addHeader(newh)
             used_bytes += bytes_used
-            log.info(time())
 
         # We haven't yet counted the eol eol at the end of the headers.
         used_bytes += 4
@@ -394,7 +392,7 @@ class Message(
             return getattr(super(Message, self), attr)
         except AttributeError:
             raise AttributeError(
-                "{self.__class__.__name__!r} object has no attribute "
+                "{self.__class__.__name__!r} instance has no attribute "
                 "{attr!r}".format(**locals()))
 
     def __setattr__(self, attr, val):
@@ -523,8 +521,7 @@ class ByeMessage(Message):
         ("startline", "ViaHeader.field.parameters.branch.startline"),
         ("FromHeader.field.value.uri.aor.username",
          "ContactHeader.field.value.uri.aor.username"),
-        ("ContactHeader.field.value.uri.aor.host",
-         "ViaHeader.field.host.host"),
+        ("ContactHeader.host", "ViaHeader.host"),
         ("startline.type", "CseqHeader.reqtype")]
 
     mandatoryheaders = [

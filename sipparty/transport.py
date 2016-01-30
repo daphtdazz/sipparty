@@ -24,9 +24,8 @@ import re
 from six import iteritems
 import socket  # TODO: should remove and rely on from socket import ... below.
 from socket import (
-    AF_INET, AF_INET6, getaddrinfo, gethostname, SHUT_RDWR,
-    socket as socket_class,
-    SOCK_STREAM, SOCK_DGRAM)
+    AF_INET, AF_INET6, error as socket_error, getaddrinfo, gethostname,
+    SHUT_RDWR, socket as socket_class, SOCK_STREAM, SOCK_DGRAM)
 from .deepclass import (dck, DeepClass)
 from .fsm import (RetryThread)
 from .vb import ValueBinder
@@ -330,7 +329,7 @@ def GetBoundSocket(family, socktype, address, port_filter=None):
             socketError = None
             break
 
-        except socket.error as _se:
+        except socket_error as _se:
             log.debug("Socket error on %r", bind_addr)
             socketError = _se
             attempts += 1
@@ -527,11 +526,21 @@ class SocketProxy(
         log_send(sck.getsockname(), paddr, data)
         sck.sendto(data, paddr)
 
+    def close(self):
+        sck = self.socket
+        if isinstance(sck, socket_class):
+            try:
+                sck.close()
+            except socket_error as exc:
+                log.warning('Exception closing socket: %s', exc)
+
+        self.socket = None
+
     #
     # =================== CALLBACKS ===========================================
     #
     def socket_selected(self, sock):
-        assert sock is self.socket
+        assert sock is self.socket, (sock, self.socket)
         if sock.type == SOCK_STREAM:
             return self._stream_socket_selected()
         return self._dgram_socket_selected()
@@ -547,8 +556,12 @@ class SocketProxy(
                 try:
                     sck.shutdown(SHUT_RDWR)
                 except:
-                    log.debug('Exception shutting socket.', exc_info=True)
-            sck.close()
+                    log.debug('Exception shutting socket', exc_info=True)
+
+            try:
+                sck.close()
+            except:
+                log.debug('Exception closing socket', exc_info=True)
 
         assert isinstance(SocketProxy, type)
         dtr = getattr(super(SocketProxy, self), '__del__', None)
@@ -775,25 +788,41 @@ class Transport(Singleton):
             return path, lsck
         return path, None
 
-    def release_listen_address(self, listen_address):
-        log.debug('Release %r', listen_address)
-        if not isinstance(listen_address, ListenDescription):
+    def release_listen_address(self, description):
+        log.debug('Release %r', description)
+        if not isinstance(description, ListenDescription):
             raise TypeError(
                 'Cannot release something which is not a ListenDescription: '
-                '%r' % (listen_address,))
+                '%r' % (description,))
 
-        path, lsck = self.find_cached_object(
-            self._tp_listen_sockets,
-            self.convert_listen_description_into_find_tuple(listen_address))
+        if isinstance(description, ConnectedAddressDescription):
+            log.debug('Release connected address')
+            root_dict = self._tp_connected_sockets
+            ftup = self.convert_connected_address_description_into_find_tuple(
+                description)
+        else:
+            log.debug('Release listen address')
+            root_dict = self._tp_listen_sockets
+            ftup = self.convert_listen_description_into_find_tuple(description)
+
+        path, lsck = self.find_cached_object(root_dict, ftup)
         if lsck is None:
             raise KeyError(
-                '%r was not a known ListenDescription.' % (listen_address))
+                '%r was not a known ListenDescription.' % (description))
 
         lsck.release()
         if not lsck.is_retained:
             log.debug('Listen address no longer retained')
             ldict = path[-2][1]
             key = path[-1][0]
+
+            if isinstance(lsck.socket, socket_class):
+                self._tp_retryThread.rmInputFD(lsck.socket)
+            try:
+                lsck.close()
+            except Exception as exc:
+                log.warning(
+                    'Exception closing socket for %s: %s', self, exc)
             del ldict[key]
 
     def resolve_host(self, host, port=None, family=None):
@@ -825,18 +854,31 @@ class Transport(Singleton):
 
         raise(UnresolvableAddress(address=host, port=port))
 
+    def close_all(self):
+        """Last ditch attempt to make sure we don't leave sockets lying around.
+        """
+        log.info('Closing all sockets.')
+        for sock_dicts in (
+                self._tp_listen_sockets, self._tp_connected_sockets):
+            socks = [path[-1][1] for path in self.yield_vals(dict(sock_dicts))]
+            for sock in socks:
+                assert sock is not None
+                self.release_listen_address(sock.local_address)
+
     #
     # =================== MAGIC METHODS =======================================
     #
     def __del__(self):
-        log.debug('__del__ %s instance', self.__class__.__name__)
+
+        log.debug('DELETE %s instance', self.__class__.__name__)
         self._tp_retryThread.cancel()
 
-        self._tp_close_all()
+        self.close_all()
 
         sp = super(Transport, self)
-        if hasattr(sp, "__del__"):
-            sp.__del__()
+        dlr = getattr(sp, '__del__', None)
+        if dlr is not None:
+            dlr()
 
     #
     # =================== INTERNAL METHODS ====================================
@@ -981,12 +1023,3 @@ class Transport(Singleton):
                 "Socket type must be one of %r" % (SOCK_TYPES_NAMES,))
 
         return sock_type
-
-    def _tp_close_all(self):
-
-        log.info('Closing all sockets.')
-        for sock_dicts in (
-                self._tp_listen_sockets, self._tp_connected_sockets):
-            for path in self.yield_vals(sock_dicts):
-                sock = path[-1]
-                assert sock is not None

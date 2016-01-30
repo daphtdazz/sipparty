@@ -24,6 +24,7 @@ from ..media.sessions import SingleRTPSession
 from ..party import (Party)
 from ..parties import (NoMediaSimpleCallsParty)
 from ..sip.dialogs import SimpleCall
+from ..sip.prot import Incomplete
 from ..sip.siptransport import SIPTransport
 from ..transport import (IsValidPortNum, NameLoopbackAddress)
 from ..util import (abytes, WaitFor)
@@ -49,13 +50,12 @@ class TestParty(SIPPartyTestCase):
 
     def setUp(self):
         self.tp = SIPTransport()
+        self.wtp = ref(self.tp)
 
     def tearDown(self):
         log.info('Delete transport')
-        wtp = ref(self.tp)
         del self.tp
-        gc.collect()
-        WaitFor(lambda: wtp() is None)
+        WaitFor(lambda: gc.collect() == 0 and self.wtp() is None, 2)
         log.info('Transport deleted')
 
     def testBasicPartyTCP(self):
@@ -69,10 +69,6 @@ class TestParty(SIPPartyTestCase):
         self.subTestBasicParty(SOCK_DGRAM, '::1')
 
     def subTestBasicParty(self, sock_type, contact_name):
-
-        self.pushLogLevel('retrythread', logging.DEBUG)
-        self.pushLogLevel('transport', logging.DEBUG)
-        self.pushLogLevel('util', logging.INFO)
 
         assert sock_type == SOCK_DGRAM
 
@@ -101,8 +97,6 @@ class TestParty(SIPPartyTestCase):
         invD = p2.invite(p1)
 
         WaitFor(lambda: invD.state == invD.States.InDialog, 1)
-
-        return
 
         self.assertEqual(len(p1.inCallDialogs), 1)
         self.assertEqual(len(p2.inCallDialogs), 1)
@@ -143,10 +137,40 @@ class TestParty(SIPPartyTestCase):
         p1.listen()
         self.assertTrue(IsValidPortNum(p1.contactURI.port))
 
+    def test_aor_bindings(self):
+
+        p1 = NoMediaSimpleCallsParty()
+        p2 = NoMediaSimpleCallsParty()
+
+        self.assertRaises(ValueError, p1.invite, p2)
+
+        p1.listen()
+
+        log.info('Incomplete raised, because we don\'t have an AOR yet.')
+
+        self.assertRaises(Incomplete, p2.invite, p1)
+
+        log.info('Set an AOR on p2')
+        p2.aor = 'p2@test.com'
+        self.assertRaises(Incomplete, p2.invite, p1)
+
+        p1.aor = 'p1@test.com'
+        inv1 = p2.invite(p1)
+        inv2 = p2.invite(p1)
+
+        del inv1
+        del inv2
+
 
 class TestPartyWeakReferences(SIPPartyTestCase):
     def test_weak_references(self):
-        self.pushLogLevel('retrythread', logging.DEBUG)
+        self.sub_test_weak_reference()
+
+        tp = self.wtp()
+        if tp:
+            tp.close_all()
+
+    def sub_test_weak_reference(self):
         owllog = logging.getLogger('OnlyWhenLocked')
         owllog.setLevel(logging.DEBUG)
 
@@ -191,11 +215,11 @@ class TestPartyWeakReferences(SIPPartyTestCase):
         p1 = NoMediaSimpleCallsParty(aor=b'alice@atlanta.com')
         wp1 = ref(p1)
         p1.listen()
-        wtp1 = ref(p1.transport)
+        self.wtp = ref(p1.transport)
         p2 = NoMediaSimpleCallsParty(aor=b'bob@biloxi.com')
         wtp2 = ref(p2.transport)
-        self.assertIs(wtp1(), wtp2())
-        self.assertIsNotNone(wtp1())
+        self.assertIs(self.wtp(), wtp2())
+        self.assertIsNotNone(self.wtp())
 
         invD = p2.invite(p1)
         w_inv = ref(invD)
@@ -213,10 +237,3 @@ class TestPartyWeakReferences(SIPPartyTestCase):
         self.assertIsNone(wp1())
         self.assertIsNone(wp2())
         WaitFor(lambda: w_inv() is None)
-
-        # The transport should have been deleted, but this is only because we
-        # checked above that the dialog was established. If there was work
-        # going on then we wouldn't have been guaranteed that this would have
-        # been released immediately.
-        WaitFor(lambda: wtp1() is None, 20)
-        self.assertIsNone(wtp1())
