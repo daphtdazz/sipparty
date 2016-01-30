@@ -19,6 +19,7 @@ limitations under the License.
 """
 from collections import Callable
 from contextlib import contextmanager
+from copy import deepcopy
 import logging
 from six import (iteritems, iterkeys)
 from .util import (Enum, DerivedProperty)
@@ -55,6 +56,9 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
     """Creates a deep class type which
     """
 
+    def _in_repr_attr_name():
+        return '_'.join(('', topLevelPrepend, 'in_repr'))
+
     class DeepClass(object):
 
         for __dc_attr_name, __dc_attr_desc_gen in iteritems(
@@ -80,7 +84,7 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
             # dictionary.
             topLevelAttrArgs = {}
             sd = self.__dict__
-            sd['_dc_in_repr'] = False
+            sd[_in_repr_attr_name()] = False
             for tlName in iterkeys(topLevelAttributeDescs):
                 sd[topLevelPrepend + tlName] = None
                 topLevelAttrArgs[tlName] = [None, {}]
@@ -249,12 +253,15 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
 
         @contextmanager
         def _dc_enter_repr(self):
-            self._dc_in_repr = True
-            yield
-            self._dc_in_repr = False
+            irat = _in_repr_attr_name()
+            setattr(self, irat, True)
+            try:
+                yield
+            finally:
+                setattr(self, irat, False)
 
         def __repr__(self):
-            if self._dc_in_repr:
+            if getattr(self, _in_repr_attr_name()):
                 return '<DC %x>' % id(self)
 
             with self._dc_enter_repr():
@@ -267,5 +274,14 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
                         for sattr in super(DeepClass, self)._dc_kvReprGen()])
 
             return("%s(%s)" % (self.__class__.__name__, ", ".join(myattrs)))
+
+        def __deepcopy__(self, memo):
+
+            cls = type(self)
+            kwargs = {
+                attr: deepcopy(getattr(self, attr))
+                for attr in topLevelAttributeDescs}
+            log.debug('deepcopy %s instance: %r', cls.__name__, kwargs)
+            return cls(**kwargs)
 
     return DeepClass

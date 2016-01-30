@@ -105,6 +105,7 @@ class FieldsBasedHeader(
                 "based header." % (self.__class__.__name__,))
 
         flds = fdc.Parse(data)
+        log.debug('Parsed fields: %r', flds)
 
         if not isinstance(flds, list):
             raise ValueError(
@@ -132,7 +133,10 @@ class FieldsBasedHeader(
                     yield bs
 
         except Incomplete as exc:
-            exc.args += ('Header type %r' % self.__class__.__name__,)
+            exc.args = (
+                (exc.args[0] + '; Header type %r' % self.__class__.__name__,) +
+                exc.args[1:])
+
             raise
 
 
@@ -168,7 +172,7 @@ class ContactHeader(
                 dck.check: lambda x: x is True or x is False,
                 dck.gen: lambda: False},
 
-            }),
+            }, recurse_repr=True),
         DNameURIHeader):
     """ABNF from RFC3261:
     Contact        =  ("Contact" / "m" ) HCOLON
@@ -198,10 +202,13 @@ class ContactHeader(
     }
 
     def parsecust(self, string, mo):
+        log.debug('%s instance parsecust %r', self.__class__.__name__, string)
         if self.isStar:
+            log.debug('is_star')
             return
 
-        return super(ContactHeader, self).parsecust(string, mo)
+        super(ContactHeader, self).parsecust(string, mo)
+        log.debug('%s instance: %r', self.__class__.__name__, self)
 
     def bytesGen(self):
         log.debug("bytes(ContactHeader)")

@@ -530,8 +530,6 @@ class TestFSM(SIPPartyTestCase):
                 }
             }
 
-        self.pushLogLevel('retrythread', logging.DEBUG)
-
         for level in range(2):
             del start_calls[:]
             afsm1 = TFSM()

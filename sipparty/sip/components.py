@@ -148,14 +148,18 @@ class AOR(
     def __bytes__(self):
 
         host = self.host
-        if not host:
-            raise Incomplete("AOR %r does not have a host." % self)
+        if host is None:
+            raise Incomplete("AOR %r does not have a host" % self)
+
+        host_bytes = bytes(host)
+        if len(host_bytes) == 0:
+            raise Incomplete("AOR %r has a zero-length host" % self)
 
         uname = self.username
         if uname:
-            return b"%s@%s" % (uname, host)
+            return b"%s@%s" % (uname, host_bytes)
 
-        return bytes(host)
+        return host_bytes
 
     def tupleRepr(self):
         return (self.username, self.host)

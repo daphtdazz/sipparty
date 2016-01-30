@@ -103,12 +103,6 @@ class TestProtocol(SIPPartyTestCase):
 
     def testParse(self):
 
-        # self.pushLogLevel("header", logging.DEBUG)
-        # self.pushLogLevel("message", logging.DEBUG)
-        # self.pushLogLevel("parse", logging.DETAIL)
-        # self.pushLogLevel('param', logging.DETAIL)
-        # self.pushLogLevel('util', logging.DETAIL)
-
         invite = Message.invite()
 
         self.assertRaises(Incomplete, lambda: bytes(invite))
@@ -116,13 +110,11 @@ class TestProtocol(SIPPartyTestCase):
         # Check the bindings were set up correctly: the Request URI should be
         # the same object as the To URI.
         self.assertIsNotNone(invite.startline.uri)
-        self.assertTrue(invite.startline.uri is invite.toheader.uri)
+        self.assertEqual(invite.startline.uri, invite.toheader.uri)
         nuri = URI()
         log.info("Set startline URI to something new.")
         invite.startline.uri = nuri
-        self.assertTrue(
-            invite.startline.uri is invite.toheader.uri, (
-                id(invite.startline.uri), id(invite.toheader.uri)))
+        self.assertEqual(invite.startline.uri, invite.toheader.uri)
         # In python3 you can't use strings for these.
         if not PY2:
             self.assertRaises(
@@ -232,8 +224,6 @@ class TestProtocol(SIPPartyTestCase):
                 self.assertEqual(exp, bytes(cp))
 
     def testMessageProperties(self):
-        # self.pushLogLevel("vb", logging.DETAIL)
-        # self.pushLogLevel("message", logging.DETAIL)
         inv = Message.invite()
         inv.bodies = [Body()]
         self.assertTrue(hasattr(inv, "Content_TypeHeader"))

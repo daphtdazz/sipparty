@@ -31,8 +31,6 @@ class TestHeaders(SIPPartyTestCase):
 
     def testContactHeaders(self):
 
-        # self.pushLogLevel("header", logging.DEBUG)
-
         ch = Header.contact()
 
         for nonbool in (1, 2, "string", 0):
@@ -67,7 +65,11 @@ class TestHeaders(SIPPartyTestCase):
         pvb.bind("hostaddr", "ch.address")
         pvb.bind("ch.address", "hostaddr2")
 
-        pvb.ch = Header.contact()
+        ch = Header.contact()
+        assert not getattr(ch, '__ctcth__in_repr')
+        pvb.ch = ch
+        pvb.ch.crash = True
+        self.assertIn('Contact', repr(pvb.ch))
         pvb.hostaddr = b'atlanta.com'
         self.assertEqual(pvb.ch.address, b'atlanta.com')
         self.assertEqual(pvb.ch.field.value.uri.aor.host.address,

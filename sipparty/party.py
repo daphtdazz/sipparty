@@ -137,12 +137,11 @@ class Party(
 
         return
 
-    def listen(self, name=None, port=None, sock_type=None, media_name=None):
+    def listen(self, **kwargs):
 
         cURI_host = self.contactURI.host
         tp = self.transport
-        l_desc = tp.listen_for_me(
-            name=name, port=port, sock_type=sock_type)
+        l_desc = tp.listen_for_me(**kwargs)
 
         cURI_host.address = abytes(l_desc.name)
         cURI_host.port = l_desc.port
@@ -182,7 +181,8 @@ class Party(
                 "with a Dialog Type to use!")
 
         invD = InviteDialog(
-            fromURI=self.uri, toURI=toURI, contactURI=self.contactURI,
+            fromURI=self.uri, toURI=toURI,
+            contactURI=self.contactURI,
             transport=self.transport)
         invD.localSession = self.newSession()
         if invD.localSession is not None:

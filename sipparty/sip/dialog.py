@@ -16,6 +16,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+from copy import deepcopy
 import logging
 import numbers
 import re
@@ -51,6 +52,7 @@ AckTransforms = {
             (tfk.CopyFrom, "request", "Call_IDHeader"),
             (tfk.CopyFrom, "request", "startline.uri"),
             (tfk.CopyFrom, "request", "viaheader"),
+            (tfk.CopyFrom, 'request', 'ContactHeader'),
             (tfk.Copy, "startline.protocol",),
             (tfk.Copy, "ToHeader"),
         )
@@ -219,16 +221,15 @@ class Dialog(
                         reqdAttr, self.__class__.__name__))
 
         req = getattr(Message, reqType)()
-        req.startline.uri = self.toURI
-        req.ToHeader.uri = self.toURI
+        req.startline.uri = deepcopy(self.toURI)
+        req.ToHeader.uri = deepcopy(self.toURI)
 
-        req.FromHeader.field.value.uri = self.fromURI
-        req.ContactHeader.uri = self.contactURI
-        req.ViaHeader.field.host = self.contactURI.aor.host
+        req.FromHeader.field.value.uri = deepcopy(self.fromURI)
+        req.ContactHeader.uri = deepcopy(self.contactURI)
 
-        req.FromHeader.parameters.tag = self.localTag
-        req.ToHeader.parameters.tag = self.remoteTag
-        req.Call_IdHeader = self._dlg_callIDHeader
+        req.FromHeader.parameters.tag = deepcopy(self.localTag)
+        req.ToHeader.parameters.tag = deepcopy(self.remoteTag)
+        req.Call_IdHeader = deepcopy(self._dlg_callIDHeader)
 
         log.debug("send request of type %r", req.type)
 
@@ -249,10 +250,9 @@ class Dialog(
         try:
             tp.sendMessage(req, self.remote_name, self.remote_port)
         except prot.Incomplete:
-            log.error("Incomplete message: %r", req)
+            log.error("Incomplete message of type %s", req.type)
             raise
-        assert req.Call_IdHeader == self._dlg_callIDHeader, (
-            req.Call_IdHeader, self._dlg_callIDHeader)
+
         req.unbindAll()
         self._dlg_requests.append(req)
         tp.updateDialogGrouping(self)
@@ -266,10 +266,12 @@ class Dialog(
         self.transport.sendMessage(resp, astr(vh.address), vh.port)
 
     def configureResponse(self, resp, req):
-        log.debug("Configure response starting %r, startline %r", resp,
-                  resp.startline)
+        log.debug("Configure response starting with %r", resp)
+        log.debug('Request was: %r', req)
 
         Transform(self.Transforms, req, req.type, resp, resp.type)
+
+        log.debug('Transformed to %r', resp)
 
         if req.type == req.types.invite and resp.type == 200:
             self.addLocalSessionSDP(resp)

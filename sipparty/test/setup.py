@@ -16,6 +16,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+import gc
 import logging
 from six import (iteritems, PY2)
 import sys
@@ -42,6 +43,9 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
 
         if hasattr(super(SIPPartyTestCase, self), "tearDown"):
             super(SIPPartyTestCase, self).tearDown()
+
+        # Speed things up a bit by doing a gc collect.
+        gc.collect()
 
     def pushLogLevelToSubMod(self, module, subModuleName, level):
 

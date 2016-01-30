@@ -33,7 +33,7 @@ limitations under the License.
 """
 import logging
 import select
-from socket import socketpair
+from socket import (error as socket_error, socketpair)
 import sys
 import threading
 from ..util import (Clock, OnlyWhenLocked)
@@ -230,6 +230,8 @@ class RetryThread(threading.Thread):
             self._rthr_noWorkSequence = 0
 
         log.debug("%s thread exiting.", self)
+        for sock in (self._rthr_trigger_run_read_fd, self._rthr_triggerRunFD):
+            sock.close()
 
     @OnlyWhenLocked
     def addInputFD(self, fd, action):
@@ -290,8 +292,6 @@ class RetryThread(threading.Thread):
     #
     def __del__(self):
         log.info('__del__ %s %s', self.name, self.__class__.__name__)
-        for sock in (self._rthr_trigger_run_read_fd, self._rthr_triggerRunFD):
-            sock.close()
 
     #
     # =================== INTERNAL METHODS ====================================
@@ -303,7 +303,11 @@ class RetryThread(threading.Thread):
 
     def _rthr_triggerSpin(self):
         log.debug("%r Trigger spin", self)
-        self._rthr_triggerRunFD.send(b'1')
+        try:
+            self._rthr_triggerRunFD.send(b'1')
+        except (OSError, socket_error):
+            log.debug('Thread already shut down')
+            pass
 
     def _rthr_shouldKeepRunning(self):
         return not self._rthr_cancelled and self._rthr_masterThread.isAlive()
