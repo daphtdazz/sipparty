@@ -28,6 +28,7 @@ from ..util import (abytes, DerivedProperty, WeakMethod)
 from . import prot
 from .components import Host
 from .message import Message
+from . import Incomplete
 
 log = logging.getLogger(__name__)
 prot_log = logging.getLogger("messages")
@@ -116,18 +117,26 @@ class SIPTransport(Transport):
 
         sock_type = SockTypeFromName(msg.viaheader.transport)
 
-        sp = super(SIPTransport, self).get_send_from_address(
+        sp = super(SIPTransport, self)
+        sprxy = super(SIPTransport, self).get_send_from_address(
             sock_type=sock_type, remote_name=name,
             remote_port=port,
             data_callback=WeakMethod(self, 'sipByteConsumer'))
 
         ch = msg.contactheader
         if not ch.address:
-            ch.address = abytes(sp.local_address.name)
+            ch.address = abytes(sprxy.local_address.name)
 
         if not ch.port:
-            ch.port = sp.local_address.port
-        sp.send(bytes(msg))
+            ch.port = sprxy.local_address.port
+
+        try:
+            sprxy.send(bytes(msg))
+        except Incomplete:
+            sp.release_listen_address(sprxy.local_address)
+            raise
+
+        return sprxy.local_address
 
     def fixTargetAddress(self, addr):
         if addr is None:

@@ -897,10 +897,11 @@ class Singleton(object):
             log.detail("%r", existing_inst)
             return existing_inst
 
-        log.info(
-            "New instance called %s required args:%r, kwargs:%r", name, args,
-            kwargs)
         ni = super(Singleton, cls).__new__(cls, *args, **kwargs)
+        log.info(
+            "New Singleton subclass %s instance called '%s' created",
+            cls.__name__, name)
+
         insts[name] = ni
         ni.singleton_name = name
         return ni

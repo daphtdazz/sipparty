@@ -154,22 +154,45 @@ class TestParty(SIPPartyTestCase):
 
         p1 = NoMediaSimpleCallsParty(uri='sip:p1@test.com')
         p2 = NoMediaSimpleCallsParty()
+        p3 = NoMediaSimpleCallsParty('sip:p3@test.com')
 
+        self.assertRaises(ValueError, p1.invite, p2)
         self.assertRaises(ValueError, p1.invite, p2)
 
         p1.listen()
+        self.assertEqual(self.tp.listen_socket_count, 1)
+        self.assertEqual(self.tp.connected_socket_count, 0)
 
         log.info('Incomplete raised, because we don\'t have an AOR yet.')
 
         self.assertRaises(Incomplete, p2.invite, p1)
+        self.assertEqual(self.tp.connected_socket_count, 0)
 
         log.info('Set an AOR on p2')
         p2.aor = 'p2@test.com'
         inv1 = p2.invite(p1)
-        inv2 = p2.invite(p1)
 
-        del inv1
-        del inv2
+        WaitFor(lambda: inv1.state == inv1.States.InDialog)
+        self.assertEqual(self.tp.connected_socket_count, 2)
+
+        inv2 = p2.invite(p1)
+        WaitFor(lambda: inv2.state == inv2.States.InDialog)
+        self.assertEqual(self.tp.connected_socket_count, 4)
+
+        log.info(
+            "Check that we get a good exception when attempting to invite "
+            "someone who isn't listening")
+        self.assertRaises(ValueError, p3.invite, p2)
+        self.assertRaises(ValueError, p3.invite, p2)
+        p2.listen()
+        inv3 = p3.invite(p2)
+        WaitFor(lambda: inv3.state == inv2.States.InDialog)
+
+        log.info("Check we've actually only opened one listen socket")
+        self.assertEqual(self.tp.listen_socket_count, 1)
+
+        log.info("But we have 6 connected sockets (two for each dialog).")
+        self.assertEqual(self.tp.connected_socket_count, 6)
 
 
 class TestPartyWeakReferences(SIPPartyTestCase):

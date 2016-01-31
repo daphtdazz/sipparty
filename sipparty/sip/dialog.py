@@ -248,11 +248,13 @@ class Dialog(
                 "request." % (self.__class__.__name__,))
 
         try:
-            tp.sendMessage(req, self.remote_name, self.remote_port)
+            ad = tp.sendMessage(req, self.remote_name, self.remote_port)
         except prot.Incomplete:
             log.error("Incomplete message of type %s", req.type)
             raise
 
+        log.debug('Resolved name %s:%d', ad.remote_name, ad.remote_port)
+        self.remote_name, self.remote_port = ad.remote_name, ad.remote_port
         req.unbindAll()
         self._dlg_requests.append(req)
         tp.updateDialogGrouping(self)
@@ -291,6 +293,10 @@ class Dialog(
         tp = self.transport
         if tp is not None:
             tp.removeDialog(self)
+
+    def session_listen(self, *args, **kwargs):
+        if self.localSession is not None:
+            self.localSession.listen()
 
     #
     # =================== DELEGATE METHODS ====================================

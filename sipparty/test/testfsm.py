@@ -414,7 +414,6 @@ class TestFSM(SIPPartyTestCase):
 
     def testThreads(self):
 
-        self.pushLogLevel('fsm.fsm', logging.DEBUG)
         thr_res = [0]
 
         def runthread():

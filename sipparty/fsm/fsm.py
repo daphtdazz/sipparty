@@ -492,9 +492,13 @@ class FSM(object):
             if run_delegate:
                 return drv
 
-            # We have to have run one of them, so it must have been the
-            # callable.
-            return crv
+            if run_callable:
+                return crv
+
+            # It would be a bug to reach here.
+            assert any((run_self, run_delegate, run_callable)), (
+                "This is a bug. Actions shouldn't exist unless they have more "
+                "than one subactions to perform.")
 
         return weak_perform_actions
 

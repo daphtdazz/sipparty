@@ -189,8 +189,6 @@ class Party(
             contactURI=self.contactURI,
             transport=self.transport)
         invD.localSession = self.newSession()
-        if invD.localSession is not None:
-            invD.localSession.listen()
 
         ids = self._pt_inviteDialogs
         if toURI not in ids:
@@ -251,6 +249,10 @@ class Party(
 
         raise ValueError("Can't resolve URI from target %r" % (target))
 
+    @staticmethod
+    def _pt_check_address_tuple(_tuple):
+        return not any(val is None for val in _tuple)
+
     def _pt_resolveProxyAddress(self, target):
         if hasattr(target, "listenAddress"):
             pAddr = target.listenAddress
@@ -261,14 +263,23 @@ class Party(
         if hasattr(target, "contactURI"):
             log.debug("Target has a proxy contact URI.")
             cURI = target.contactURI
-            return (cURI.address, cURI.port)
+            rtup = (cURI.address, cURI.port)
+            if not self._pt_check_address_tuple(rtup):
+                raise ValueError(
+                    "Target's contact URI is not complete: %r" % cURI)
+            return rtup
 
         try:
             turi = self._pt_resolveTargetURI(target)
         except (TypeError, ValueError) as exc:
             raise type(exc)("Can't resolve proxy from target %r" % (
                 target,))
-        return (turi.address, turi.port)
+
+        rtup = (turi.address, turi.port)
+        if not self._pt_check_address_tuple(rtup):
+            raise ValueError("Target URI is not complete: %r" % (turi,))
+
+        return rtup
 
     def _pt_resolveProxyHostFromTarget(self, target):
         try:

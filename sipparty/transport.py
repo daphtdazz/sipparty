@@ -26,6 +26,7 @@ import socket  # TODO: should remove and rely on from socket import ... below.
 from socket import (
     AF_INET, AF_INET6, error as socket_error, getaddrinfo, gethostname,
     SHUT_RDWR, socket as socket_class, SOCK_STREAM, SOCK_DGRAM)
+from weakref import WeakValueDictionary
 from .deepclass import (dck, DeepClass)
 from .fsm import (RetryThread)
 from .vb import ValueBinder
@@ -461,6 +462,8 @@ class ListenDescription(
 
         laddr = self.description_from_socket(lsck)
 
+        log.info('New listen socket %s', laddr)
+
         return SocketProxy(
             local_address=laddr, socket=lsck, data_callback=data_callback,
             transport=transport)
@@ -473,6 +476,9 @@ class ListenDescription(
         if self.sock_family == AF_INET:
             return '{self.name}:{self.port} ({sock_type})'.format(
                 self=self, sock_type=astr(SockTypeName(self.sock_type)))
+
+        return "'{self.name}' (unknown type), port: {self.port}".format(
+            self=self)
 
 
 class ConnectedAddressDescription(
@@ -520,13 +526,20 @@ class ConnectedAddressDescription(
             'Connect to %r, result (%r --> %r)', self.remote_sockname_tuple,
             sck.getsockname(), sck.getpeername())
 
+        laddr = ConnectedAddressDescription.description_from_socket(sck)
+        log.info('New connected socket: %s', laddr)
+
         csck = SocketProxy(
-            local_address=ConnectedAddressDescription.description_from_socket(
-                sck),
-            socket=sck,
-            data_callback=data_callback, is_connected=True,
-            transport=transport)
+            local_address=laddr, socket=sck, data_callback=data_callback,
+            is_connected=True, transport=transport)
         return csck
+
+    def __str__(self):
+        sp_str = super(ConnectedAddressDescription, self).__str__()
+
+        return (
+            '{sp_str} -> {self.remote_name}:'
+            '{self.remote_port:d}'.format(**locals()))
 
 
 class SocketProxy(
@@ -538,7 +551,8 @@ class SocketProxy(
                     isinstance(x, socket_class) or hasattr(x, 'socket')},
             'data_callback': {dck.check: lambda x: isinstance(x, Callable)},
             'is_connected': {dck.gen: lambda: False},
-            'transport': {dck.descriptor: WeakProperty}
+            'transport': {dck.descriptor: WeakProperty},
+            'connected_sockets': {dck.gen: WeakValueDictionary}
         }), Retainable):
 
     socket_proxies = []
@@ -627,17 +641,26 @@ class SocketProxy(
                 Transport.FormatBytesForLogging(data))
 
         if not self.is_connected:
-            tp = self.transport
-            if tp is not None:
-                desc = self.local_address
-                cad = ConnectedAddressDescription(
-                    sock_family=desc.sock_family, sock_type=desc.sock_type,
-                    name=desc.name, port=desc.port,
-                    remote_name=addr[0], remote_port=addr[1])
-                csp = SocketProxy(
-                    local_address=cad, socket=self, is_connected=True,
-                    transport=tp)
-                tp.add_connected_socket_proxy(csp)
+            csp = self.connected_sockets.get(addr, None)
+            if csp is None:
+                log.debug('First receipt of data on this listen socket')
+                # Therefore need to create a new 'connected' socket proxy that
+                # uses our socket to send on.
+                tp = self.transport
+                if tp is not None:
+                    desc = self.local_address
+                    cad = ConnectedAddressDescription(
+                        sock_family=desc.sock_family, sock_type=desc.sock_type,
+                        name=desc.name, port=desc.port,
+                        remote_name=addr[0], remote_port=addr[1])
+                    csp = SocketProxy(
+                        local_address=cad, socket=self, is_connected=True,
+                        transport=tp)
+                    log.info(
+                        'New connected socket proxy using UDP listen socket: '
+                        '%s' % (cad,))
+                    tp.add_connected_socket_proxy(csp)
+                    self.connected_sockets[addr] = csp
 
         dc = self.data_callback
         if dc is None:
