@@ -4,6 +4,9 @@
 
 This project aims implements a SIP stack and provides tools for handling SIP media sessions with other SIP speakers. It is written entirely in Python using standard libraries with support for python 2.7 and >3.5, and attempts to provide an dead-easy and idiomatic API for other python clients.
 
+There is an iPython tutorial to get started with at SIP Party tutorial.ipynb. Docs are generated using sphinx but still a work in progress.
+
+
 ## Key features ##
 
 ### High-level interaction with dialogs ###
