@@ -442,7 +442,11 @@ class TestFSM(SIPPartyTestCase):
         self.assertRaises(
             ValueError,
             lambda: nf.addTransition(
-                "a", "b", "c", start_threads=[("not", "a", "threadable")]))
+                "a", "b", "c", start_threads=[(
+                    "not", "all", "strings", ('this', 'is', 'a', 'tuple')
+                )]
+            )
+        )
         self.assertEqual(old_t_dict, nf._fsm_transitions)
 
         nf.addTransition("jumping", "stop", "not_running")
@@ -540,3 +544,26 @@ class TestFSM(SIPPartyTestCase):
 
             del afsm1
             self.assertIsNone(wptr())
+
+    def test_multiple_actions(self):
+
+        class TFSM(AsyncFSM):
+            FSMDefinitions = {
+                InitialStateKey: {
+                    "input": {
+                        TransitionKeys.NewState: "end",
+                        TransitionKeys.Action: ['meth1', 'meth2']
+                    },
+                },
+                'end': {}
+            }
+
+            def __init__(self, *args, **kwargs):
+                super(TFSM, self).__init__(*args, **kwargs)
+                self.meth1 = MagicMock()
+                self.meth2 = MagicMock()
+
+        tfsm = TFSM()
+        tfsm.hit('input')
+        tfsm.meth1.assert_called_once_with()
+        tfsm.meth2.assert_called_once_with()

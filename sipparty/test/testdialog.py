@@ -34,7 +34,6 @@ class TestDialog(SIPPartyTestCase):
 
         dl.fromURI = 'sip:user1@host'
         self.assertRaises(ValueError, dl.hit, 'initiate')
-        self.pushLogLevel('testdialog', logging.INFO)
         log.info('%r', dl.fromURI)
         self.assertEqual(
             dl.fromURI,

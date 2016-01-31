@@ -27,11 +27,6 @@ log = logging.getLogger(__name__)
 
 class TestSDP(SIPPartyTestCase):
 
-    def setUp(self):
-        # self.pushLogLevel('sdp.sdp', logging.DEBUG)
-        # self.pushLogLevel('testsdp', logging.DEBUG)
-        pass
-
     def testSDPLine(self):
         for args, byte_res in (
                     ((LineTypes.v, 0), b'v=0'),

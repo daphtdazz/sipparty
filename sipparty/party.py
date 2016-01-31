@@ -21,9 +21,9 @@ from six import (binary_type as bytes, itervalues)
 from .deepclass import (DeepClass, dck)
 from .parse import (ParsedPropertyOfClass)
 from .sip import (
-    SIPTransport, DNameURI, URI, Host, Request, Message, defaults)
+    SIPTransport, DNameURI, URI, Host, Incomplete, Request, Message, defaults)
 from .transport import (IPaddress_re, IsSpecialName)
-from .util import (abytes, WeakMethod)
+from .util import (abytes,  WeakMethod)
 from .vb import ValueBinder
 
 log = logging.getLogger(__name__)
@@ -66,7 +66,7 @@ class Party(
                     underlying if underlying is not None else
                     self.contactURI.address)
             },
-            "transport": {dck.gen: lambda: None}
+            "transport": {dck.gen: SIPTransport}
         }),
         ValueBinder):
     """A party in a sip call, aka an endpoint, caller or callee etc.
@@ -127,11 +127,6 @@ class Party(
         self._pt_inviteDialogs = {}
         self._pt_listenAddress = None
 
-        if self.transport is None:
-            log.debug("Create new transport for")
-            tp = SIPTransport()
-            self.transport = tp
-
         if self.mediaAddress is None:
             self.mediaAddress = self.DefaultMediaAddress
 
@@ -139,15 +134,24 @@ class Party(
 
     def listen(self, **kwargs):
 
-        cURI_host = self.contactURI.host
+        aor = self.uri.aor
+        try:
+            bytes(aor)
+        except Incomplete as exc:
+            exc.args = (
+                "Party instance can't listen as it has an incomplete uri",
+            )
+            raise
+
         tp = self.transport
+        tp.addDialogHandlerForAOR(
+            self.uri.aor, WeakMethod(self, 'newDialogHandler'))
+
+        cURI_host = self.contactURI.host
         l_desc = tp.listen_for_me(**kwargs)
 
         cURI_host.address = abytes(l_desc.name)
         cURI_host.port = l_desc.port
-
-        tp.addDialogHandlerForAOR(
-            self.uri.aor, WeakMethod(self, "newDialogHandler"))
 
     def invite(self, target, proxy=None, media_session=None):
 
@@ -185,8 +189,6 @@ class Party(
             contactURI=self.contactURI,
             transport=self.transport)
         invD.localSession = self.newSession()
-        if invD.localSession is not None:
-            invD.localSession.listen()
 
         ids = self._pt_inviteDialogs
         if toURI not in ids:
@@ -247,6 +249,10 @@ class Party(
 
         raise ValueError("Can't resolve URI from target %r" % (target))
 
+    @staticmethod
+    def _pt_check_address_tuple(_tuple):
+        return not any(val is None for val in _tuple)
+
     def _pt_resolveProxyAddress(self, target):
         if hasattr(target, "listenAddress"):
             pAddr = target.listenAddress
@@ -257,14 +263,23 @@ class Party(
         if hasattr(target, "contactURI"):
             log.debug("Target has a proxy contact URI.")
             cURI = target.contactURI
-            return (cURI.address, cURI.port)
+            rtup = (cURI.address, cURI.port)
+            if not self._pt_check_address_tuple(rtup):
+                raise ValueError(
+                    "Target's contact URI is not complete: %r" % cURI)
+            return rtup
 
         try:
             turi = self._pt_resolveTargetURI(target)
         except (TypeError, ValueError) as exc:
             raise type(exc)("Can't resolve proxy from target %r" % (
                 target,))
-        return (turi.address, turi.port)
+
+        rtup = (turi.address, turi.port)
+        if not self._pt_check_address_tuple(rtup):
+            raise ValueError("Target URI is not complete: %r" % (turi,))
+
+        return rtup
 
     def _pt_resolveProxyHostFromTarget(self, target):
         try:

@@ -91,9 +91,9 @@ class attributesubclassgen(type):
             try:
                 name = getattr(tps, name)
             except AttributeError:
-                log.error(
-                    "%r not a type of %r (supername %r).", name,
-                    cls.__name__, cls._supername)
+                log.debug(
+                    "%r not a type of %r (supername %r).", name, cls.__name__,
+                    cls._supername)
                 raise
 
         normalizedSCType = cls.NormalizeGeneratingAttributeName(name)
@@ -897,10 +897,11 @@ class Singleton(object):
             log.detail("%r", existing_inst)
             return existing_inst
 
-        log.info(
-            "New instance called %s required args:%r, kwargs:%r", name, args,
-            kwargs)
         ni = super(Singleton, cls).__new__(cls, *args, **kwargs)
+        log.info(
+            "New Singleton subclass %s instance called '%s' created",
+            cls.__name__, name)
+
         insts[name] = ni
         ni.singleton_name = name
         return ni

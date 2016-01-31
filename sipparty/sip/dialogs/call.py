@@ -30,7 +30,7 @@ S = Enum((
     "Terminated"))
 A = Enum((
     "sendRequestINVITE", "sendResponse200", "errorResponse", "sendRequestBYE",
-    "hasTerminated"))
+    "hasTerminated", "session_listen"))
 I = Enum((
     "initiate", "receiveRequestINVITE", "receiveResponse18",
     "receiveResponse2", "receiveResponse4", "terminate", "receiveRequestBYE"))
@@ -47,7 +47,7 @@ class SimpleCall(Dialog):
         S.Initial: {
             I.initiate: {
                 tsk.NewState: S.InitiatingDialog,
-                tsk.Action: A.sendRequestINVITE
+                tsk.Action: [A.session_listen, A.sendRequestINVITE]
             },
             I.receiveRequestINVITE: {
                 tsk.NewState: S.InDialog,

@@ -26,6 +26,7 @@ import socket  # TODO: should remove and rely on from socket import ... below.
 from socket import (
     AF_INET, AF_INET6, error as socket_error, getaddrinfo, gethostname,
     SHUT_RDWR, socket as socket_class, SOCK_STREAM, SOCK_DGRAM)
+from weakref import WeakValueDictionary
 from .deepclass import (dck, DeepClass)
 from .fsm import (RetryThread)
 from .vb import ValueBinder
@@ -43,6 +44,7 @@ SOCK_TYPES_NAMES = AsciiBytesEnum((b"SOCK_STREAM", b"SOCK_DGRAM"))
 SOCK_TYPE_IP_NAMES = AsciiBytesEnum((b"TCP", b"UDP"))
 SOCK_FAMILIES = Enum((AF_INET, AF_INET6))
 SOCK_FAMILY_NAMES = AsciiBytesEnum((b"IPv4", b"IPv6"))
+DEFAULT_SOCK_FAMILY = AF_INET
 log = logging.getLogger(__name__)
 prot_log = logging.getLogger("messages")
 
@@ -129,6 +131,26 @@ SendFromAddressNameAny = type(
 SpecialNames = set((
     NameAll, NameLANHostname, NameLoopbackAddress, SendFromAddressNameAny
 ))
+
+
+def AllAddressesFromFamily(sock_family):
+    if sock_family == AF_INET:
+        return '0.0.0.0'
+
+    if sock_family == AF_INET6:
+        return '::'
+
+    return None
+
+
+def LoopbackAddressFromFamily(sock_family):
+    if sock_family == AF_INET:
+        return '127.0.0.1'
+
+    if sock_family == AF_INET6:
+        return '::'
+
+    return None
 
 
 def IsSpecialName(name):
@@ -277,6 +299,15 @@ def GetBoundSocket(family, socktype, address, port_filter=None):
     log.debug("GetBoundSocket addr:%r port:%r family:%r socktype:%r...",
               address_list[0], address_list[1], family, socktype)
 
+    if address_list[0] is NameAll:
+        if family != 0:
+            address_list[0] = AllAddressesFromFamily(family)
+        else:
+            # We've been asked for the 'all' address, but we haven't been told
+            # a family, so we just have to pick one, so pick AF_INET!
+            address_list[0] = AllAddressesFromFamily(DEFAULT_SOCK_FAMILY)
+            family = DEFAULT_SOCK_FAMILY
+
     gai_tuple = (address_list[0], address_list[1], family, socktype)
     addrinfos = getaddrinfo(*gai_tuple)
     if len(addrinfos) == 0:
@@ -394,9 +425,9 @@ class ListenDescription(
 
     @property
     def sockname_tuple(self):
-        if self.name is NameAll:
-            name = '0.0.0.0' if self.sock_family == AF_INET else '::'
-        elif self.name is SendFromAddressNameAny:
+        name = self.name
+
+        if self.name is SendFromAddressNameAny:
             name = ''
         elif self.name is NameLoopbackAddress:
             name = None
@@ -431,9 +462,23 @@ class ListenDescription(
 
         laddr = self.description_from_socket(lsck)
 
+        log.info('New listen socket %s', laddr)
+
         return SocketProxy(
             local_address=laddr, socket=lsck, data_callback=data_callback,
             transport=transport)
+
+    def __str__(self):
+        if self.sock_family == AF_INET6:
+            return '[{self.name}]:{self.port} ({sock_type})'.format(
+                self=self, sock_type=astr(SockTypeName(self.sock_type)))
+
+        if self.sock_family == AF_INET:
+            return '{self.name}:{self.port} ({sock_type})'.format(
+                self=self, sock_type=astr(SockTypeName(self.sock_type)))
+
+        return "'{self.name}' (unknown type), port: {self.port}".format(
+            self=self)
 
 
 class ConnectedAddressDescription(
@@ -481,13 +526,20 @@ class ConnectedAddressDescription(
             'Connect to %r, result (%r --> %r)', self.remote_sockname_tuple,
             sck.getsockname(), sck.getpeername())
 
+        laddr = ConnectedAddressDescription.description_from_socket(sck)
+        log.info('New connected socket: %s', laddr)
+
         csck = SocketProxy(
-            local_address=ConnectedAddressDescription.description_from_socket(
-                sck),
-            socket=sck,
-            data_callback=data_callback, is_connected=True,
-            transport=transport)
+            local_address=laddr, socket=sck, data_callback=data_callback,
+            is_connected=True, transport=transport)
         return csck
+
+    def __str__(self):
+        sp_str = super(ConnectedAddressDescription, self).__str__()
+
+        return (
+            '{sp_str} -> {self.remote_name}:'
+            '{self.remote_port:d}'.format(**locals()))
 
 
 class SocketProxy(
@@ -499,7 +551,8 @@ class SocketProxy(
                     isinstance(x, socket_class) or hasattr(x, 'socket')},
             'data_callback': {dck.check: lambda x: isinstance(x, Callable)},
             'is_connected': {dck.gen: lambda: False},
-            'transport': {dck.descriptor: WeakProperty}
+            'transport': {dck.descriptor: WeakProperty},
+            'connected_sockets': {dck.gen: WeakValueDictionary}
         }), Retainable):
 
     socket_proxies = []
@@ -588,17 +641,26 @@ class SocketProxy(
                 Transport.FormatBytesForLogging(data))
 
         if not self.is_connected:
-            tp = self.transport
-            if tp is not None:
-                desc = self.local_address
-                cad = ConnectedAddressDescription(
-                    sock_family=desc.sock_family, sock_type=desc.sock_type,
-                    name=desc.name, port=desc.port,
-                    remote_name=addr[0], remote_port=addr[1])
-                csp = SocketProxy(
-                    local_address=cad, socket=self, is_connected=True,
-                    transport=tp)
-                tp.add_connected_socket_proxy(csp)
+            csp = self.connected_sockets.get(addr, None)
+            if csp is None:
+                log.debug('First receipt of data on this listen socket')
+                # Therefore need to create a new 'connected' socket proxy that
+                # uses our socket to send on.
+                tp = self.transport
+                if tp is not None:
+                    desc = self.local_address
+                    cad = ConnectedAddressDescription(
+                        sock_family=desc.sock_family, sock_type=desc.sock_type,
+                        name=desc.name, port=desc.port,
+                        remote_name=addr[0], remote_port=addr[1])
+                    csp = SocketProxy(
+                        local_address=cad, socket=self, is_connected=True,
+                        transport=tp)
+                    log.info(
+                        'New connected socket proxy using UDP listen socket: '
+                        '%s' % (cad,))
+                    tp.add_connected_socket_proxy(csp)
+                    self.connected_sockets[addr] = csp
 
         dc = self.data_callback
         if dc is None:
@@ -635,9 +697,15 @@ class Transport(Singleton):
 
     @property
     def connected_socket_count(self):
+        return self._tp_count_vals_in_dict(self._tp_connected_sockets)
 
+    @property
+    def listen_socket_count(self):
+        return self._tp_count_vals_in_dict(self._tp_listen_sockets)
+
+    def _tp_count_vals_in_dict(self, rdict):
         count = 0
-        for sock in self.yield_vals(self._tp_connected_sockets):
+        for sock in self.yield_vals(rdict):
             count += 1
         return count
 
@@ -658,7 +726,8 @@ class Transport(Singleton):
 
     def listen_for_me(self, callback, sock_type=None, sock_family=None,
                       name=NameAll, port=0, port_filter=None, flowinfo=None,
-                      scopeid=None, listen_description=None):
+                      scopeid=None, listen_description=None,
+                      reuse_socket=True):
 
         if not isinstance(callback, Callable):
             raise TypeError(
@@ -684,13 +753,17 @@ class Transport(Singleton):
         tpl = self.convert_listen_description_into_find_tuple(
             provisional_laddr)
         path, lsck = self.find_cached_object(self._tp_listen_sockets, tpl)
+
         if lsck is not None:
+            if reuse_socket:
+                lsck.retain()
+                return lsck.local_address
+
             raise SocketInUseError(
                 'All sockets matcing Description %s are already in use.' % (
                     provisional_laddr))
 
         lsck = self.create_listen_socket(provisional_laddr, callback)
-
         return lsck.local_address
 
     # connect
@@ -779,6 +852,7 @@ class Transport(Singleton):
         log.debug(
             'Path is %d long, full find tuple is %d long', len(path),
             full_path_len)
+
         assert not (len(path) == 7 and full_path_len == 8), path[-1]
 
         assert len(path) <= full_path_len
@@ -786,6 +860,7 @@ class Transport(Singleton):
             lsck = path[-1][1]
             log.debug('Found object %r', lsck)
             return path, lsck
+
         return path, None
 
     def release_listen_address(self, description):
@@ -870,7 +945,7 @@ class Transport(Singleton):
     #
     def __del__(self):
 
-        log.debug('DELETE %s instance', self.__class__.__name__)
+        log.info('DELETE %s instance', self.__class__.__name__)
         self._tp_retryThread.cancel()
 
         self.close_all()
@@ -911,6 +986,15 @@ class Transport(Singleton):
 
         pfilter = listen_address.port_filter
 
+        def first_entry_if_key_else_new(cond):
+            def find_first_entry(pdict, key):
+                if cond(key):
+                    for key, val in iteritems(pdict):
+                        return key, val
+                return None, None
+
+            return find_first_entry
+
         def find_suitable_port(pdict, port):
             if port != 0:
                 return None, None
@@ -923,11 +1007,18 @@ class Transport(Singleton):
 
         def find_suitable_name(pdict, name):
             log.debug('Find name for %r in keys %r', name, pdict.keys())
-            if name != SendFromAddressNameAny:
+            if name is NameAll:
+                for _all in (
+                        AllAddressesFromFamily(AF_INET),
+                        AllAddressesFromFamily(AF_INET6)):
+                    if _all in pdict:
+                        return _all, pdict[_all]
+
                 return None, None
 
-            for name, name_dict in iteritems(pdict):
-                return name, name_dict
+            if name is SendFromAddressNameAny:
+                for name, name_dict in iteritems(pdict):
+                    return name, name_dict
 
             return None, None
 
@@ -944,13 +1035,17 @@ class Transport(Singleton):
             return None, None
 
         rtup = (
-            (listen_address.sock_family, lambda _dict, key: (key, {})),
-            (listen_address.sock_type, lambda _dict, key: (key, {})),
+            (listen_address.sock_family, first_entry_if_key_else_new(
+                lambda key: key is None)),
+            (listen_address.sock_type, first_entry_if_key_else_new(
+                lambda key: key is None)),
             (listen_address.name, find_suitable_name),
             (listen_address.port, find_suitable_port),
             (listen_address.flowinfo, find_suitable_flowinfo_or_scopeid),
             (listen_address.scopeid, find_suitable_flowinfo_or_scopeid))
-        if listen_address.sock_family == AF_INET:
+
+        sock_family = listen_address.sock_family or DEFAULT_SOCK_FAMILY
+        if sock_family == AF_INET:
             return rtup[:-2]
         return rtup
 
@@ -985,6 +1080,9 @@ class Transport(Singleton):
                     return
                 next_dict[key] = obj
             yield key, obj
+            if not isinstance(obj, dict):
+                # We're done.
+                return
             next_dict = obj
 
     @classmethod
