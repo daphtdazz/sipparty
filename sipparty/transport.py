@@ -465,6 +465,15 @@ class ListenDescription(
             local_address=laddr, socket=lsck, data_callback=data_callback,
             transport=transport)
 
+    def __str__(self):
+        if self.sock_family == AF_INET6:
+            return '[{self.name}]:{self.port} ({sock_type})'.format(
+                self=self, sock_type=astr(SockTypeName(self.sock_type)))
+
+        if self.sock_family == AF_INET:
+            return '{self.name}:{self.port} ({sock_type})'.format(
+                self=self, sock_type=astr(SockTypeName(self.sock_type)))
+
 
 class ConnectedAddressDescription(
         DeepClass('_cad_', {

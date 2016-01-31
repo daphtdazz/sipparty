@@ -148,7 +148,9 @@ class MediaSession(
             WeakMethod(self, 'data_received'),
             listen_description=self.local_addr_description
         )
-        log.error('Media listen address: %r', l_desc)
+        log.info(
+            '%s instance has listen address %s', self.__class__.__name__,
+            l_desc)
 
         self.local_addr_description = l_desc
 

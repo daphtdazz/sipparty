@@ -91,9 +91,9 @@ class attributesubclassgen(type):
             try:
                 name = getattr(tps, name)
             except AttributeError:
-                log.error(
-                    "%r not a type of %r (supername %r).", name,
-                    cls.__name__, cls._supername)
+                log.debug(
+                    "%r not a type of %r (supername %r).", name, cls.__name__,
+                    cls._supername)
                 raise
 
         normalizedSCType = cls.NormalizeGeneratingAttributeName(name)
