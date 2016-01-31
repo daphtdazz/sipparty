@@ -295,7 +295,12 @@ class FSM(object):
             self._fsm_weakDelegate = weakref.ref(val)
 
     def __init__(self, name=None, delegate=None):
-        """name: a name for this FSM for debugging purposes.
+        """
+        :param None,str name: a name for this FSM for debugging purposes. If
+        `None`, then a name will be generated from the class name and a count
+        of how many unnamed instances have been created so far.
+        :param delegate: A delegate. If this delegate has method names that
+        match actions, then they will be called when the action is called.
         """
         super(FSM, self).__init__()
 
@@ -304,7 +309,6 @@ class FSM(object):
             self.__class__.NextFSMNum += 1
 
         self._fsm_name = name
-        # self._fsm_use_async_timers = asynchronous_timers
         self._fsm_weakDelegate = None
         self.delegate = delegate
         self.__processing_hit = False
