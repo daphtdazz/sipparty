@@ -17,7 +17,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from collections import (Callable, OrderedDict)
+from collections import (Callable, Iterable, OrderedDict)
 from copy import copy
 import logging
 from six import (iteritems, add_metaclass)
@@ -406,22 +406,33 @@ class FSM(object):
         if action is None:
             return None
 
-        if isinstance(action, Callable):
-            return action
+        # Normalize to a list of actions.
+        if isinstance(action, str) or isinstance(action, Callable):
+            action_list = [action]
+        else:
+            action_list = action
+
+        def _raise_ValueError():
+            raise ValueError(
+                "Action %r not a valid action type (must be a single action "
+                "or list of actions, where an action is a method name or a "
+                "Callable)." % (action,))
+
+        if not isinstance(action_list, Iterable):
+            _raise_ValueError()
+
+        if any(not (isinstance(_act, str) or isinstance(_act, Callable))
+               for _act in action_list):
+            _raise_ValueError()
 
         if isinstance(self, type):
-            # Delay deciding whether the action is appropriate because we
-            # can't bind the action name to a method at this point as we are
-            # the class not the instance.
+            # Delay actually building the action until we have an instance
+            # for it.
             return action
-
-        if not isinstance(action, str):
-            raise ValueError("Action %r not a callable nor a method name." %
-                             (action,))
 
         weak_self = weakref.ref(self)
 
-        def weak_action(*args, **kwargs):
+        def weak_perform_actions(*args, **kwargs):
             """Finds the action to run if self has not been released yet and
             runs it. Lookup order is:
 
@@ -433,46 +444,59 @@ class FSM(object):
 
             Otherwise AttributeError is raised.
             """
-            log.debug("Weak action %r.", action)
+            log.debug("Action list: %r", action_list)
+            assert len(action_list)
             self = weak_self()
             if self is None:
                 return None
 
-            run_delegate = False
-            run_self = False
-            if hasattr(self, action):
-                log.debug("  Self has %r.", action)
-                func = getattr(self, action)
-                if isinstance(func, Callable):
-                    run_self = True
-                    srv = func(*args, **kwargs)
+            for action in action_list:
+                run_delegate = False
+                run_self = False
+                run_callable = False
 
-            if hasattr(self, "delegate"):
-                dele = getattr(self, "delegate")
-                if dele is not None:
-                    if hasattr(dele, action):
-                        log.debug("  delegate has %r.", action)
-                        method = getattr(dele, action)
-                        run_delegate = True
-                        drv = method(*args, **kwargs)
+                if isinstance(action, Callable):
+                    crv = action(*args, **kwargs)
+                    run_callable = True
+                    continue
 
+                if hasattr(self, action):
+                    log.debug("  Self has %r.", action)
+                    func = getattr(self, action)
+                    if isinstance(func, Callable):
+                        run_self = True
+                        srv = func(*args, **kwargs)
+
+                if hasattr(self, "delegate"):
+                    dele = getattr(self, "delegate")
+                    if dele is not None:
+                        if hasattr(dele, action):
+                            log.debug("  delegate has %r.", action)
+                            method = getattr(dele, action)
+                            run_delegate = True
+                            drv = method(*args, **kwargs)
+
+                if not (run_self or run_delegate):
+                    # The action could not be resolved.
+                    raise AttributeError(
+                        "Action %r is not a callable or a method on %r object "
+                        "or its delegate %r." %
+                        (action, self.__class__.__name__,
+                         self.delegate
+                         if hasattr(self, "delegate") else None))
+
+            del self
             if run_self:
-                del self
                 return srv
+
             if run_delegate:
-                del self
                 return drv
 
-            # Else the action could not be resolved.
-            raise AttributeError(
-                "Action %r is not a callable or a method on %r object or "
-                "its delegate %r." %
-                (action, self.__class__.__name__,
-                 self.delegate
-                 if hasattr(self, "delegate") else None))
+            # We have to have run one of them, so it must have been the
+            # callable.
+            return crv
 
-        weak_action.__name__ = "weak_action_%s" % action
-        return weak_action
+        return weak_perform_actions
 
     @class_or_instance_method
     def _fsm_makeThreadAction(self, action):
