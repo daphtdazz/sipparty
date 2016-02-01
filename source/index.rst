@@ -11,7 +11,9 @@ Contents:
 .. toctree::
    :maxdepth: 2
 
-   intro 
+   intro
+   top
+   party
 
 Indices and tables
 ==================

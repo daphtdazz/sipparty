@@ -82,7 +82,8 @@ class TestProtocol(SIPPartyTestCase):
         invite.fromheader.field.value.uri.aor.host = b"atlanta.com"
         invite.viaheader.field.host.address = b"127.0.0.1"
         inv_bytes = bytes(invite)
-        self.assertTrue(re.match(
+        self.assertTrue(
+            re.match(
                 b"INVITE sip:bob@baltimore.com SIP/2.0\r\n"
                 b"From: <sip:alice@atlanta.com>;%(tag_pattern)s\r\n"
                 b"To: <sip:bob@baltimore.com>\r\n"

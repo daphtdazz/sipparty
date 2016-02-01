@@ -43,7 +43,7 @@ class Header(
         DeepClass("_hdr_", {
             "header_value": {dck.gen: lambda: None},
             "type": {dck.descriptor: lambda x: ClassType("Header")}
-            }),
+        }),
         Parser, BytesGenner, ValueBinder):
     """A SIP header.
 
@@ -172,7 +172,7 @@ class ContactHeader(
                 dck.check: lambda x: x is True or x is False,
                 dck.gen: lambda: False},
 
-            }, recurse_repr=True),
+        }, recurse_repr=True),
         DNameURIHeader):
     """ABNF from RFC3261:
     Contact        =  ("Contact" / "m" ) HCOLON
@@ -221,7 +221,7 @@ class ContactHeader(
             yield bs
 
 
-class Call_IdHeader(
+class Call_IdHeader(  # noqa
         DeepClass("_cidh_", {
             "host": {},
             "key": {dck.gen: "GenerateKey"}
@@ -253,7 +253,7 @@ class Call_IdHeader(
         Returns a string composed of 6 random hexadecimal characters, followed
         by a hyphen, followed by a timestamp of form YYYYMMDDHHMMSS.
         """
-        keyval = randint(0, 2**24 - 1)
+        keyval = randint(0, 2 ** 24 - 1)
 
         dt = datetime.now()
         keydate = (
@@ -291,7 +291,7 @@ class Call_IdHeader(
 class CseqHeader(
         DeepClass("_csh_", {
             "number": {
-                dck.gen: lambda: randint(0, 2**31 - 1),
+                dck.gen: lambda: randint(0, 2 ** 31 - 1),
                 dck.check: lambda num: isinstance(num, Integral)},
             "reqtype": {dck.gen: lambda: None}
         }),
@@ -323,7 +323,7 @@ class NumberHeader(
             "number": {
                 dck.gen: "Default_Number",
                 dck.check: lambda x: isinstance(x, Integral)}
-            }),
+        }),
         Header):
     parseinfo = {
         Parser.Pattern:
@@ -337,15 +337,15 @@ class NumberHeader(
         yield b'%d' % self.number
 
 
-class Max_ForwardsHeader(NumberHeader):
+class Max_ForwardsHeader(NumberHeader):  # noqa
     Default_Number = defaults.max_forwards
 
 
-class Content_LengthHeader(NumberHeader):
+class Content_LengthHeader(NumberHeader):  # noqa
     Default_Number = 0
 
 
-class Content_TypeHeader(
+class Content_TypeHeader(  # noqa
         DeepClass("_cth_", {
             "content_type": {},
             "parameters": {dck.gen: Parameters}

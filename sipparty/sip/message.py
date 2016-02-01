@@ -62,11 +62,11 @@ ContentTypeBinding = (
 @add_metaclass(
     # The FSM type needs both the attributesubclassgen and the cumulative
     # properties metaclasses.
-    type('Message',
-         (util.CCPropsFor((
+    type('Message', (
+        util.CCPropsFor((
             "mandatoryheaders", "mandatoryparameters", "field_bindings")),
-          util.attributesubclassgen,),
-         dict()))
+        util.attributesubclassgen,),
+        dict()))
 @util.TwoCompatibleThree
 class Message(
         DeepClass("_msg_", {
@@ -84,7 +84,7 @@ class Message(
     types = Request.types
 
     mandatoryheaders = [
-        Header.types.From,  Header.types.To, Header.types.Via,
+        Header.types.From, Header.types.To, Header.types.Via,
         Header.types.call_id, Header.types.cseq, Header.types.max_forwards,
         Header.types.content_length]
     shouldheaders = []  # Should be sent but parties must cope without.

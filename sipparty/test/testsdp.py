@@ -29,9 +29,9 @@ class TestSDP(SIPPartyTestCase):
 
     def testSDPLine(self):
         for args, byte_res in (
-                    ((LineTypes.v, 0), b'v=0'),
-                    ((LineTypes.s, b'asdf'), b's=asdf')
-                ):
+            ((LineTypes.v, 0), b'v=0'),
+            ((LineTypes.s, b'asdf'), b's=asdf')
+        ):
             log.info('Check Line%r == %r', args, byte_res)
             self.assertEqual(SessionDescription.Line(*args), byte_res)
 

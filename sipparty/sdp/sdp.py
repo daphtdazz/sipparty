@@ -47,15 +47,15 @@ class SDPIncomplete(SDPException):
 class SDPSection(parse.Parser, ValueBinder):
 
     @staticmethod
-    def Line(lineType, value):
+    def Line(line_type, value):
         if isinstance(value, bytes):
-            return b'%s=%s' % (lineType, value)
+            return b'%s=%s' % (line_type, value)
 
         if isinstance(value, Integral):
-            return b'%s=%d' % (lineType, value)
+            return b'%s=%d' % (line_type, value)
 
         if hasattr(value, '__bytes__'):
-            return b'%s=%s' % (lineType, bytes(value))
+            return b'%s=%s' % (line_type, bytes(value))
 
         raise ValueError(
             'Don\'t know how to make bytes out of %r' % value)
@@ -172,14 +172,15 @@ class MediaDescription(
             b"(?:%(LineTypes.a)s=%(text)s%(eol)s)*"
             b"" % bdict,
         parse.Parser.Mappings:
-            [("mediaType",),
-             ("port", int),
-             ("transProto",),
-             # The standard values for formats are defined in
-             # https://tools.ietf.org/html/rfc3551#section-6
-             ("formats", lambda fmtstr: [
-                int(fmt) for fmt in fmt_space_re.split(fmtstr)]),
-             ("connectionDescription", ConnectionDescription)],
+            [
+                ("mediaType",),
+                ("port", int),
+                ("transProto",),
+                # The standard values for formats are defined in
+                # https://tools.ietf.org/html/rfc3551#section-6
+                ("formats", lambda fmtstr: [
+                    int(fmt) for fmt in fmt_space_re.split(fmtstr)]),
+                ("connectionDescription", ConnectionDescription)],
         parse.Parser.Repeats: True
     }
 

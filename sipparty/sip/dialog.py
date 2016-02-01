@@ -62,9 +62,9 @@ AckTransforms = {
 
 class Dialog(
         DeepClass("_dlg_", {
-            "fromURI": {dck.descriptor: ParsedPropertyOfClass(URI)},
-            "toURI": {dck.descriptor: ParsedPropertyOfClass(URI)},
-            "contactURI": {dck.descriptor: ParsedPropertyOfClass(URI)},
+            "from_uri": {dck.descriptor: ParsedPropertyOfClass(URI)},
+            "to_uri": {dck.descriptor: ParsedPropertyOfClass(URI)},
+            "contact_uri": {dck.descriptor: ParsedPropertyOfClass(URI)},
             "remote_name": {},
             "remote_port": {dck.check: IsValidPortNum},
             "localTag": {},
@@ -158,10 +158,10 @@ class Dialog(
             if tp is not None:
                 tp.updateDialogGrouping(self)
 
-        if self.contactURI is None:
+        if self.contact_uri is None:
             cURI = msg.ContactHeader.uri
-            log.debug("Learning contactURI: %r", cURI)
-            self.contactURI = cURI
+            log.debug("Learning contact_uri: %r", cURI)
+            self.contact_uri = cURI
 
         if mtype in Request.types:
             input = "receiveRequest" + getattr(Request.types, mtype)
@@ -196,7 +196,7 @@ class Dialog(
         self.transport.sendMessage(
             ack, self.remote_name, self.remote_port)
 
-    def sendRequest(self, reqType, remote_name=None, remote_port=None):
+    def sendRequest(self, req_type, remote_name=None, remote_port=None):
 
         if self._dlg_callIDHeader is None:
             log.debug("First request, generate call ID header.")
@@ -211,7 +211,7 @@ class Dialog(
             self.remote_port = remote_port
 
         for reqdAttr in (
-                "fromURI", "toURI", "contactURI", "remote_name",
+                "from_uri", "to_uri", "contact_uri", "remote_name",
                 "transport"):
             attrVal = getattr(self, reqdAttr)
             if attrVal is None:
@@ -220,12 +220,12 @@ class Dialog(
                     "is None." % (
                         reqdAttr, self.__class__.__name__))
 
-        req = getattr(Message, reqType)()
-        req.startline.uri = deepcopy(self.toURI)
-        req.ToHeader.uri = deepcopy(self.toURI)
+        req = getattr(Message, req_type)()
+        req.startline.uri = deepcopy(self.to_uri)
+        req.ToHeader.uri = deepcopy(self.to_uri)
 
-        req.FromHeader.field.value.uri = deepcopy(self.fromURI)
-        req.ContactHeader.uri = deepcopy(self.contactURI)
+        req.FromHeader.field.value.uri = deepcopy(self.from_uri)
+        req.ContactHeader.uri = deepcopy(self.contact_uri)
 
         req.FromHeader.parameters.tag = deepcopy(self.localTag)
         req.ToHeader.parameters.tag = deepcopy(self.remoteTag)

@@ -32,12 +32,12 @@ class TestDialog(SIPPartyTestCase):
         self.assertRaises(ValueError, dl.hit, 'initiate')
         self.assertEqual(dl.state, dl.States.Initial)
 
-        dl.fromURI = 'sip:user1@host'
+        dl.from_uri = 'sip:user1@host'
         self.assertRaises(ValueError, dl.hit, 'initiate')
-        log.info('%r', dl.fromURI)
+        log.info('%r', dl.from_uri)
         self.assertEqual(
-            dl.fromURI,
+            dl.from_uri,
             URI(absoluteURIPart=None, headers=b'', aor=AOR(
-                    username=b'user1', host=Host(address=b'host', port=None)),
+                username=b'user1', host=Host(address=b'host', port=None)),
                 parameters=b'', scheme=b'sip'),
-            dl.fromURI.aor)
+            dl.from_uri.aor)

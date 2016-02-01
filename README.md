@@ -2,10 +2,23 @@
 
 ## Overview ##
 
-This project aims implements a SIP stack and provides tools for handling SIP media sessions with other SIP speakers. It is written entirely in Python using standard libraries with support for python 2.7 and >3.5, and attempts to provide an dead-easy and idiomatic API for other python clients.
+This project implements a SIP stack and provides tools for holding SIP media sessions with other SIP speakers. It is written entirely in Python using standard libraries with support for python 2.7 and >=3.5, and attempts to provide a dead-easy and idiomatic API for python clients.
 
-There is an iPython tutorial to get started with at SIP Party tutorial.ipynb. Docs are generated using sphinx but still a work in progress.
+There is an iPython tutorial to get started with at **SIP Party tutorial.ipynb**. Docs are generated using sphinx but still a work in progress.
 
+Tested on CentOS 6 and the latest Mac OS X public release. Windows support is unlikely.
+
+## Install ##
+
+Clone from github, `cd` to the root directory and install the requirements using
+
+    pip install -r requirements.txt
+
+If you want to edit and build the docs, use
+
+    pip install -r docs_requirements.txt
+
+as well.
 
 ## Key features ##
 
@@ -45,10 +58,11 @@ Creating multiple parties with the default settings only results in a single lis
     from sipparty.sip.siptransport import SIPTransport
 
     parties = [
-        NoMediaSimpleCallsParty(aor='test%d@test.com' % (test + 1,)) 
+        NoMediaSimpleCallsParty(aor='test%d@test.com' % (test + 1,))
         for test in range(100)]
+    map(lambda x: x.listen(), parties)
 
-    # The transport is implemented using sipparty.util.Singleton which 
+    # The transport is implemented using sipparty.util.Singleton which
     # provides a powerful and simple Singleton design pattern implementation.
     tp = SIPTransport()
     tp.listen_socket_count
@@ -58,6 +72,6 @@ Creating multiple parties with the default settings only results in a single lis
 
 Dialog state is maintained by inheriting from the `sipparty.fsm.FSM` class, allowing for easy debuggability of state changes and understandable exceptions when an illegal input is applied in a given state.
 
-### And more! ###
+*And more...*
 
 

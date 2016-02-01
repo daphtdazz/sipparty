@@ -53,7 +53,7 @@ TransitionKeys = Enum((
     'StartTimers',
     'StopTimers',
     'StartThreads'
-    ))
+))
 
 
 class FSMClassInitializer(type):
@@ -654,9 +654,9 @@ class FSM(object):
             log.debug("Joined thread %r", thr.name)
 
     @class_or_instance_method
-    def _fsm_setState(self, newState):
+    def _fsm_setState(self, new_state):
         "Should only be called from methods that have the lock."
-        self._fsm_state = newState
+        self._fsm_state = new_state
 
 
 class LockedFSM(FSM):

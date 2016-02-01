@@ -78,11 +78,11 @@ class TestDeepClass(SIPPartyTestCase):
             'attributes, and attribute \'name\' which originally was broken')
 
         class TestDeepClass(DeepClass('_tdc_', {
-                    'attr1': {},
-                    'integral_attr': {
-                        dck.check: lambda x: isinstance(x, Integral)},
-                    'name': {},
-                })):
+                'attr1': {},
+                'integral_attr': {
+                    dck.check: lambda x: isinstance(x, Integral)},
+                'name': {}
+        })):
             pass
 
         tdc = TestDeepClass()
@@ -93,8 +93,8 @@ class TestDeepClass(SIPPartyTestCase):
     def test_repr_recursion(self):
 
         class TestDeepClass(DeepClass('_tdc_', {
-                    'attr1': {},
-                })):
+            'attr1': {},
+        })):
             pass
 
         dc1 = TestDeepClass()
