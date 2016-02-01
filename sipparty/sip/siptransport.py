@@ -94,8 +94,10 @@ class SIPTransport(Transport):
 
         log.debug("Adding handler %r for AOR %r", handler, aor)
         hdlrs[aor] = handler
-        log.detail('All aors to handle now: %s', ', '.join(
-            [str(key) for key in self._sptr_dialogHandlers.keys()]))
+
+        if log.getEffectiveLevel() <= logging.DETAIL:
+            log.detail('All aors to handle now: %s', ', '.join(
+                [str(key) for key in self._sptr_dialogHandlers.keys()]))
 
     def removeDialogHandlerForAOR(self, aor):
 
@@ -153,7 +155,7 @@ class SIPTransport(Transport):
 
         return addr
 
-    def sipByteConsumer(self, lAddr, rAddr, data):
+    def sipByteConsumer(self, local_addr, remote_addr, data):
         log.debug(
             "SIPTransport attempting to consume %d bytes.", len(data))
 
