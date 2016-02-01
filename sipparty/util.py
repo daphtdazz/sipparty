@@ -34,7 +34,7 @@ log = logging.getLogger(__name__)
 Clock = timeit.default_timer
 
 
-class attributesubclassgen(type):
+class attributesubclassgen(type):  # noqa
     """This is used as a metaclass to give automatic subclass creation from
     attribute access.
 
@@ -53,59 +53,59 @@ class attributesubclassgen(type):
     >>> inst is an instance of Subclass.
     """
 
-    @classmethod
-    def NormalizeGeneratingAttributeName(clscls, name):
+    @staticmethod
+    def NormalizeGeneratingAttributeName(name):
         return name.title().replace("-", "_")
 
-    def __init__(cls, name, bases, dict):
+    def __init__(self, name, bases, dict):
         """__init__ for classes is called after the bases and dict have been
         set up, so no need to re-set up here."""
-        log.debug("Init %r, %r, %r, %r", cls.__name__, name, bases, dict)
-        super(attributesubclassgen, cls).__init__(name, bases, dict)
-        cls._supername = name
-        cls._ascg_subClasses = {}
+        log.debug("Init %r, %r, %r, %r", self.__name__, name, bases, dict)
+        super(attributesubclassgen, self).__init__(name, bases, dict)
+        self._supername = name
+        self._ascg_subClasses = {}
 
-    def addSubclassesFromDict(cls, SCDict):
-        superName = cls._supername
-        for name, obj in iteritems(SCDict):
+    def addSubclassesFromDict(self, subclass_dict):
+        superName = self._supername
+        for name, obj in iteritems(subclass_dict):
             subClassType, sep, empty = name.partition(superName)
             if sep != superName or empty != '':
                 continue
 
             log.debug("Found subclass type %r.", subClassType)
-            cls._ascg_subClasses[subClassType] = obj
+            self._ascg_subClasses[subClassType] = obj
 
-    def __getattr__(cls, name):
+    def __getattr__(self, name):
 
         if name == 'types':
-            sp = super(attributesubclassgen, cls)
+            sp = super(attributesubclassgen, self)
             gt = getattr(sp, '__getattr__', None)
             if gt is not None:
                 return gt(name)
 
             raise AttributeError(
-                '%r class has no attribute \'types\'.', cls.__name__)
+                '%r class has no attribute \'types\'.', self.__name__)
 
-        if hasattr(cls, 'types'):
-            tps = cls.types
+        if hasattr(self, 'types'):
+            tps = self.types
             try:
                 name = getattr(tps, name)
             except AttributeError:
                 log.debug(
-                    "%r not a type of %r (supername %r).", name, cls.__name__,
-                    cls._supername)
+                    "%r not a type of %r (supername %r).", name, self.__name__,
+                    self._supername)
                 raise
 
-        normalizedSCType = cls.NormalizeGeneratingAttributeName(name)
+        normalizedSCType = self.NormalizeGeneratingAttributeName(name)
         log.debug("Normalized: %r -> %r.", name, normalizedSCType)
-        scs = cls._ascg_subClasses
+        scs = self._ascg_subClasses
         if normalizedSCType not in scs:
             log.debug(
                 "No predefined to find subclass of %r of type %r.",
-                cls.__name__, name)
+                self.__name__, name)
 
             return type(
-                normalizedSCType + cls._supername, (cls,),
+                normalizedSCType + self._supername, (self,),
                 dict())
         ty = scs[normalizedSCType]
         log.debug("Return %r for type %r from %r", ty, name, scs)
@@ -258,11 +258,16 @@ else:
 
 
 class ClassType(object):
+    """Dynamic property that returns a string naming the "type" of the
+    instance. This is the class name with {self.class_append} removed.
+    """
 
     def __init__(self, class_append):
         self.class_append = class_append
+        self.__doc__ = self.__doc__.format(**locals())
 
     def __get__(self, instance, owner):
+
         class_name = owner.__name__
         capp = self.class_append
         log.detail("Class is %r, append is %r", class_name, capp)
@@ -508,7 +513,7 @@ def CCPropsFor(props):
     return CumulativeClassProperties
 
 
-class class_or_instance_method(object):
+class class_or_instance_method(object):  # noqa
     """This decorator allows you to make a method act on a class or an
     instance. So:
 
@@ -594,15 +599,15 @@ def OnlyWhenLocked(method):
 
 class DerivedProperty(object):
 
-    def update(self, newDP):
+    def update(self, new_derived_property):
         """Updates the derived property so that subclasses can override
         particular methods.
 
-        :param newDP: an instance of `DerivedProperty`.
+        :param new_derived_property: an instance of `DerivedProperty`.
         """
-        log.debug("Update %r with %r.", self, newDP)
+        log.debug("Update %r with %r.", self, new_derived_property)
         for pr in ("_rp_propName", "_rp_get", "_rp_set", "_rp_check"):
-            np = getattr(newDP, pr)
+            np = getattr(new_derived_property, pr)
             if np is not None:
                 # Only update if not None.
                 log.debug("Update property %r with %s %r.",
@@ -770,13 +775,13 @@ class SingletonType(type):
     __instance_names = {}
 
     @property
-    def __initing_attribute(cls):
-        return '__' + cls.__name__ + '_singleton_initing'
+    def __initing_attribute(self):
+        return '__' + self.__name__ + '_singleton_initing'
 
-    def __new__(meta, name, bases, dct):
+    def __new__(cls, name, bases, dct):
 
         log.debug(
-            'New %r instance called %r with bases %r', meta.__name__, name,
+            'New %r instance called %r with bases %r', cls.__name__, name,
             bases)
         init_proc = dct.get('__init__', None)
         new_module_name = []
@@ -786,7 +791,7 @@ class SingletonType(type):
         def singleton_init_wrapper(self, singleton=None, *args, **kwargs):
 
             assert len(new_module_name) == 1
-            singleton_subclass = meta.__instance_names[new_module_name[0]]
+            singleton_subclass = cls.__instance_names[new_module_name[0]]
             log.debug(
                 'Init of %r type wrapper for %r instance, initing attr %r',
                 singleton_subclass.__name__,
@@ -839,13 +844,13 @@ class SingletonType(type):
 
         # Now we've patched init, we can call super to create the instance of
         # this metaclass.
-        new_type = super(SingletonType, meta).__new__(
-            meta, name, bases, dct)
+        new_type = super(SingletonType, cls).__new__(
+            cls, name, bases, dct)
 
         module_path = '.'.join((new_type.__module__, new_type.__name__))
         new_module_name.append(module_path)
 
-        if module_path in meta.__instance_names:
+        if module_path in cls.__instance_names:
             log.debug(
                 'Overwriting existing class at %s, check this is using the '
                 'six module', module_path)
@@ -860,9 +865,9 @@ class SingletonType(type):
                     'same name in the same module that both inherit from '
                     'Singleton is not supported.' % module_path)
 
-        meta.__instance_names[module_path] = new_type
+        cls.__instance_names[module_path] = new_type
 
-        log.debug('New %r instance %s - FINISHED', meta.__name__, module_path)
+        log.debug('New %r instance %s - FINISHED', cls.__name__, module_path)
         return new_type
 
 

@@ -109,7 +109,7 @@ class TestParty(SIPPartyTestCase):
         # Try another call.
         p3 = BasicParty(
             aor=b'charlie@charlesville.com',
-            contactURI__address=abytes(contact_name))
+            contact_uri__address=abytes(contact_name))
         p3.listen(sock_type=sock_type, name=contact_name, port=5061)
         self.assertTrue(p3.transport is p1.transport)
         self.assertTrue(p3.transport is p2.transport)
@@ -136,19 +136,19 @@ class TestParty(SIPPartyTestCase):
 
         p1.uri = 'sip:p1@test.com'
         p1.listen()
-        self.assertEqual(p1.contactURI.port, 5060)
+        self.assertEqual(p1.contact_uri.port, 5060)
 
         p2 = NoMediaSimpleCallsParty()
         p2.uri = 'sip:p2@test.com'
         p2.listen()
-        self.assertEqual(p1.contactURI.port, 5060)
+        self.assertEqual(p1.contact_uri.port, 5060)
 
     def test_no_media_party(self):
 
         log.info('Create two new no-media parties.')
         p1 = NoMediaSimpleCallsParty(uri='sip:p1@test.com')
         p1.listen()
-        self.assertTrue(IsValidPortNum(p1.contactURI.port))
+        self.assertTrue(IsValidPortNum(p1.contact_uri.port))
 
     def test_aor_bindings(self):
 

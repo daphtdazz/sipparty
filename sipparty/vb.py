@@ -255,15 +255,15 @@ class ValueBinder(object):
         return wp() if wp is not None else None
 
     @vb_parent.setter
-    def vb_parent(self, newParent):
+    def vb_parent(self, new_parent):
         log.debug(
             "Set vb_parent of %r instance to %r instance",
-            self.__class__.__name__, newParent.__class__.__name__)
-        if newParent is None:
+            self.__class__.__name__, new_parent.__class__.__name__)
+        if new_parent is None:
             self._vb_weakBindingParent = None
             return
 
-        weakp = wref(newParent)
+        weakp = wref(new_parent)
         self._vb_weakBindingParent = weakp
 
     def attributeAtPath(self, path):
@@ -460,8 +460,8 @@ class ValueBinder(object):
         existing_val = getattr(self, attr, sentinel)
         if existing_val is sentinel:
             raise AttributeError(
-                    "Attribute %r of %r instance cannot be deleted as it does "
-                    "not exist." % (attr, self.__class__.__name__))
+                "Attribute %r of %r instance cannot be deleted as it does "
+                "not exist." % (attr, self.__class__.__name__))
 
         self.vb_updateAttributeBindings(attr, existing_val, None)
 

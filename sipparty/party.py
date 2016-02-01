@@ -23,7 +23,7 @@ from .parse import (ParsedPropertyOfClass)
 from .sip import (
     SIPTransport, DNameURI, URI, Host, Incomplete, Request, Message, defaults)
 from .transport import (IPaddress_re, IsSpecialName)
-from .util import (abytes,  WeakMethod)
+from .util import (abytes, WeakMethod)
 from .vb import ValueBinder
 
 log = logging.getLogger(__name__)
@@ -54,17 +54,17 @@ def NewAOR():
 
 class Party(
         DeepClass("_pt_", {
-            "dnameURI": {
+            "display_name_uri": {
                 dck.descriptor: ParsedPropertyOfClass(DNameURI),
                 dck.gen: DNameURI},
-            "contactURI": {
+            "contact_uri": {
                 dck.descriptor: ParsedPropertyOfClass(URI),
                 dck.gen: URI},
             "mediaAddress": {
                 dck.check: lambda x: IsSpecialName(x) or IPaddress_re.match(x),
                 dck.get: lambda self, underlying: (
                     underlying if underlying is not None else
-                    self.contactURI.address)
+                    self.contact_uri.address)
             },
             "transport": {dck.gen: SIPTransport}
         }),
@@ -80,7 +80,7 @@ class Party(
     DefaultMediaAddress = None
 
     vb_dependencies = (
-        ("dnameURI", ("uri", "aor")),)
+        ("display_name_uri", ("uri", "aor")),)
 
     #
     # =================== INSTANCE INTERFACE =================================
@@ -109,15 +109,13 @@ class Party(
             raise
         return icds
 
-    def __init__(self, dnameURI=None, **kwargs):
+    def __init__(self, display_name_uri=None, **kwargs):
         """Create the party.
 
-        :param dnameURI: The display name and URI of this party. To specify
-        child components, use underscores to split the path. So to set the AOR
-        of the URI, use dnameURI_uri_aor=AOR().
-        :param
+        :param display_name_uri: The display name and URI of this party.
         """
-        super(Party, self).__init__(dnameURI=dnameURI, **kwargs)
+        super(Party, self).__init__(
+            display_name_uri=display_name_uri, **kwargs)
         if log.level <= logging.DETAIL:
             log.detail(
                 "%r dir after super init: %r", self.__class__.__name__,
@@ -147,7 +145,7 @@ class Party(
         tp.addDialogHandlerForAOR(
             self.uri.aor, WeakMethod(self, 'newDialogHandler'))
 
-        cURI_host = self.contactURI.host
+        cURI_host = self.contact_uri.host
         l_desc = tp.listen_for_me(**kwargs)
 
         cURI_host.address = abytes(l_desc.name)
@@ -165,19 +163,19 @@ class Party(
                 "Cannot build a request since we aren't configured with an "
                 "URI!")
 
-        toURI = self._pt_resolveTargetURI(target)
+        to_uri = self._pt_resolveTargetURI(target)
         if proxy is not None:
             assert 0
         else:
             remote_name, remote_port = self._pt_resolveProxyAddress(target)
 
-        invD = self.newInviteDialog(toURI)
+        invD = self.newInviteDialog(to_uri)
 
         log.debug("Initialize dialog to %r", ((remote_name, remote_port,)))
         invD.initiate(remote_name=remote_name, remote_port=remote_port)
         return invD
 
-    def newInviteDialog(self, toURI):
+    def newInviteDialog(self, to_uri):
         InviteDialog = self.InviteDialog
         if InviteDialog is None:
             raise AttributeError(
@@ -185,16 +183,16 @@ class Party(
                 "with a Dialog Type to use!")
 
         invD = InviteDialog(
-            fromURI=self.uri, toURI=toURI,
-            contactURI=self.contactURI,
+            from_uri=self.uri, to_uri=to_uri,
+            contact_uri=self.contact_uri,
             transport=self.transport)
         invD.localSession = self.newSession()
 
         ids = self._pt_inviteDialogs
-        if toURI not in ids:
-            ids[toURI] = [invD]
+        if to_uri not in ids:
+            ids[to_uri] = [invD]
         else:
-            ids[toURI].append(invD)
+            ids[to_uri].append(invD)
 
         invD.delegate = self
 
@@ -260,9 +258,9 @@ class Party(
                 log.debug("Target has listen address %r", pAddr)
                 return pAddr
 
-        if hasattr(target, "contactURI"):
+        if hasattr(target, "contact_uri"):
             log.debug("Target has a proxy contact URI.")
-            cURI = target.contactURI
+            cURI = target.contact_uri
             rtup = (cURI.address, cURI.port)
             if not self._pt_check_address_tuple(rtup):
                 raise ValueError(
@@ -284,7 +282,7 @@ class Party(
     def _pt_resolveProxyHostFromTarget(self, target):
         try:
             if hasattr(target, "attributeAtPath"):
-                for apath in ("contactURI.address", ""):
+                for apath in ("contact_uri.address", ""):
                     try:
                         tcURI = target.attributeAtPath(apath)
                         return tcURI
