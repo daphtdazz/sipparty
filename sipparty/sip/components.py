@@ -19,11 +19,12 @@ limitations under the License.
 import logging
 from numbers import Integral
 from six import binary_type as bytes
-import socket
+from socket import AF_INET6
 from . import defaults
 from .prot import (bdict as abnf_name_bdict, Incomplete)
 from ..deepclass import (DeepClass, dck)
 from ..parse import (Parser, ParsedProperty, ParsedPropertyOfClass)
+from ..transport import IPAddressFamilyFromName
 from ..util import (astr, TwoCompatibleThree, TupleRepresentable)
 from ..vb import ValueBinder
 
@@ -76,14 +77,8 @@ class Host(
         isIpv6 = False
         if address:
             log.detail("Resolve address: %r", address)
-            try:
-                ais = socket.getaddrinfo(address, 0)
-                for ai in ais:
-                    if ai[0] == socket.AF_INET:
-                        break
-                    isIpv6 = True
-            except socket.gaierror:
-                pass
+
+            isIpv6 = IPAddressFamilyFromName(address) == AF_INET6
 
         if address and port:
             if isIpv6:
