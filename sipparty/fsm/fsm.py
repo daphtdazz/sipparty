@@ -32,7 +32,8 @@ log = logging.getLogger(__name__)
 
 __all__ = [
     'AsyncFSM', 'FSMError', 'UnexpectedInput', 'FSMTimeout', 'FSM', 'FSMType',
-    'FSMClassInitializer', 'InitialStateKey', 'LockedFSM', 'TransitionKeys']
+    'FSMClassInitializer', 'InitialStateKey', 'LockedFSM', 'TransitionKeys',
+    'tsk']
 
 
 class FSMError(Exception):
@@ -66,6 +67,9 @@ class FSMClassInitializer(type):
         self._fsm_timers = {}
         self._fsm_name = self.__name__
         self._fsm_state = None
+
+        # Add any predefined timers.
+        self.AddTimers()
 
         # Add any predefined transitions.
         self.AddClassTransitions()
@@ -130,32 +134,20 @@ class FSM(object):
         cls._fsm_definitionDictionary = definition_dict
         for old_state, stdict in iteritems(definition_dict):
             for input, transdef in iteritems(stdict):
-                try:
-                    ns = transdef[TransitionKeys.NewState]
-                except KeyError:
-                    raise KeyError(
-                        "{cls.__name__!r} definition transition dictionary "
-                        "for "
-                        "input {input!r} into state {old_state!r} doesn't "
-                        "have a {_ns!r} value."
-                        "".format(_ns=TransitionKeys.NewState, **locals()))
+                ns = transdef.get(TransitionKeys.NewState, old_state)
                 if ns not in definition_dict:
                     raise KeyError(
                         "NewState %r for input %r to state %r for "
                         "transitions definition dictionary for class %r "
                         "has not been declared in the dictionary." % (
                             ns, input, old_state, cls.__name__))
-                action = (
-                    transdef[TransitionKeys.Action]
-                    if TransitionKeys.Action in transdef else
-                    None)
-                start_threads = (
-                    transdef[TransitionKeys.StartThreads]
-                    if TransitionKeys.StartThreads in transdef else None)
 
                 cls.addTransition(
-                    old_state, input, ns, action=action,
-                    start_threads=start_threads)
+                    old_state, input, ns,
+                    action=transdef.get(tsk.Action, None),
+                    start_threads=transdef.get(tsk.StartThreads, None),
+                    start_timers=transdef.get(tsk.StartTimers, None),
+                    stop_timers=transdef.get(tsk.StopTimers, None))
 
         # If the special initial state is specified, set that.
         if InitialStateKey in definition_dict:
@@ -169,6 +161,13 @@ class FSM(object):
         """
         if hasattr(cls, "FSMDefinitions"):
             cls.PopulateWithDefinition(cls.FSMDefinitions)
+
+    @classmethod
+    def AddTimers(cls):
+        """Build and add the predefined timers."""
+        tmrs = getattr(cls, 'FSMTimers', {})
+        for tname, (act, retryer) in iteritems(tmrs):
+            cls.addTimer(tname, act, retryer)
 
     #
     # =================== CLASS OR INSTANCE INTERFACE ========================
@@ -233,11 +232,12 @@ class FSM(object):
             timers = []
             result[key] = timers
 
-            if timer_names is None:
+            if not timer_names:
                 # No timers specified, so leave a blank list.
                 continue
 
             for timer_name in timer_names:
+                log.debug('Add timer %r to fsm %r', timer_name, self.name)
                 if timer_name not in timrs_dict:
                     raise KeyError("No such timer %r." % (timer_name))
                 timers.append(timrs_dict[timer_name])
@@ -260,14 +260,31 @@ class FSM(object):
         """Add a timer with name `name`. Timers must be independent of
         transitions because they may be stopped or started at any transition.
         """
-        newtimer = (
-            (action, retryer) if isinstance(self, type) else
-            fsmtimer.Timer(name, self._fsm_makeAction(action), retryer))
+        if isinstance(self, type):
+            # Class, just save the parameters for when we instantiate and
+            # create the actual generator and action then.
+            self._fsm_timers[name] = (action, retryer)
+            return
+
+        if isinstance(retryer, str):
+            try:
+                retryer = getattr(self, retryer)
+            except AttributeError as exc:
+                exc.args = (
+                    "Can't make an action with string %s as it is not a "
+                    "method;%s" % (retryer, exc.args[0]))
+                raise
+
+        newtimer = fsmtimer.Timer(name, self._fsm_makeAction(action), retryer)
         self._fsm_timers[name] = newtimer
 
     #
     # =================== INSTANCE INTERFACE =================================
     #
+    @property
+    def name(self):
+        return self._fsm_name
+
     @property
     def state(self):
         return self._fsm_state
@@ -376,7 +393,7 @@ class FSM(object):
         Subclassing: subclasses may override this to implement background timer
         popping, which is what AsyncFSM does.
         """
-        log.debug("Stop timer %r", timer.name)
+        log.debug("Start timer %r", timer.name)
         timer.start()
 
     def stop_timer(self, timer):
@@ -706,7 +723,7 @@ class AsyncFSM(LockedFSM):
         """Override of the superclass to implement background timer scheduling.
         :param timer: The FSMTimer to start.
         """
-        log.debug("Stop timer %r", timer.name)
+        log.debug("Start timer %r", timer.name)
         timer.start()
         self._fsm_thread.addRetryTime(timer.nextPopTime)
 
@@ -755,3 +772,6 @@ class AsyncFSM(LockedFSM):
 
         self.checkTimers()
         self._fsm_garbageCollect()
+
+# Abbreviation for TransitionKeys
+tsk = TransitionKeys  # noqa

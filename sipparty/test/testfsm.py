@@ -567,3 +567,57 @@ class TestFSM(SIPPartyTestCase):
         tfsm.hit('input')
         tfsm.meth1.assert_called_once_with()
         tfsm.meth2.assert_called_once_with()
+
+    @patch.object(fsmtimer, 'Clock', new=Clock)
+    @patch.object(retrythread, 'Clock', new=Clock)
+    def test_timer_definitions(self):
+
+        class TimerFSM(FSM):
+            FSMDefinitions = {
+                InitialStateKey: {
+                    'input': {
+                        TransitionKeys.NewState: 'running',
+                        TransitionKeys.StartTimers: ['running_timer']
+                    }
+                },
+                'running': {
+                    'input': {
+                        TransitionKeys.NewState: 'done',
+                        TransitionKeys.StopTimers: ['running_timer']
+                    }
+                },
+                'done': {}
+            }
+            FSMTimers = {
+                'running_timer': ('running_timer_action', 'running_timer_gen')
+            }
+
+            timer_duration_s = 2
+
+            def __init__(self, *args, **kwargs):
+                super(TimerFSM, self).__init__(*args, **kwargs)
+                self.action_count = 0
+
+            def running_timer_gen(self):
+                while True:
+                    yield self.timer_duration_s
+
+            def running_timer_action(self):
+                self.action_count += 1
+
+        tfsm = TimerFSM()
+        tfsm.hit('input')
+        self.assertEqual(tfsm.action_count, 0)
+        self.Clock.return_value = 3
+        tfsm.checkTimers()
+        self.assertEqual(tfsm.action_count, 1)
+        self.Clock.return_value = 3.9
+        tfsm.checkTimers()
+        self.assertEqual(tfsm.action_count, 1)
+        self.Clock.return_value = 4
+        tfsm.checkTimers()
+        self.assertEqual(tfsm.action_count, 2)
+        tfsm.hit('input')
+        self.Clock.return_value = 6
+        tfsm.checkTimers()
+        self.assertEqual(tfsm.action_count, 2)
