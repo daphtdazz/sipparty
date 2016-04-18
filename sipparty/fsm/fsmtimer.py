@@ -19,16 +19,13 @@ limitations under the License.
 import collections
 import logging
 from six import next
-from ..util import Clock
+from threading import Lock
+from ..util import Clock, OnlyWhenLocked
 
 log = logging.getLogger(__name__)
 
 
 class TimerError(Exception):
-    pass
-
-
-class TimerNotRunning(TimerError):
     pass
 
 
@@ -59,6 +56,8 @@ class Timer(object):
         self._tmr_action = action
         self._tmr_startTime = None
         self._tmr_alarmTime = None
+        self._lock = Lock()
+        self._lock_holdingThread = None
 
     def __repr__(self):
         return "Timer(%r, action=%r, retryer=%r)" % (
@@ -78,6 +77,7 @@ class Timer(object):
     def nextPopTime(self):
         return self._tmr_alarmTime
 
+    @OnlyWhenLocked
     def start(self):
         "Start the timer."
         log.debug("Start timer %r.", self._tmr_name)
@@ -85,18 +85,20 @@ class Timer(object):
         self._tmr_currentPauseIter = self._tmr_retryer()
         self._tmr_setNextPopTime()
 
+    @OnlyWhenLocked
     def stop(self):
         "Stop the timer."
-        self._tmr_startTime = None
-        self._tmr_alarmTime = None
-        self._tmr_currentPauseIter = None
+        self.__stop()
 
+    @OnlyWhenLocked
     def check(self):
         "Checks the timer, and if it has expired runs the action."
+
         if self._tmr_alarmTime is None:
-            raise TimerNotRunning(
-                "%r instance named %r not running." % (
-                    self.__class__.__name__, self._tmr_name))
+            log.debug(
+                "%r instance named %r not running.", self.__class__.__name__,
+                self._tmr_name)
+            return None
 
         now = Clock()
 
@@ -121,7 +123,7 @@ class Timer(object):
         try:
             wait_time = next(self._tmr_currentPauseIter)
         except StopIteration:
-            self.stop()
+            self.__stop()
             return
 
         if self._tmr_alarmTime is None:
@@ -140,3 +142,8 @@ class Timer(object):
         else:
             res = None
         return res
+
+    def __stop(self):
+        self._tmr_startTime = None
+        self._tmr_alarmTime = None
+        self._tmr_currentPauseIter = None

@@ -409,10 +409,7 @@ class FSM(object):
     def checkTimers(self):
         "Check all the timers that are running."
         for name, timer in iteritems(self._fsm_timers):
-            isRunning = timer.isRunning
-            log.debug("Check timer %r (isRunning: %r).", name, isRunning)
-            if isRunning:
-                timer.check()
+            timer.check()
 
     #
     # ======================= INTERNAL METHODS ===============================
@@ -721,6 +718,7 @@ class AsyncFSM(LockedFSM):
 
     def start_timer(self, timer):
         """Override of the superclass to implement background timer scheduling.
+
         :param timer: The FSMTimer to start.
         """
         log.debug("Start timer %r", timer.name)

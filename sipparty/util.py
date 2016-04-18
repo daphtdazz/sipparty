@@ -564,7 +564,7 @@ def OnlyWhenLocked(method):
 
         if not hasattr(self, "_lock_holdingThread"):
             raise AttributeError(
-                "%s instance % uses OnlyWhenLocked but has no "
+                "%s instance %s uses OnlyWhenLocked but has no "
                 "attribute _lock_holdingThread which is required." %
                 (self.__class__.__name__, obj_name))
 

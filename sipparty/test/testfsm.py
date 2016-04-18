@@ -354,14 +354,7 @@ class TestFSM(SIPPartyTestCase):
         # forward some number of seconds and check 3 times in a row, we
         # should pop on each one.
         self.Clock.return_value = 10
-        nf.checkTimers()
-        self.assertEqual(nf.retries, 2)
-        nf.checkTimers()
-        self.assertEqual(nf.retries, 3)
-        nf.checkTimers()
-        self.assertEqual(nf.retries, 4)
-        nf.checkTimers()
-        self.assertEqual(nf.retries, 4)
+        WaitFor(lambda: nf.checkTimers() is None and nf.retries == 4)
 
         # The Inputs should be instance specific.
         nf.addTransition("stopped", "error", "error")
