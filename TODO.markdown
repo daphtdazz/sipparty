@@ -5,6 +5,7 @@
 1. UDP transport retrying. 
 2. REGISTER dialogues.
 3. TCP support. 
+4. Move "Programming guides" into a section of the documentation.
 9. Smarter ACK than simply "ACK all 200s" in dialog.py
 11. Refactor singleton out of util.
 13. Make util a package with sub-modules.
