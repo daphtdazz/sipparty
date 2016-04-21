@@ -32,7 +32,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-import select
+from select import error as select_error, select
 from socket import (error as socket_error, socketpair)
 import sys
 import threading
@@ -158,10 +158,10 @@ class RetryThread(threading.Thread):
             rsrckeys = rsrcs.keys()
             log.debug("%s wait on %r.", self, rsrckeys)
             try:
-                rfds, wfds, efds = select.select(
+                rfds, wfds, efds = select(
                     rsrckeys, [], rsrckeys, wait)
                 select_bad_fd_count = 0
-            except select.error:
+            except select_error:
                 # One of the FDs is bad... in general users should remove file
                 # descriptors before shutting them down, and we can't tell
                 # which has failed anyway, so we should just be able to

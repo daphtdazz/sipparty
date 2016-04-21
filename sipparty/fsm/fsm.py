@@ -272,7 +272,7 @@ class FSM(object):
             except AttributeError as exc:
                 exc.args = (
                     "Can't make an action with string %s as it is not a "
-                    "method;%s" % (retryer, exc.args[0]))
+                    "method;%s" % (retryer, exc.args[0]),)
                 raise
 
         newtimer = fsmtimer.Timer(name, self._fsm_makeAction(action), retryer)
@@ -408,6 +408,7 @@ class FSM(object):
 
     def checkTimers(self):
         "Check all the timers that are running."
+        log.debug('check timers on fsm %s', self.name)
         for name, timer in iteritems(self._fsm_timers):
             timer.check()
 

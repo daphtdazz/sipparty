@@ -291,6 +291,11 @@ class Call_IdHeader(  # noqa
 class CseqHeader(
         DeepClass("_csh_", {
             "number": {
+                # https://tools.ietf.org/html/rfc3261#section-12.2.1.1 says
+                # that the CSeq should never wrap and be a 32 bit unsigned
+                # integer. Therefore start from a random value up to half the
+                # 32 bit space to ensure we are really unlikely to wrap, even
+                # if we get the largest possible starting number.
                 dck.gen: lambda: randint(0, 2 ** 31 - 1),
                 dck.check: lambda num: isinstance(num, Integral)},
             "reqtype": {dck.gen: lambda: None}

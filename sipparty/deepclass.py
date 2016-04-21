@@ -42,6 +42,8 @@ def DCProperty(tlp, name, attrDesc):
         log.debug("%r uses descriptor %r", internalName, dc)
         return dc(internalName)
 
+    # Remaining keys are for the derived property class, except 'gen' which is
+    # used only once at init time to populate the initial value.
     dpdict = dict(attrDesc)
     for badKey in (dck.gen,):
         if badKey in dpdict:

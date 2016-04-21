@@ -16,8 +16,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from ...util import Enum
 from ...fsm import (InitialStateKey as InitialState, TransitionKeys)
+from ...util import Enum
 from ..dialog import Dialog
 from ..header import ContactHeader
 from ..param import Param
