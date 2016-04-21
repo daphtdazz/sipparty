@@ -25,6 +25,7 @@ from ..sip.prot import (
     DefaultGiveupTimeMS, DefaultMaximumRetryTimeMS, DefaultRetryTimeMS)
 from ..sip.siptransaction import (
     TransactionTransport, TransactionUser, NonInviteClientTransaction)
+from ..util import WaitFor
 from .setup import (MagicMock, patch, SIPPartyTestCase)
 
 log = logging.getLogger(__name__)
@@ -54,7 +55,6 @@ class TestNonInviteTransaction(
         super(TestNonInviteTransaction, self).tearDown()
 
     def retry_thread_select(self, *args, **kwargs):
-        assert 0, 'nope'
         log.debug('Wait for the select semaphore')
         self.select_semaphore.acquire()
         log.debug('select semaphore acquired')
@@ -88,10 +88,10 @@ class TestNonInviteTransaction(
                 (11.5, 6),
                 (31.9, 7)):
             self.Clock.return_value = time
-            non_inv_trans.checkTimers()
-            self.assertEqual(len(self.msgs_sent), resend_count)
+            self.select_semaphore.release()
+            WaitFor(lambda: len(self.msgs_sent) == resend_count)
 
         self.assertEqual(non_inv_trans.state, non_inv_trans.States.trying)
         self.Clock.return_value = 32
-        non_inv_trans.checkTimers()
-        self.assertEqual(non_inv_trans.state, non_inv_trans.States.terminated)
+        self.select_semaphore.release()
+        WaitFor(lambda: non_inv_trans.state == non_inv_trans.States.terminated)

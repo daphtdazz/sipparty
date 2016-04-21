@@ -304,7 +304,6 @@ class TestFSM(SIPPartyTestCase):
     @patch.object(fsmtimer, 'Clock', new=Clock)
     @patch.object(retrythread, 'Clock', new=Clock)
     def subtest_FSM_class(self, async):
-        self.pushLogLevel('fsm.retrythread', logging.DEBUG)
         actnow_hit = [0]
 
         def actnow(*args, **kwargs):
@@ -357,8 +356,6 @@ class TestFSM(SIPPartyTestCase):
         self.assertEqual(nf.retries, 0)
         self.Clock.return_value = 1
         check_retries(1)
-        self.pushLogLevel('fsmtimer', logging.DEBUG)
-        self.pushLogLevel('fsm.fsm', logging.DEBUG)
         self.Clock.return_value = 2
         check_retries(2)
         self.Clock.return_value = 3

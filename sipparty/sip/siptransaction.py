@@ -24,7 +24,7 @@ from six import add_metaclass
 from ..deepclass import (dck, DeepClass)
 from ..transport import IsValidPortNum
 from ..util import Enum, Singleton
-from ..fsm import (FSM, InitialStateKey as InitialState, tsk)
+from ..fsm import (AsyncFSM, InitialStateKey as InitialState, tsk)
 from .prot import (
     DefaultMaximumRetryTimeMS, DefaultRetryTimeMS, TransactionID)
 
@@ -126,7 +126,7 @@ class Transaction(
             'tu_data': {},
             'tt_data': {}
         }),
-        FSM):
+        AsyncFSM):
 
     def __init__(self, *args, **kwargs):
         super(Transaction, self).__init__(*args, **kwargs)
