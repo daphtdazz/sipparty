@@ -295,16 +295,24 @@ class TestFSM(SIPPartyTestCase):
         nf.hit("stop", 1)
         WaitFor(lambda: actnext_hit[0] == 1)
 
+    def testFSMClass(self):
+        self.subtest_FSM_class(async=False)
+
+    def testAsyncFSMClass(self):
+        self.subtest_FSM_class(async=True)
+
     @patch.object(fsmtimer, 'Clock', new=Clock)
     @patch.object(retrythread, 'Clock', new=Clock)
-    def testFSMClass(self):
-
+    def subtest_FSM_class(self, async):
+        self.pushLogLevel('fsm.retrythread', logging.DEBUG)
         actnow_hit = [0]
 
         def actnow(*args, **kwargs):
             actnow_hit[0] += 1
 
-        class FSMTestSubclass(AsyncFSM):
+        cls = AsyncFSM if async else FSM
+
+        class FSMTestSubclass(cls):
 
             @classmethod
             def AddClassTransitions(cls):
@@ -339,14 +347,25 @@ class TestFSM(SIPPartyTestCase):
         nf.hit("start")
         self.assertEqual(actnow_hit[0], 1)
 
+        def check_retries(val):
+            if async:
+                WaitFor(lambda: nf.retries == val, timeout_s=10)
+            else:
+                nf.checkTimers()
+                self.assertEqual(nf.retries, val)
+
         self.assertEqual(nf.retries, 0)
         self.Clock.return_value = 1
-        nf.checkTimers()
-        self.assertEqual(nf.retries, 1)
-        nf.hit("start_done")
+        check_retries(1)
+        self.pushLogLevel('fsmtimer', logging.DEBUG)
+        self.pushLogLevel('fsm.fsm', logging.DEBUG)
         self.Clock.return_value = 2
-        nf.checkTimers()
-        self.assertEqual(nf.retries, 1)
+        check_retries(2)
+        self.Clock.return_value = 3
+        check_retries(3)
+        nf.hit("start_done")
+        self.Clock.return_value = 4
+        check_retries(3)
         nf.hit("stop")
         nf.hit("start")
 
@@ -354,7 +373,7 @@ class TestFSM(SIPPartyTestCase):
         # forward some number of seconds and check 3 times in a row, we
         # should pop on each one.
         self.Clock.return_value = 10
-        WaitFor(lambda: nf.checkTimers() is None and nf.retries == 4)
+        WaitFor(lambda: nf.checkTimers() is None and nf.retries == 6)
 
         # The Inputs should be instance specific.
         nf.addTransition("stopped", "error", "error")

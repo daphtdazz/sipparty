@@ -698,6 +698,7 @@ class AsyncFSM(LockedFSM):
 
     def __init__(self, *args, **kwargs):
         super(AsyncFSM, self).__init__(*args, **kwargs)
+
         # If we pass ourselves directly to the RetryThread, then we'll get
         # a retain deadlock so neither us nor the thread can be freed.
         # Fortunately python 2.7 has a nice weak references module.
@@ -725,6 +726,14 @@ class AsyncFSM(LockedFSM):
         log.debug("Start timer %r", timer.name)
         timer.start()
         self._fsm_thread.addRetryTime(timer.nextPopTime)
+
+    def checkTimers(self):
+        "Check all the timers that are running."
+        log.debug('check timers on fsm %s', self.name)
+        for name, timer in iteritems(self._fsm_timers):
+            timer.check()
+            if timer.nextPopTime is not None:
+                self._fsm_thread.addRetryTime(timer.nextPopTime)
 
     def waitForStateCondition(self, condition, timeout=5):
         if not isinstance(condition, Callable):

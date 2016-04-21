@@ -2,9 +2,9 @@
 
 ## List. ##
 
-1. UDP transport retrying. 
+1. UDP transport retrying.
 2. REGISTER dialogues.
-3. TCP support. 
+3. TCP support.
 4. Move "Programming guides" into a section of the documentation.
 9. Smarter ACK than simply "ACK all 200s" in dialog.py
 11. Refactor singleton out of util.
@@ -24,6 +24,7 @@
 27. Disable checking on deepclass attributes.
 28. Allow the DeepClass attribute dictionary to be a list / tuple of (key, value) tuples to enforce ordering.
 29. OnlyWhenLocked decorator should allow the lock attribute name to be specified in its constructor.
+30. Use bridge pattern to make FSM more lightweight and allow asynchronous flexibility
 
 ## Done list. ##
 
@@ -62,7 +63,7 @@
 
 ### What is the design for the media session?  ###
 
-1. Media session 
+1. Media session
 
 ### When a VB instance is set on an attribute on another VB instance due to a binding action, where is its parent? ###
 
@@ -98,7 +99,7 @@ Potential solutions:
     But now, when pushing values to a parent, how can we choose the right path, as we have no way to know what attribute of the parent we are, so the parent itself cannot determine uniquely its parent for the attribute.
 
 3. You can't add bindings between two direct attributes of the same object. So the following are illegal:
-    
+
         a.bind("a", "b")
         a.bind("a.a.a", "a.a.b")
 

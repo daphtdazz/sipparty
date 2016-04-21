@@ -33,6 +33,7 @@ limitations under the License.
 """
 import logging
 from select import error as select_error, select
+from six import PY2
 from socket import (error as socket_error, socketpair)
 import sys
 import threading
@@ -223,7 +224,10 @@ class RetryThread(threading.Thread):
                     # resource tidy-up won't happen correctly which means we
                     # may never get cancelled (if the cancel is in the __del__
                     # of one of the objects on the exception stack).
-                    sys.exc_clear()
+                    #
+                    # Python 3 does this for us, thank you Python 3!
+                    if PY2:
+                        sys.exc_clear()
 
             # Immediately respin since we haven't checked the next timer yet.
             wait = 0

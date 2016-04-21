@@ -29,6 +29,10 @@ class TimerError(Exception):
     pass
 
 
+class NotRunning(TimerError):
+    pass
+
+
 class Timer(object):
 
     def __init__(self, name, action, retryer):
@@ -59,19 +63,19 @@ class Timer(object):
         self._lock = Lock()
         self._lock_holdingThread = None
 
-    def __repr__(self):
-        return "Timer(%r, action=%r, retryer=%r)" % (
-            self._tmr_name, self._tmr_action, self._tmr_retryer)
-
     @property
     def name(self):
         return self._tmr_name
 
     @property
-    def isRunning(self):
+    def was_started(self):
         # If the timer is running. A timer stops automatically after all the
         # pauses have been tried.
         return self._tmr_startTime is not None
+
+    @property
+    def has_expired(self):
+        return self.was_started and self._tmr_alarmTime is None
 
     @property
     def nextPopTime(self):
@@ -94,11 +98,14 @@ class Timer(object):
     def check(self):
         "Checks the timer, and if it has expired runs the action."
 
-        if self._tmr_alarmTime is None:
-            log.debug(
-                "%r instance named %r not running.", self.__class__.__name__,
-                self._tmr_name)
-            return None
+        if not self.was_started:
+            raise NotRunning(
+                "%r instance named %r not yet started." % (
+                    self.__class__.__name__, self._tmr_name))
+
+        if self.has_expired:
+            log.debug('Timer %s has already expired', self._tmr_name)
+            return
 
         now = Clock()
 
@@ -112,11 +119,19 @@ class Timer(object):
         return res
 
     #
+    # --------------------- MAGIC METHODS -------------------------------------
+    #
+    def __repr__(self):
+        return "%s(name=%r, action=%r, retryer=%r)" % (
+            type(self).__name__, self._tmr_name, self._tmr_action,
+            self._tmr_retryer)
+
+    #
     # INTERNAL METHODS FOLLOW.
     #
     def _tmr_setNextPopTime(self):
         "Sets up the next pop time."
-        if not self.isRunning:
+        if not self.was_started:
             # Not running (perhaps the number of times to retry expired).
             return
 
@@ -144,6 +159,5 @@ class Timer(object):
         return res
 
     def __stop(self):
-        self._tmr_startTime = None
         self._tmr_alarmTime = None
         self._tmr_currentPauseIter = None
