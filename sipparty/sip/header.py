@@ -224,7 +224,9 @@ class ContactHeader(
 class Call_IdHeader(  # noqa
         DeepClass("_cidh_", {
             "host": {},
-            "key": {dck.gen: "GenerateKey"}
+            "key": {
+                dck.gen: "GenerateKey",
+                dck.check: lambda x: isinstance(x, bytes)}
             }),
         Header):
     """Call ID header.
@@ -297,7 +299,8 @@ class CseqHeader(
                 # 32 bit space to ensure we are really unlikely to wrap, even
                 # if we get the largest possible starting number.
                 dck.gen: lambda: randint(0, 2 ** 31 - 1),
-                dck.check: lambda num: isinstance(num, Integral)},
+                dck.check: lambda num: (
+                    isinstance(num, Integral) and 0 <= num < 2 ** 32)},
             "reqtype": {dck.gen: lambda: None}
         }),
         Header):

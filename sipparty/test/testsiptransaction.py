@@ -21,9 +21,11 @@ from threading import Semaphore
 
 from ..fsm import fsmtimer
 from ..fsm import retrythread
+from ..sip.message import Message
 from ..sip.prot import (
     DefaultGiveupTimeMS, DefaultMaximumRetryTimeMS, DefaultRetryTimeMS)
 from ..sip.siptransaction import (
+    TransactionManager,
     TransactionTransport, TransactionUser, NonInviteClientTransaction)
 from ..util import WaitFor
 from .setup import (MagicMock, patch, SIPPartyTestCase)
@@ -95,3 +97,39 @@ class TestNonInviteTransaction(
         self.Clock.return_value = 32
         self.select_semaphore.release()
         WaitFor(lambda: non_inv_trans.state == non_inv_trans.States.terminated)
+
+
+class TestTransactionManager(
+        TransactionTransport, TransactionUser, SIPPartyTestCase):
+
+    Clock = MagicMock()
+
+    def setUp(self):
+        super(TestTransactionManager, self).setUp()
+        self.retry = 0
+        self.cleanup = 0
+
+        self.Clock.return_value = 0
+        self.msgs_sent = []
+        self.msg_tu_datas = []
+
+    def sendMessage(self, msg, remote_name, remote_port):
+        self.msgs_sent.append(msg)
+
+    def consumeMessage(self, msg, tu_data=None):
+        self.msg_tu_datas.append((msg, tu_data))
+
+    def test_basic(self):
+        tm = TransactionManager()
+        tm2 = TransactionManager()
+        self.assertIs(tm, tm2)
+
+        invite = Message.invite()
+
+        invite.Call_IDHeader.key = b'test-call-id_12345'
+        invite.FromHeader.parameters.tag = b'from-tag'
+        invite.ToHeader.parameters.tag = b'to-tag'
+
+        inv_trns = tm.transaction_for_message(invite)
+        inv_trns2 = tm.transaction_for_message(invite)
+        self.assertIs(inv_trns, inv_trns2)

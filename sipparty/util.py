@@ -671,9 +671,9 @@ class DerivedProperty(object):
             finally:
                 if exc_type is not None:
                     raise exc_class(
-                        "%r instance is not an allowed value for attribute %r "
-                        "of class %r." % (
-                            value.__class__.__name__, pname,
+                        "%r instance %r is not an allowed value for attribute "
+                        "%s of class %r." % (
+                            value.__class__.__name__, value, pname,
                             obj.__class__.__name__))
 
         st = self._rp_set

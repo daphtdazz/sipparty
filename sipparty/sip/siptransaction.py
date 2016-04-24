@@ -45,8 +45,8 @@ class TransactionManager(Singleton):
             `self.transactions`.
         """
         return TransactionID(
-            msg.Call_IDHeader.value, msg.FromHeader.parameters.tag.value,
-            msg.ToHeader.parameters.tag.value)
+            msg.Call_IDHeader.value, msg.FromHeader.parameters.tag,
+            msg.ToHeader.parameters.tag, msg.CseqHeader.number)
 
     def __init__(self):
         """Initialization method.
@@ -73,6 +73,7 @@ class TransactionManager(Singleton):
             trns = InviteClientTransaction()
 
     def send_message(self, msg, socket_proxy):
+        trns = self.transaction_for_message()
         socket_proxy.send(bytes(msg))
 
 
