@@ -131,5 +131,13 @@ class TestTransactionManager(
         invite.ToHeader.parameters.tag = b'to-tag'
 
         inv_trns = tm.transaction_for_message(invite)
+        self.assertIsNotNone(inv_trns)
         inv_trns2 = tm.transaction_for_message(invite)
         self.assertIs(inv_trns, inv_trns2)
+
+        inv2 = Message.invite()
+        inv2.Call_IDHeader.key = b'test-call-id_12345'
+        inv2.FromHeader.parameters.tag = b'from-tag'
+        inv2.ToHeader.parameters.tag = b'to-tag-2'
+        inv_trns2 = tm.transaction_for_message(inv2)
+        self.assertIsNot(inv_trns2, inv_trns)

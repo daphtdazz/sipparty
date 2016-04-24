@@ -55,6 +55,10 @@ class TransactionManager(Singleton):
         """
         self.transactions = {}
 
+    def add_transaction_for_message(self, trans, message):
+        tk = self.transaction_key_for_message(message)
+        self.transactions[tk] = trans
+
     def lookup_transaction(self, message):
         """Lookup a transaction for a message.
 
@@ -71,6 +75,11 @@ class TransactionManager(Singleton):
 
         if message.type == 'INVITE':
             trns = InviteClientTransaction()
+        else:
+            trns = NonInviteClientTransaction()
+
+        self.add_transaction_for_message(trns, message)
+        return trns
 
     def send_message(self, msg, socket_proxy):
         trns = self.transaction_for_message()
