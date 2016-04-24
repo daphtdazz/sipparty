@@ -13,6 +13,7 @@
 12. Move sipheader out of util and probably into prot.
 15. Document and fixing attribute naming convention in vb.py.
 16. deepclass representation is overly verbose / not detailed enough depending on whether we recurse to superclass's deepclasses.
+17. retrythread is heavyweight: should be able to share retrythreads amongst multiple async FSMs / users (e.g. Transactions!)
 18. Better handling of attempt to pass an unrecognised kwarg into DeepClass.__init__().
 19. Cumulative field_bindings for Message classes.
 20. Short form header names.

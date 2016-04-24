@@ -17,6 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 from abc import ABCMeta, abstractmethod
+import logging
 from numbers import Real
 
 from six import add_metaclass
@@ -27,6 +28,8 @@ from ..util import Enum, Singleton
 from ..fsm import (AsyncFSM, InitialStateKey as InitialState, tsk)
 from .prot import (
     DefaultMaximumRetryTimeMS, DefaultRetryTimeMS, TransactionID)
+
+log = logging.getLogger(__name__)
 
 
 class TransactionError(Exception):
@@ -82,7 +85,8 @@ class TransactionManager(Singleton):
         return trns
 
     def send_message(self, msg, socket_proxy):
-        trns = self.transaction_for_message()
+        trns = self.transaction_for_message(msg)
+
         socket_proxy.send(bytes(msg))
 
 

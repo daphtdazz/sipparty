@@ -18,6 +18,7 @@ limitations under the License.
 """
 import logging
 from threading import Semaphore
+from time import sleep
 
 from ..fsm import fsmtimer
 from ..fsm import retrythread
@@ -33,7 +34,7 @@ from .setup import (MagicMock, patch, SIPPartyTestCase)
 log = logging.getLogger(__name__)
 
 
-class TestNonInviteTransaction(
+class TransactionTest(
         TransactionTransport, TransactionUser, SIPPartyTestCase):
 
     Clock = MagicMock()
@@ -43,24 +44,35 @@ class TestNonInviteTransaction(
         self.cleanup = 0
 
         self.Clock.return_value = 0
-        self.select_semaphore = Semaphore(0)
+        sema = Semaphore(0)
+        self.select_semaphore = sema
         self.msgs_sent = []
         self.msg_tu_datas = []
 
+        def retry_thread_select(self, *args, **kwargs):
+            log.debug('Wait for the select semaphore')
+            sema.acquire()
+            log.debug('select semaphore acquired')
+
+            # small sleep to improve chance of garbage collection before the
+            # semaphore is exhausted.
+            sleep(0.0001)
+            return [], [], []
+
         self.select_patch = patch.object(
-            retrythread, 'select', new=self.retry_thread_select)
+            retrythread, 'select', new=retry_thread_select)
         self.select_patch.start()
 
     def tearDown(self):
-        self.select_semaphore.release()
+        # Given the unpredicatibility of python object lifetimes we don't know
+        # exactly when the retry threads will be garbage collected and stop, so
+        # flood the semaphore to endeavour to make sure they don't deadlock on
+        # it before being tidied.
+        log.debug('Release semaphore for tearDown.')
+        for ii in range(1000):
+            self.select_semaphore.release()
         self.select_patch.stop()
-        super(TestNonInviteTransaction, self).tearDown()
-
-    def retry_thread_select(self, *args, **kwargs):
-        log.debug('Wait for the select semaphore')
-        self.select_semaphore.acquire()
-        log.debug('select semaphore acquired')
-        return [], [], []
+        super(TransactionTest, self).tearDown()
 
     def sendMessage(self, msg, remote_name, remote_port):
         self.msgs_sent.append(msg)
@@ -68,8 +80,11 @@ class TestNonInviteTransaction(
     def consumeMessage(self, msg, tu_data=None):
         self.msg_tu_datas.append((msg, tu_data))
 
-    @patch.object(fsmtimer, 'Clock', new=Clock)
-    @patch.object(retrythread, 'Clock', new=Clock)
+
+class TestNonInviteTransaction(TransactionTest):
+
+    @patch.object(fsmtimer, 'Clock', new=TransactionTest.Clock)
+    @patch.object(retrythread, 'Clock', new=TransactionTest.Clock)
     def test_basic(self):
         non_inv_trans = NonInviteClientTransaction(
             transaction_user=self, transport=self,
@@ -90,34 +105,16 @@ class TestNonInviteTransaction(
                 (11.5, 6),
                 (31.9, 7)):
             self.Clock.return_value = time
+            log.debug('Release semaphore for resend')
             self.select_semaphore.release()
             WaitFor(lambda: len(self.msgs_sent) == resend_count)
 
         self.assertEqual(non_inv_trans.state, non_inv_trans.States.trying)
         self.Clock.return_value = 32
-        self.select_semaphore.release()
         WaitFor(lambda: non_inv_trans.state == non_inv_trans.States.terminated)
 
 
-class TestTransactionManager(
-        TransactionTransport, TransactionUser, SIPPartyTestCase):
-
-    Clock = MagicMock()
-
-    def setUp(self):
-        super(TestTransactionManager, self).setUp()
-        self.retry = 0
-        self.cleanup = 0
-
-        self.Clock.return_value = 0
-        self.msgs_sent = []
-        self.msg_tu_datas = []
-
-    def sendMessage(self, msg, remote_name, remote_port):
-        self.msgs_sent.append(msg)
-
-    def consumeMessage(self, msg, tu_data=None):
-        self.msg_tu_datas.append((msg, tu_data))
+class TestTransactionManager(TransactionTest):
 
     def test_basic(self):
         tm = TransactionManager()
