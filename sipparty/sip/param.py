@@ -18,50 +18,58 @@ limitations under the License.
 """
 import logging
 import random
-from six import (itervalues, binary_type as bytes, add_metaclass)
+from six import (binary_type as bytes, add_metaclass)
 from ..parse import (Parser)
 from ..util import (
     abytes, astr, Enum, attributesubclassgen, BytesGenner, ClassType,
     DerivedProperty, TwoCompatibleThree)
 from ..vb import ValueBinder
-from .prot import (BranchMagicCookie, Incomplete)
+from .prot import (bdict, BranchMagicCookie, Incomplete)
 
 log = logging.getLogger(__name__)
 
 
-class Parameters(Parser, BytesGenner, ValueBinder, dict):
+class Parameters(Parser, BytesGenner, ValueBinder):
     """Class representing a list of parameters on a header or other object.
     """
     parseinfo = {
-        Parser.Pattern: b"^(.*)$"
+        Parser.Pattern: b"(;%(generic_param)s)*" % bdict
     }
 
     def __init__(self):
         super(Parameters, self).__init__()
-        self.parms = {}
+        self._parm_list = []
 
     def __setattr__(self, attr, val):
-        super(Parameters, self).__setattr__(attr, val)
-        if attr in Param.types:
-            if val is None:
-                if attr in self:
-                    del self[attr]
+        if attr.startswith('_') or attr.startswith('vb'):
+            return super(Parameters, self).__setattr__(attr, val)
+
+        if not isinstance(val, Param):
+            if attr in Param.types:
+                val = getattr(Param, attr)(val)
             else:
-                self[attr] = val
+                # generic parameter
+                val = Param(val)
 
-    def __getattr__(self, attr):
+        if attr not in self._parm_list:
+            self._parm_list.append(attr)
 
-        if attr in self:
-            return self[attr]
+        super(Parameters, self).__setattr__(attr, val)
 
-        sp = super(Parameters, self)
-        try:
-            return sp.__getattr__(attr)
-        except AttributeError:
-            raise AttributeError(
-                "%r instance has no attribute %r: parameters contained are "
-                "%r.", (
-                    self.__class__.__name__, attr, self.keys()))
+    def __len__(self):
+        return len(self._parm_list)
+
+    def __eq__(self, other):
+        if type(self) != type(other):
+            return False
+
+        if len(self) != len(other):
+            return False
+
+        return all(
+            getattr(self, attr) == getattr(other, attr)
+            for attr in self._parm_list
+        )
 
     def parsecust(self, string, mo):
         parms = string.lstrip(b';').split(b';')
@@ -69,14 +77,19 @@ class Parameters(Parser, BytesGenner, ValueBinder, dict):
 
         for parm in parms:
             newp = Param.Parse(parm)
-            self[newp.name] = newp
+            setattr(self, newp.name, newp)
 
     def bytesGen(self):
-        for pm in itervalues(self):
-            log.detail('Add param type %r', pm.__class__.__name__)
+        for key in self._parm_list:
+
+            log.detail('Add %s param ', key)
             yield b';'
-            for by in pm.safeBytesGen():
-                yield by
+            yield abytes(key)
+            val = getattr(self, key)
+            if val:
+                yield b'='
+                for by in val.safeBytesGen():
+                    yield by
 
 
 @add_metaclass(attributesubclassgen)
@@ -104,14 +117,12 @@ class Param(Parser, BytesGenner, ValueBinder):
         super(Param, self).__init__()
         self.value = value
 
-    def getValue(self, underlyingValue):
+    def getValue(self, underlying_value):
         "Get the value. Subclasses should override."
-        return underlyingValue
+        return underlying_value
 
     def bytesGen(self):
         log.debug("%r bytesGen", self.__class__.__name__)
-        yield bytes(abytes(self.name))
-        yield b'='
         yield bytes(self.value)
 
     def __eq__(self, other):
@@ -146,21 +157,21 @@ class BranchParam(Param):
 
     BranchNumber = random.randint(1, 10000)
 
-    def __init__(self, startline=None, branch_num=None):
-        super(BranchParam, self).__init__()
+    def __init__(self, value=None, startline=None, branch_num=None):
+        super(BranchParam, self).__init__(value=value)
         self.startline = startline
         if branch_num is None:
             branch_num = BranchParam.BranchNumber
             BranchParam.BranchNumber += 1
         self.branch_num = branch_num
 
-    def getValue(self, underlyingValue):
+    def getValue(self, underlying_value):
         log.detail(
             'Get %r instance value, underlying is %r', self.__class__.__name__,
-            underlyingValue)
+            underlying_value)
 
-        if underlyingValue is not None:
-            return underlyingValue
+        if underlying_value is not None:
+            return underlying_value
 
         if not hasattr(self, "startline") or not hasattr(self, "branch_num"):
             return None
@@ -183,18 +194,18 @@ class TagParam(Param):
     """The dialog ID consists of a Call-ID value, a local tag and a remote tag.
     """
 
-    def __init__(self, tagtype=None):
+    def __init__(self, value=None, tagtype=None):
         # tagtype could be used to help ensure that the From: and To: tags are
         # different all the time.
-        super(TagParam, self).__init__()
+        super(TagParam, self).__init__(value=value)
         self.tagtype = tagtype
 
-    def getValue(self, underlyingValue):
+    def getValue(self, underlying_value):
         log.detail(
             'Get %r instance value, underlying is %r', self.__class__.__name__,
-            underlyingValue)
-        if underlyingValue is not None:
-            return underlyingValue
+            underlying_value)
+        if underlying_value is not None:
+            return underlying_value
 
         # RFC 3261 asks for 32 bits of randomness. Expect random is good
         # enough.

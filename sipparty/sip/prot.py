@@ -45,7 +45,7 @@ protocols = AsciiBytesEnum((b"SIP/2.0",), normalize=lambda p: p.upper())
 CRLF = b"\r\n"
 SP = b" "
 HTAB = b"\t"
-WS = b"[ \t]" % bglobals()
+WS = b"[ %(HTAB)s]" % bglobals()
 LWS = b"(?:%(WS)s*%(CRLF)s)?%(WS)s+" % bglobals()  # Linear whitespace.
 SWS = b"(?:%(LWS)s)?" % bglobals()  # Separator whitespace.
 HCOLON = b"%(WS)s*:%(SWS)s" % bglobals()
@@ -373,9 +373,7 @@ def ProvisionalDialogIDFromEstablishedID(est_did):
     return est_did[:2]
 
 
-def TransactionID(call_id_text, local_tag_text, remote_tag_text, cseq):
-    return (
-        EstablishedDialogID(call_id_text, local_tag_text, remote_tag_text) +
-        (cseq,))
+def TransactionID(branch, cseq_method):
+    return (branch, cseq_method)
 
 bdict = bglobals()

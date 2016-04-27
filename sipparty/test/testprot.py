@@ -25,6 +25,7 @@ from ..sip import (prot, components, Message, Header)
 from ..sip.body import Body
 from ..sip.components import URI
 from ..sip.header import ContactHeader
+from ..sip.param import Parameters
 from ..sip.prot import (Incomplete)
 from ..sip.request import Request
 from ..util import (bglobals_g)
@@ -231,3 +232,15 @@ class TestProtocol(SIPPartyTestCase):
         inv.unbindAll()
         self.assertEqual(len(inv._vb_forwardbindings), 0)
         self.assertEqual(len(inv._vb_backwardbindings), 0)
+
+    def test_parameters(self):
+        pms = Parameters()
+        pms.tag = b'abcdefg'
+        self.assertEqual(bytes(pms.tag), b'abcdefg')
+        self.assertEqual(bytes(pms), b';tag=abcdefg')
+        pms.branch = b'somebranch'
+        self.assertEqual(bytes(pms.branch), b'somebranch')
+        self.assertEqual(bytes(pms), b';tag=abcdefg;branch=somebranch')
+
+        pms2 = Parameters.Parse(b';tag=abcdefg;branch=somebranch')
+        self.assertEqual(pms, pms2)
