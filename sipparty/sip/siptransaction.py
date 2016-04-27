@@ -48,8 +48,7 @@ class TransactionManager(Singleton):
             `self.transactions`.
         """
         return TransactionID(
-            msg.Call_IDHeader.value, msg.FromHeader.parameters.tag,
-            msg.ToHeader.parameters.tag, msg.CseqHeader.number)
+            msg.ViaHeader.parameters.branch.value, msg.CseqHeader.reqtype)
 
     def __init__(self):
         """Initialization method.

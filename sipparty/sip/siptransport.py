@@ -28,6 +28,7 @@ from ..util import (abytes, DerivedProperty, WeakMethod)
 from . import prot
 from .components import Host
 from .message import Message
+from .siptransaction import TransactionManager, TransactionUser
 from . import Incomplete
 
 log = logging.getLogger(__name__)
@@ -60,7 +61,7 @@ class SIPTransport(Transport):
     provisionalDialogs = DerivedProperty("_sptr_provisionalDialogs")
     establishedDialogs = DerivedProperty("_sptr_establishedDialogs")
 
-    def __init__(self):
+    def __init__(self, transaction_singleton=None):
         super(SIPTransport, self).__init__()
         self._sptr_messageConsumer = None
         self._sptr_messages = []
@@ -72,6 +73,8 @@ class SIPTransport(Transport):
         # released if we don't store strong references to them. Therefore if
         # you want a weak reference, use WeakMethod.
         self._sptr_dialogHandlers = {}
+        self._sptr_transaction_manager = TransactionManager(
+            singleton=transaction_singleton)
 
     def listen_for_me(self, **kwargs):
 
@@ -133,7 +136,7 @@ class SIPTransport(Transport):
             ch.port = sprxy.local_address.port
 
         try:
-            sprxy.send(bytes(msg))
+            self._sptr_transaction_manager.send_message(msg, sprxy)
         except Incomplete:
             sp.release_listen_address(sprxy.local_address)
             raise
@@ -288,3 +291,5 @@ class SIPTransport(Transport):
                 del eds[did]
         except AttributeError:
             pass
+
+TransactionUser.register(SIPTransport)

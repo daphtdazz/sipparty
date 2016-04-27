@@ -68,6 +68,9 @@ class TransactionTest(
         # exactly when the retry threads will be garbage collected and stop, so
         # flood the semaphore to endeavour to make sure they don't deadlock on
         # it before being tidied.
+        #
+        # That's also why this inline function is used, so that we use separate
+        # semaphores for each test.
         log.debug('Release semaphore for tearDown.')
         for ii in range(1000):
             self.select_semaphore.release()
@@ -122,10 +125,8 @@ class TestTransactionManager(TransactionTest):
         self.assertIs(tm, tm2)
 
         invite = Message.invite()
-
-        invite.Call_IDHeader.key = b'test-call-id_12345'
-        invite.FromHeader.parameters.tag = b'from-tag'
-        invite.ToHeader.parameters.tag = b'to-tag'
+        self.assertEqual(invite.CseqHeader.reqtype, 'INVITE')
+        invite.ViaHeader.parameters.branch = b'branch1'
 
         inv_trns = tm.transaction_for_message(invite)
         self.assertIsNotNone(inv_trns)
@@ -133,8 +134,6 @@ class TestTransactionManager(TransactionTest):
         self.assertIs(inv_trns, inv_trns2)
 
         inv2 = Message.invite()
-        inv2.Call_IDHeader.key = b'test-call-id_12345'
-        inv2.FromHeader.parameters.tag = b'from-tag'
-        inv2.ToHeader.parameters.tag = b'to-tag-2'
+        invite.ViaHeader.parameters.branch = b'branch2'
         inv_trns2 = tm.transaction_for_message(inv2)
         self.assertIsNot(inv_trns2, inv_trns)
