@@ -512,8 +512,12 @@ class ConnectedAddressDescription(
 
     def connect(self, data_callback, transport):
         """Attempt to connect this description.
+
         :returns: a SocketProxy object
         """
+        if any((self.sock_family is None, self.sock_type is None)):
+            raise ValueError('sock_family (%r) or sock_type (%r) None' % (
+                self.sock_family, self.sock_type))
 
         log.debug('Connect socket using %r', self)
         sck = socket.socket(self.sock_family, self.sock_type)
@@ -933,8 +937,7 @@ class Transport(Singleton):
         raise(UnresolvableAddress(address=host, port=port))
 
     def close_all(self):
-        """Last ditch attempt to make sure we don't leave sockets lying around.
-        """
+        """Last ditch attempt to avoid leaving sockets lying around."""
         log.info('Closing all sockets.')
         for sock_dicts in (
                 self._tp_listen_sockets, self._tp_connected_sockets):
@@ -954,9 +957,7 @@ class Transport(Singleton):
         self.close_all()
 
         sp = super(Transport, self)
-        dlr = getattr(sp, '__del__', None)
-        if dlr is not None:
-            dlr()
+        getattr(sp, '__del__', lambda: None)()
 
     #
     # =================== INTERNAL METHODS ====================================

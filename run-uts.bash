@@ -51,9 +51,11 @@ killchildren () {
     then
         signal=KILL
     fi
-    for cpid in $(pgrep -P ${ppid})
+    local children=$(pgrep -P ${ppid})
+    echo "Children are $children"
+    for cpid in $children 
     do
-        killchildren "${cpid}"
+        killchildren "${cpid}" "$signal"
         echo "killing $cpid" >&2
         kill -${signal} ${cpid}
     done
@@ -91,5 +93,8 @@ else
     fi
 fi
 
+echo "Waiting for child $child_pid"
 wait "${child_pid}"
-exit $?
+rc=$?
+echo "child exited with $rc"
+exit $rc

@@ -1,6 +1,4 @@
-"""siptransport.py
-
-Specializes the transport layer for SIP.
+"""Specializes the transport layer for SIP.
 
 Copyright 2015 David Park
 
@@ -16,8 +14,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+from abc import ABCMeta, abstractmethod
 import logging
-from six import (binary_type as bytes)
+from six import (add_metaclass, binary_type as bytes)
 from socket import SOCK_DGRAM
 from weakref import (WeakValueDictionary)
 from ..parse import ParseError
@@ -28,12 +27,26 @@ from ..util import (abytes, DerivedProperty, WeakMethod)
 from . import prot
 from .components import Host
 from .message import Message
-from .siptransaction import TransactionManager, TransactionUser
+from .siptransaction import TransactionTransport
 from . import Incomplete
 
 log = logging.getLogger(__name__)
 prot_log = logging.getLogger("messages")
 prot_log.setLevel(logging.INFO)
+
+
+@add_metaclass(ABCMeta)
+class AORHandler(object):
+
+    @abstractmethod
+    def new_dialog_from_request(self, req):
+        """Handle a dialog creating request.
+
+        :raises Exception:
+            Any exception raised is logged at error level and the
+        :returns: A Dialog instance.
+        """
+        raise NotImplemented
 
 
 class SIPTransport(Transport):
@@ -61,7 +74,7 @@ class SIPTransport(Transport):
     provisionalDialogs = DerivedProperty("_sptr_provisionalDialogs")
     establishedDialogs = DerivedProperty("_sptr_establishedDialogs")
 
-    def __init__(self, transaction_singleton=None):
+    def __init__(self):
         super(SIPTransport, self).__init__()
         self._sptr_messageConsumer = None
         self._sptr_messages = []
@@ -73,8 +86,6 @@ class SIPTransport(Transport):
         # released if we don't store strong references to them. Therefore if
         # you want a weak reference, use WeakMethod.
         self._sptr_dialogHandlers = {}
-        self._sptr_transaction_manager = TransactionManager(
-            singleton=transaction_singleton)
 
     def listen_for_me(self, **kwargs):
 
@@ -87,8 +98,14 @@ class SIPTransport(Transport):
             SIPTransport, self).listen_for_me(
                 WeakMethod(self, 'sipByteConsumer'), **kwargs)
 
+    #
+    # =================== AOR MANAGER INTERFACE ===============================
+    #
     def addDialogHandlerForAOR(self, aor, handler):
-        """Register a handler to call """
+        """Register a handler to call."""
+        if not isinstance(handler, AORHandler):
+            raise TypeError('%s instance is not of type AORHandler' % (
+                type(handler).__name__,))
 
         hdlrs = self._sptr_dialogHandlers
         if aor in hdlrs:
@@ -112,7 +129,45 @@ class SIPTransport(Transport):
         log.debug("Remove handler for AOR %r", aor)
         del hdlrs[aor]
 
-    def sendMessage(self, msg, name, port):
+    def updateDialogGrouping(self, dlg):
+        log.detail("Update grouping for dlg %r", dlg)
+        pds = self.provisionalDialogs
+        eds = self.establishedDialogs
+        pdid = dlg.provisionalDialogID
+        if hasattr(dlg, "dialogID"):
+            log.debug("Dialog is established.")
+            did = dlg.dialogID
+            if pdid in pds:
+                log.debug("  Dialog was provisional.")
+                del pds[pdid]
+            if did not in eds:
+                log.debug("  Dialog was not yet established.")
+                eds[did] = dlg
+
+        else:
+            log.debug("Dialog is not established.")
+            if pdid not in pds:
+                log.debug("  Dialog is new.")
+                pds[pdid] = dlg
+
+    def removeDialog(self, dlg):
+        pdid = dlg.provisionalDialogID
+        pdids = self.provisionalDialogs
+        if pdid in pdids:
+            del pdids[pdid]
+
+        try:
+            did = dlg.dialogID
+            eds = self.establishedDialogs
+            if did in eds:
+                del eds[did]
+        except AttributeError:
+            pass
+
+    #
+    # =================== TRANSPORT SENDER INTERFACE ==========================
+    #
+    def send_message(self, msg, name, port):
         log.debug("Send message -> %r type %s", (name, port), msg.type)
 
         if not IsValidTransportName(name):
@@ -136,7 +191,7 @@ class SIPTransport(Transport):
             ch.port = sprxy.local_address.port
 
         try:
-            self._sptr_transaction_manager.send_message(msg, sprxy)
+            sprxy.send(bytes(msg))
         except Incomplete:
             sp.release_listen_address(sprxy.local_address)
             raise
@@ -184,7 +239,7 @@ class SIPTransport(Transport):
             self.consumeMessage(msg)
         except Exception:
             log.exception(
-                "Consuming %r message raised exception.", msg)
+                "Consuming %s message raised exception.", msg.type)
 
         return msg.parsedBytes
 
@@ -221,7 +276,16 @@ class SIPTransport(Transport):
             return
 
         hdlr = hdlrs[toAOR]
-        hdlr(msg)
+
+        dlg = hdlr.new_dialog_from_request(msg)
+        if dlg is None:
+            log.info(
+                'Dropped dialog creating %s message as not wanted by AOR '
+                'handler', msg.type)
+            return
+
+        dlg.consume_message(msg)
+        self.updateDialogGrouping(dlg)
 
     def consumeInDialogMessage(self, msg):
         estDs = self.establishedDialogs
@@ -240,7 +304,7 @@ class SIPTransport(Transport):
         log.detail("Is established dialog %r in %r?", did, estDs)
         if did in estDs:
             log.debug("Found established dialog for %r", did)
-            return estDs[did].receiveMessage(msg)
+            return estDs[did].consume_message(msg)
 
         # Couldn't find an established dialog, so perhaps this is the
         # establishing response for a provisional dialog we started before.
@@ -249,47 +313,13 @@ class SIPTransport(Transport):
         log.detail("Is provisional dialog %r in %r?", pdid, provDs)
         if pdid in provDs:
             log.debug("Found provisional dialog for %r", pdid)
-            return provDs[pdid].receiveMessage(msg)
+            return provDs[pdid].consume_message(msg)
 
         log.warning(
             "Unable to find a dialog for message with dialog ID %r", did)
+        assert 0, (dict(provDs), dict(estDs))
         log.detail("  Current provisional dialogs: %r", provDs)
         log.detail("  Current establishedDialogs dialogs: %r", estDs)
         return
 
-    def updateDialogGrouping(self, dlg):
-        log.detail("Update grouping for dlg %r", dlg)
-        pds = self.provisionalDialogs
-        eds = self.establishedDialogs
-        pdid = dlg.provisionalDialogID
-        if hasattr(dlg, "dialogID"):
-            log.debug("Dialog is established.")
-            did = dlg.dialogID
-            if pdid in pds:
-                log.debug("  Dialog was provisional.")
-                del pds[pdid]
-            if did not in eds:
-                log.debug("  Dialog was not yet established.")
-                eds[did] = dlg
-
-        else:
-            log.debug("Dialog is not established.")
-            if pdid not in pds:
-                log.debug("  Dialog is new.")
-                pds[pdid] = dlg
-
-    def removeDialog(self, dlg):
-        pdid = dlg.provisionalDialogID
-        pdids = self.provisionalDialogs
-        if pdid in pdids:
-            del pdids[pdid]
-
-        try:
-            did = dlg.dialogID
-            eds = self.establishedDialogs
-            if did in eds:
-                del eds[did]
-        except AttributeError:
-            pass
-
-TransactionUser.register(SIPTransport)
+TransactionTransport.register(SIPTransport)

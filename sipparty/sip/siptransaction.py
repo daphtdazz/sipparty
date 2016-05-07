@@ -1,6 +1,4 @@
-"""siptransaction.py
-
-State machines to control SIP transactions.
+"""State machines to control SIP transactions.
 
 Copyright 2016 David Park
 
@@ -24,7 +22,7 @@ from six import add_metaclass
 
 from ..deepclass import (dck, DeepClass)
 from ..transport import IsValidPortNum
-from ..util import Enum, Singleton
+from ..util import Enum, WeakProperty
 from ..fsm import (AsyncFSM, InitialStateKey as InitialState, tsk)
 from .prot import (
     DefaultMaximumRetryTimeMS, DefaultRetryTimeMS, TransactionID)
@@ -36,7 +34,9 @@ class TransactionError(Exception):
     pass
 
 
-class TransactionManager(Singleton):
+class TransactionManager(object):
+
+    lookup_sentinel = type('TransactionManagerLookupSentinel', (), {})()
 
     @classmethod
     def transaction_key_for_message(cls, msg):
@@ -57,36 +57,42 @@ class TransactionManager(Singleton):
         """
         self.transactions = {}
 
+    def __del__(self):
+        log.info('__del__ TransactionManager')
+        getattr(
+            super(TransactionManager, self), '__del__', lambda: None)()
+
     def add_transaction_for_message(self, trans, message):
         tk = self.transaction_key_for_message(message)
         self.transactions[tk] = trans
 
-    def lookup_transaction(self, message):
+    def lookup_transaction(self, message, default=lookup_sentinel):
         """Lookup a transaction for a message.
 
         :returns Transaction,None:
         """
+        assert default is self.lookup_sentinel
         tk = self.transaction_key_for_message(message)
-        return self.transactions.get(tk, None)
+        try:
+            return self.transactions[tk]
+        except KeyError as exc:
+            exc.args = ((
+                '%s; message type %s' % (exc.args[0], message.type),) +
+                exc.args[1:])
+            raise
 
-    def transaction_for_message(self, message):
+    def new_transaction_for_request(self, req, transport, transaction_user,
+                                    **kwargs):
 
-        trns = self.lookup_transaction(message)
-        if trns is not None:
-            return trns
-
-        if message.type == 'INVITE':
-            trns = InviteClientTransaction()
+        if req.type == 'INVITE':
+            trns = InviteClientTransaction(**kwargs)
         else:
-            trns = NonInviteClientTransaction()
+            trns = NonInviteClientTransaction(**kwargs)
 
-        self.add_transaction_for_message(trns, message)
+        trns.transport = transport
+        trns.transaction_user = transaction_user
+        self.add_transaction_for_message(trns, req)
         return trns
-
-    def send_message(self, msg, socket_proxy):
-        trns = self.transaction_for_message(msg)
-
-        socket_proxy.send(bytes(msg))
 
 
 @add_metaclass(ABCMeta)
@@ -110,7 +116,7 @@ class TransactionTransport(object):
     """This is what a transport object for the transaction must look like."""
 
     @abstractmethod
-    def sendMessage(self, msg, tt_data=None):
+    def send_message(self, msg, tt_data=None):
         """Send a SIP message.
 
         :param msg: The message to send.
@@ -125,9 +131,11 @@ class TransactionTransport(object):
 class Transaction(
         DeepClass('_trns_', {
             'transaction_user': {
+                dck.descriptor: WeakProperty,
                 dck.check: lambda x: isinstance(x, TransactionUser)
             },
             'transport': {
+                dck.descriptor: WeakProperty,
                 dck.check: lambda x: isinstance(x, TransactionTransport)
             },
             'remote_name': {
@@ -146,15 +154,22 @@ class Transaction(
 
         self.last_message = None
 
+    def __del__(self):
+        log.info('__del__ %s', type(self).__name__)
+        getattr(super(Transaction, self), '__del__', lambda: None)()
+
     """Base class for all SIP transactions."""
     def send_message(self, message):
+        log.debug('send %s message', message.type)
         self.last_message = message
-        self.transport.sendMessage(message, self.remote_name, self.remote_port)
+        self.transport.send_message(
+            message, self.remote_name, self.remote_port)
 
     def resend_message(self):
         msg = self.last_message
         assert msg is not None, (
             "Can't resend in a transaction before the first send.")
+        log.debug('resend message %s', msg.type)
         self.send_message(msg)
 
     def giveup(self):
@@ -174,6 +189,7 @@ class ClientTransaction(
         }),
         Transaction):
     """Base class for client transactions."""
+
     States = Enum(('trying', 'proceeding', 'completed', 'terminated'))
     Inputs = Enum((
         'request', 'transport_error', 'timer_retry', 'timer_giveup',
@@ -184,10 +200,20 @@ class ClientTransaction(
         # 'timer_completed': ('complete', 'timer_completed_gen')
     }
 
+    giveup_period_multiple = 64
+
+    @property
+    def giveup_period(self):
+        return (
+            self.initial_retry_period_ms * self.giveup_period_multiple /
+            1000.0)
+
     def timer_retry_gen(self):
+        total_wait = 0
         next_wait = self.initial_retry_period_ms / 1000.0
-        while True:
+        while total_wait + next_wait < self.giveup_period:
             yield next_wait
+            total_wait += next_wait
 
             # The duration of the timer double each reattempt, as per
             # https://tools.ietf.org/html/rfc3261#section-17.1.1.2
@@ -196,7 +222,7 @@ class ClientTransaction(
                 next_wait = self.maximum_retry_period_ms / 1000.0
 
     def timer_giveup_gen(self):
-        yield self.initial_retry_period_ms * 64 / 1000.0
+        yield self.giveup_period
 
 
 class NonInviteClientTransaction(ClientTransaction):
@@ -217,7 +243,8 @@ class NonInviteClientTransaction(ClientTransaction):
             },
             Inputs.timer_giveup: {
 
-                tsk.NewState: States.terminated
+                tsk.NewState: States.terminated,
+                tsk.StopTimers: ['timer_retry', 'timer_giveup']
                 # Inform TU, inform manage, 'timer_completed'r.
             },
             Inputs.transport_error: {

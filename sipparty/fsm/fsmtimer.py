@@ -41,8 +41,8 @@ class Timer(object):
 
         if isinstance(retryer, collections.Iterable):
             if isinstance(retryer, collections.Iterator):
-                raise ValueError("retryer is an Iterator (must be "
-                                 "just an Iterable).")
+                raise TypeError("retryer is an Iterator (must be "
+                                "just an Iterable).")
 
             def retry_generator():
                 return iter(retryer)
@@ -83,38 +83,47 @@ class Timer(object):
 
     @OnlyWhenLocked
     def start(self):
-        "Start the timer."
-        log.debug("Start timer %r.", self._tmr_name)
-        self._tmr_startTime = Clock()
+        """Start the timer."""
+        now = Clock()
+        log.debug("Start timer %s at clock %s.", self._tmr_name, now)
+        self._tmr_startTime = now
         self._tmr_currentPauseIter = self._tmr_retryer()
         self._tmr_setNextPopTime()
 
     @OnlyWhenLocked
     def stop(self):
-        "Stop the timer."
+        """Stop the timer."""
         self.__stop()
 
-    @OnlyWhenLocked
     def check(self):
-        "Checks the timer, and if it has expired runs the action."
+        """Checks the timer, and if it has expired runs the action."""
 
-        if not self.was_started:
-            raise NotRunning(
-                "%r instance named %r not yet started." % (
-                    self.__class__.__name__, self._tmr_name))
+        with self._lock:
+            if not self.was_started:
+                raise NotRunning(
+                    "%r instance named %r not yet started." % (
+                        self.__class__.__name__, self._tmr_name))
 
-        if self.has_expired:
-            log.debug('Timer %s has already expired', self._tmr_name)
-            return
+            if self.has_expired:
+                log.debug('Timer %s has already expired', self._tmr_name)
+                return
 
-        now = Clock()
+            now = Clock()
 
-        log.debug("Check at %r", now)
+            log.debug("Check timer %s at time %r", self._tmr_name, now)
 
-        res = None
-        if now >= self._tmr_alarmTime:
+            res = None
+            should_pop = now >= self._tmr_alarmTime
+            if should_pop:
+                log.debug('Going to pop')
+                self._tmr_setNextPopTime()
+
+        if should_pop:
+            # The actual timer pop is done without the lock as it may recurse
+            # to hit this fsm, which may cause this timer to be stopped, which
+            # needs the lock.
+            log.debug('Perform timer pop')
             res = self._tmr_pop()
-            self._tmr_setNextPopTime()
 
         return res
 
@@ -131,10 +140,10 @@ class Timer(object):
         getattr(super(Timer, self), '__del__', lambda: None)()
 
     #
-    # INTERNAL METHODS FOLLOW.
+    # -----------------------INTERNAL METHODS----------------------------------
     #
     def _tmr_setNextPopTime(self):
-        "Sets up the next pop time."
+        """Set up the next pop time."""
         if not self.was_started:
             # Not running (perhaps the number of times to retry expired).
             return
@@ -150,17 +159,17 @@ class Timer(object):
         else:
             self._tmr_alarmTime += wait_time
 
-        log.debug("Start time %r, pop timer %r", self._tmr_startTime,
+        log.debug("Start time was %r, next pop is now %r", self._tmr_startTime,
                   self._tmr_alarmTime)
 
     def _tmr_pop(self):
-        "Pops this timer, calling the action."
+        """Pop this timer, calling the action."""
         log.debug("POP, action %r", self._tmr_action)
-        if self._tmr_action is not None:
-            res = self._tmr_action()
-        else:
-            res = None
-        return res
+        act = getattr(self, '_tmr_action', None)
+        if act is None:
+            return None
+
+        return act()
 
     def __stop(self):
         self._tmr_alarmTime = None

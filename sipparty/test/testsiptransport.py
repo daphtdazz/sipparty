@@ -19,14 +19,14 @@ limitations under the License.
 import logging
 from socket import (AF_INET, SOCK_DGRAM)
 from .. import (sip, transport)
-from ..sip.siptransport import SIPTransport
+from ..sip.siptransport import AORHandler, SIPTransport
 from ..util import WaitFor
 from .setup import (MagicMock, patch, SIPPartyTestCase)
 
 log = logging.getLogger(__name__)
 
 
-class TestSIPTransport(SIPPartyTestCase):
+class TestSIPTransport(AORHandler, SIPPartyTestCase):
 
     def setUp(self):
         self.def_hname_mock = MagicMock()
@@ -40,16 +40,16 @@ class TestSIPTransport(SIPPartyTestCase):
         self.hostname_patch.stop()
         super(TestSIPTransport, self).tearDown()
 
+    def new_dialog_from_request(self, message):
+        self.rcvd_messages.append(message)
+        log.debug("NewDialogHandler consumed the message.")
+
     def test_general(self):
 
         sock_family = AF_INET
         sock_type = SOCK_DGRAM
 
-        rcvd_messages = []
-
-        def newDialogHandler(message):
-            rcvd_messages.append(message)
-            log.debug("NewDialogHandler consumed the message.")
+        self.rcvd_messages = []
 
         log.info('Make SIPTransport object')
         tp = SIPTransport()
@@ -66,11 +66,11 @@ class TestSIPTransport(SIPPartyTestCase):
         msg.ContactHeader.field.value.uri.aor.host.port = l_desc.port
 
         log.info('Add Dialog Handler for our AOR')
-        tp.addDialogHandlerForAOR(msg.ToHeader.aor, newDialogHandler)
+        tp.addDialogHandlerForAOR(msg.ToHeader.aor, self)
         log.info('Send the message')
-        tp.sendMessage(msg, '127.0.0.1', l_desc.port)
+        tp.send_message(msg, '127.0.0.1', l_desc.port)
 
         log.info('Receive the message.')
-        WaitFor(lambda: len(rcvd_messages) > 0, 1)
-        rmsg = rcvd_messages.pop()
+        WaitFor(lambda: len(self.rcvd_messages) > 0, 1)
+        rmsg = self.rcvd_messages.pop()
         self.assertEqual(msg.type, rmsg.type, rmsg)

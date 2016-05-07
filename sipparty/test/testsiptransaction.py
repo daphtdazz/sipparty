@@ -28,6 +28,7 @@ from ..sip.prot import (
 from ..sip.siptransaction import (
     TransactionManager,
     TransactionTransport, TransactionUser, NonInviteClientTransaction)
+from ..sip.siptransport import SIPTransport
 from ..util import WaitFor
 from .setup import (MagicMock, patch, SIPPartyTestCase)
 
@@ -51,8 +52,10 @@ class TransactionTest(
 
         def retry_thread_select(self, *args, **kwargs):
             log.debug('Wait for the select semaphore')
-            sema.acquire()
-            log.debug('select semaphore acquired')
+            if sema.acquire(timeout=0.01):
+                log.debug('select semaphore acquired')
+            else:
+                log.debug('select semaphore timeout')
 
             # small sleep to improve chance of garbage collection before the
             # semaphore is exhausted.
@@ -71,13 +74,13 @@ class TransactionTest(
         #
         # That's also why this inline function is used, so that we use separate
         # semaphores for each test.
-        log.debug('Release semaphore for tearDown.')
+        log.info('tear down')
         for ii in range(1000):
             self.select_semaphore.release()
         self.select_patch.stop()
         super(TransactionTest, self).tearDown()
 
-    def sendMessage(self, msg, remote_name, remote_port):
+    def send_message(self, msg, remote_name, remote_port):
         self.msgs_sent.append(msg)
 
     def consumeMessage(self, msg, tu_data=None):
@@ -89,10 +92,17 @@ class TestNonInviteTransaction(TransactionTest):
     @patch.object(fsmtimer, 'Clock', new=TransactionTest.Clock)
     @patch.object(retrythread, 'Clock', new=TransactionTest.Clock)
     def test_basic(self):
+
+        class FakeMessage(object):
+            type = 'FAKE'
+
+            def __bytes__(self):
+                return b'FAKE MESSAGE'
+
         non_inv_trans = NonInviteClientTransaction(
             transaction_user=self, transport=self,
             remote_name='nowhere.com', remote_port=5060)
-        non_inv_trans.hit('request', 'message')
+        non_inv_trans.hit('request', FakeMessage())
 
         # Test that the standard timers work OK.
         self.assertEqual(DefaultRetryTimeMS, 500)
@@ -106,34 +116,40 @@ class TestNonInviteTransaction(TransactionTest):
                 (7.5, 5),
                 (11.49, 5),
                 (11.5, 6),
-                (31.9, 7)):
+                (31.9, 11)):
             self.Clock.return_value = time
-            log.debug('Release semaphore for resend')
+            log.info('Release semaphore for resend')
             self.select_semaphore.release()
             WaitFor(lambda: len(self.msgs_sent) == resend_count)
 
         self.assertEqual(non_inv_trans.state, non_inv_trans.States.trying)
         self.Clock.return_value = 32
         WaitFor(lambda: non_inv_trans.state == non_inv_trans.States.terminated)
+        self.assertEqual(len(self.msgs_sent), resend_count)
 
 
 class TestTransactionManager(TransactionTest):
 
+    def tearDown(self):
+        log.info('tearing down tm test')
+        super(TestTransactionManager, self).tearDown()
+
     def test_basic(self):
         tm = TransactionManager()
-        tm2 = TransactionManager()
-        self.assertIs(tm, tm2)
 
+        log.info('First invite')
         invite = Message.invite()
         self.assertEqual(invite.CseqHeader.reqtype, 'INVITE')
         invite.ViaHeader.parameters.branch = b'branch1'
 
-        inv_trns = tm.transaction_for_message(invite)
+        self.assertRaises(KeyError, tm.lookup_transaction, invite)
+        inv_trns = tm.new_transaction_for_request(invite, self, self)
         self.assertIsNotNone(inv_trns)
-        inv_trns2 = tm.transaction_for_message(invite)
+        inv_trns2 = tm.lookup_transaction(invite)
         self.assertIs(inv_trns, inv_trns2)
 
+        log.info('Second invite')
         inv2 = Message.invite()
         invite.ViaHeader.parameters.branch = b'branch2'
-        inv_trns2 = tm.transaction_for_message(inv2)
+        inv_trns2 = tm.new_transaction_for_request(inv2, self, self)
         self.assertIsNot(inv_trns2, inv_trns)
