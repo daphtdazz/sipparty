@@ -452,7 +452,7 @@ class TestFSM(SIPPartyTestCase):
             ValueError,
             lambda: nf.addTransition(
                 "a", "b", "c", start_threads=[(
-                    "not", "all", "strings", ('this', 'is', 'a', 'tuple')
+                    "not", "all", "strings", {'this': 'is', 'a': 'map'}
                 )]
             )
         )
@@ -630,3 +630,30 @@ class TestFSM(SIPPartyTestCase):
         self.Clock.return_value = 6
         tfsm.checkTimers()
         self.assertEqual(tfsm.action_count, 2)
+
+    def test_partial_actions(self):
+
+        class TFSM(AsyncFSM):
+            FSMDefinitions = {
+                InitialStateKey: {
+                    "input": {
+                        TransitionKeys.NewState: "end",
+                        TransitionKeys.Action: [
+                            ('meth1', 'arg1'), 'meth2',
+                            ['meth3']]
+                    },
+                },
+                'end': {}
+            }
+
+            def __init__(self, *args, **kwargs):
+                super(TFSM, self).__init__(*args, **kwargs)
+                self.meth1 = MagicMock()
+                self.meth2 = MagicMock()
+                self.meth3 = MagicMock()
+
+        tfsm = TFSM()
+        tfsm.hit('input')
+        tfsm.meth1.assert_called_once_with('arg1')
+        tfsm.meth2.assert_called_once_with()
+        tfsm.meth3.assert_called_once_with()

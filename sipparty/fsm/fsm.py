@@ -1,7 +1,7 @@
-"""fsm.py
+"""Implements an `FSM` for use with sip party.
 
-Implements an `FSM` for use with sip party. This provides a generic way to
-implement arbitrary state machines, with easy support for timers.
+This provides a generic way to implement arbitrary state machines, with easy
+support for timers.
 
 Copyright 2015 David Park
 
@@ -19,6 +19,7 @@ limitations under the License.
 """
 from collections import (Callable, Iterable, OrderedDict)
 from copy import copy
+from functools import partial
 import logging
 from six import (iteritems, add_metaclass)
 from six.moves import queue
@@ -417,9 +418,8 @@ class FSM(object):
     #
     @class_or_instance_method
     def _fsm_makeAction(self, action):
-        """action is either a callable, which is called directly, or it is a
-        method name, in which case we bind it to a method if we can.
-        """
+        # action is either a callable, which is called directly, or it is a
+        # method name, in which case we bind it to a method if we can.
         log.debug("make action %r", action)
 
         if action is None:
@@ -429,7 +429,7 @@ class FSM(object):
         if isinstance(action, str) or isinstance(action, Callable):
             action_list = [action]
         else:
-            action_list = action
+            action_list = list(action)
 
         def _raise_ValueError():
             raise ValueError(
@@ -440,8 +440,11 @@ class FSM(object):
         if not isinstance(action_list, Iterable):
             _raise_ValueError()
 
-        if any(not (isinstance(_act, str) or isinstance(_act, Callable))
-               for _act in action_list):
+        if any(
+                not (
+                    isinstance(_act, str) or isinstance(_act, Callable) or
+                    isinstance(_act, list) or isinstance(_act, tuple))
+                for _act in action_list):
             _raise_ValueError()
 
         if isinstance(self, type):
@@ -452,8 +455,9 @@ class FSM(object):
         weak_self = weakref.ref(self)
 
         def weak_perform_actions(*args, **kwargs):
-            """Finds the action to run if self has not been released yet and
-            runs it. Lookup order is:
+            """Find action to run if self is not released and run it.
+
+            The Lookup order is:
 
             If self has a method with the correct name, it is run.
             If the delegate exists and has a method with the correct name, it
@@ -479,21 +483,31 @@ class FSM(object):
                     run_callable = True
                     continue
 
-                if hasattr(self, action):
-                    log.debug("  Self has %r.", action)
-                    func = getattr(self, action)
-                    if isinstance(func, Callable):
-                        run_self = True
-                        srv = func(*args, **kwargs)
+                if isinstance(action, str):
+                    action_name = action
+                    action_partial_args = ()
+                else:
+                    action_name = action[0]
+                    action_partial_args = action[1:]
 
-                if hasattr(self, "delegate"):
-                    dele = getattr(self, "delegate")
-                    if dele is not None:
-                        if hasattr(dele, action):
-                            log.debug("  delegate has %r.", action)
-                            method = getattr(dele, action)
-                            run_delegate = True
-                            drv = method(*args, **kwargs)
+                func = getattr(self, action_name, None)
+                if isinstance(func, Callable):
+                    log.debug(
+                        'Call self.%s(*%s)', action_name, action_partial_args)
+                    run_self = True
+                    srv = partial(func, *action_partial_args)(*args, **kwargs)
+
+                dele = getattr(self, "delegate", None)
+                if dele is not None:
+                    method = getattr(dele, action, None)
+                    if isinstance(method, Callable):
+                        log.debug(
+                            "Call self.delegate.%s(*%s)", action_name,
+                            action_partial_args)
+
+                        run_delegate = True
+                        drv = partial(method, *action_partial_args)(
+                            *args, **kwargs)
 
                 if not (run_self or run_delegate):
                     # The action could not be resolved.
