@@ -16,9 +16,10 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+from collections import OrderedDict
 import logging
 import random
-from six import (binary_type as bytes, add_metaclass)
+from six import (iteritems, binary_type as bytes, add_metaclass)
 from ..parse import (Parser)
 from ..util import (
     abytes, astr, Enum, attributesubclassgen, BytesGenner, ClassType,
@@ -44,7 +45,10 @@ class Parameters(Parser, BytesGenner, ValueBinder):
         if attr.startswith('_') or attr.startswith('vb'):
             return super(Parameters, self).__setattr__(attr, val)
 
-        if not isinstance(val, Param):
+        if val is None:
+            # For a None val we don't want to create a new object.
+            pass
+        elif not isinstance(val, Param):
             if attr in Param.types:
                 val = getattr(Param, attr)(val)
             else:
@@ -81,11 +85,14 @@ class Parameters(Parser, BytesGenner, ValueBinder):
 
     def bytesGen(self):
         for key in self._parm_list:
+            val = getattr(self, key)
+            if val is None:
+                log.detail('Skip None param, %s', key)
+                continue
 
             log.detail('Add %s param ', key)
             yield b';'
             yield abytes(key)
-            val = getattr(self, key)
             if val:
                 yield b'='
                 for by in val.safeBytesGen():

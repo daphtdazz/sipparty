@@ -773,7 +773,10 @@ class Transport(Singleton):
             remote_name=None, remote_port=None, port_filter=None,
             data_callback=None,
             from_description=None, to_description=None):
+        """Get a SocketProxy to send data on.
 
+        :returns: SocketProxy instance.
+        """
         if sock_family is None:
             sock_family = IPAddressFamilyFromName(remote_name)
 

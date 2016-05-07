@@ -235,6 +235,13 @@ class TestProtocol(SIPPartyTestCase):
 
     def test_parameters(self):
         pms = Parameters()
+        self.assertRaises(AttributeError, getattr, pms, 'tag')
+
+        log.info('Check setting None parameter works')
+        pms.tag = None
+        self.assertEqual(pms.tag, None)
+        self.assertEqual(bytes(pms), b'')
+
         pms.tag = b'abcdefg'
         self.assertEqual(bytes(pms.tag), b'abcdefg')
         self.assertEqual(bytes(pms), b';tag=abcdefg')
