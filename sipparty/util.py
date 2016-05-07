@@ -597,7 +597,36 @@ def OnlyWhenLocked(method):
     return maybeGetLock
 
 
-class DerivedProperty(object):
+class CheckingProperty(object):
+
+    def __init__(self, *args, **kwargs):
+        self.check = kwargs.pop('check', None)
+        super(CheckingProperty, self).__init__(*args, **kwargs)
+
+    def __set__(self, obj, value):
+        check = self.check
+        if value is not None and check is not None:
+            exc_type = None
+            try:
+                if not check(value):
+                    raise ValueError()
+            except (ValueError, TypeError) as exc:
+                log.error(exc.__class__.__name__)
+                exc_type = type(exc)
+                exc_class = (
+                    ValueError if issubclass(exc_type, ValueError) else
+                    TypeError)
+            finally:
+                if exc_type is not None:
+                    raise exc_class(
+                        "%r instance %r is not an allowed value for attribute "
+                        "of class %r." % (
+                            type(value).__name__, value, type(obj).__name__))
+
+        super(CheckingProperty, self).__set__(obj, value)
+
+
+class _DerivedProperty(object):
 
     def update(self, new_derived_property):
         """Updates the derived property so that subclasses can override
@@ -656,25 +685,6 @@ class DerivedProperty(object):
 
     def __set__(self, obj, value):
         pname = self._rp_propName
-        checker = self._rp_check
-        if value is not None and checker is not None:
-            exc_type = None
-            try:
-                if not checker(value):
-                    raise ValueError()
-            except (ValueError, TypeError) as exc:
-                log.error(exc.__class__.__name__)
-                exc_type = type(exc)
-                exc_class = (
-                    ValueError if issubclass(exc_type, ValueError) else
-                    TypeError)
-            finally:
-                if exc_type is not None:
-                    raise exc_class(
-                        "%r instance %r is not an allowed value for attribute "
-                        "%s of class %r." % (
-                            value.__class__.__name__, value, pname,
-                            obj.__class__.__name__))
 
         st = self._rp_set
 
@@ -701,6 +711,10 @@ class DerivedProperty(object):
             "DerivedProperty({_rp_propName!r}, check={_rp_check!r}, "
             "get={_rp_get!r}, set={_rp_set!r})"
             "".format(**self.__dict__))
+
+
+DerivedProperty = type(
+    'DerivedProperty', (CheckingProperty, _DerivedProperty), {})
 
 
 def TwoCompatibleThree(cls):
@@ -1036,6 +1050,8 @@ else:
     def astr(x):
         if x is None:
             return None
+        if isinstance(x, str):
+            return x
         return str(x, encoding='ascii')
 
 

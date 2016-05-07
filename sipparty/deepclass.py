@@ -22,7 +22,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 import logging
 from six import (iteritems, iterkeys)
-from .util import (Enum, DerivedProperty)
+from .util import (CheckingProperty, Enum, DerivedProperty)
 from .vb import ValueBinder
 
 log = logging.getLogger(__name__)
@@ -40,7 +40,10 @@ def DCProperty(tlp, name, attrDesc):
             return None
 
         log.debug("%r uses descriptor %r", internalName, dc)
-        return dc(internalName)
+
+        return type(
+            '%sDescriptor' % (name,), (CheckingProperty, dc), {})(
+                name=internalName, check=attrDesc.get('check'))
 
     # Remaining keys are for the derived property class, except 'gen' which is
     # used only once at init time to populate the initial value.
@@ -51,7 +54,7 @@ def DCProperty(tlp, name, attrDesc):
     log.detail(
         "New derived property for %r underlying %r: with config %r", name,
         internalName, dpdict)
-    return DerivedProperty(internalName, **dpdict)
+    return DerivedProperty(name=internalName, **dpdict)
 
 
 def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
