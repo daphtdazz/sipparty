@@ -25,7 +25,7 @@ from six import (iteritems, add_metaclass)
 from six.moves import queue
 import time
 import threading
-import weakref
+from weakref import ref
 from ..util import (CCPropsFor, class_or_instance_method, Enum, OnlyWhenLocked)
 from . import (fsmtimer, retrythread)
 
@@ -258,8 +258,10 @@ class FSM(object):
 
     @class_or_instance_method
     def addTimer(self, name, action, retryer):
-        """Add a timer with name `name`. Timers must be independent of
-        transitions because they may be stopped or started at any transition.
+        """Add a timer with name `name`.
+
+        Timers must be independent of transitions because they may be stopped
+        or started at any transition.
         """
         if isinstance(self, type):
             # Class, just save the parameters for when we instantiate and
@@ -268,13 +270,29 @@ class FSM(object):
             return
 
         if isinstance(retryer, str):
-            try:
-                retryer = getattr(self, retryer)
-            except AttributeError as exc:
-                exc.args = (
-                    "Can't make an action with string %s as it is not a "
-                    "method;%s" % (retryer, exc.args[0]),)
-                raise
+
+            weak_self = ref(self)
+            retryer_name = retryer
+
+            def weak_retry_wrapper():
+                self = weak_self()
+                if self is None:
+                    log.warning(
+                        'Retryer for timer %s has been released, returning '
+                        'empty list of retry times', name)
+                    return iter(())
+
+                try:
+                    retryer = getattr(self, retryer_name)
+                except AttributeError as exc:
+                    exc.args = (
+                        "Can't make an action with string %s as it is not a "
+                        "method;%s" % (retryer, exc.args[0]),)
+                    raise
+
+                return retryer()
+
+            retryer = weak_retry_wrapper
 
         newtimer = fsmtimer.Timer(name, self._fsm_makeAction(action), retryer)
         self._fsm_timers[name] = newtimer
@@ -310,7 +328,7 @@ class FSM(object):
         if val is None:
             self._fsm_weakDelegate = None
         else:
-            self._fsm_weakDelegate = weakref.ref(val)
+            self._fsm_weakDelegate = ref(val)
 
     def __init__(self, name=None, delegate=None):
         """
@@ -452,7 +470,7 @@ class FSM(object):
             # for it.
             return action
 
-        weak_self = weakref.ref(self)
+        weak_self = ref(self)
 
         def weak_perform_actions(*args, **kwargs):
             """Find action to run if self is not released and run it.
@@ -545,7 +563,7 @@ class FSM(object):
             # the class not the instance.
             return weak_method
 
-        weak_self = weakref.ref(self)
+        weak_self = ref(self)
         owner_thread = threading.currentThread()
 
         def fsmThread():
@@ -716,7 +734,7 @@ class AsyncFSM(LockedFSM):
         # If we pass ourselves directly to the RetryThread, then we'll get
         # a retain deadlock so neither us nor the thread can be freed.
         # Fortunately python 2.7 has a nice weak references module.
-        weak_self = weakref.ref(self)
+        weak_self = ref(self)
 
         def check_weak_self_timers():
             self = weak_self()

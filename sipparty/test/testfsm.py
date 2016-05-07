@@ -657,3 +657,39 @@ class TestFSM(SIPPartyTestCase):
         tfsm.meth1.assert_called_once_with('arg1')
         tfsm.meth2.assert_called_once_with()
         tfsm.meth3.assert_called_once_with()
+
+    @patch.object(fsmtimer, 'Clock', new=Clock)
+    @patch.object(retrythread, 'Clock', new=Clock)
+    def test_async_timer_lifetime(self):
+
+        class TimerFSM(AsyncFSM):
+            FSMDefinitions = {
+                InitialStateKey: {
+                    'input': {
+                        TransitionKeys.NewState: 'done',
+                        TransitionKeys.StartTimers: ['running_timer']
+                    }
+                },
+                'done': {}
+            }
+            FSMTimers = {
+                'running_timer': ('running_timer_action', 'running_timer_gen')
+            }
+
+            timer_duration_s = 2
+
+            def __init__(self, *args, **kwargs):
+                super(TimerFSM, self).__init__(*args, **kwargs)
+                self.action_count = 0
+
+            def running_timer_gen(self):
+                while True:
+                    yield self.timer_duration_s
+
+            def running_timer_action(self):
+                self.action_count += 1
+
+        tfsm = TimerFSM()
+        wtfsm = ref(tfsm)
+        del tfsm
+        self.assertIsNone(wtfsm())

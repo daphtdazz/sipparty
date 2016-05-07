@@ -126,6 +126,10 @@ class Timer(object):
             type(self).__name__, self._tmr_name, self._tmr_action,
             self._tmr_retryer)
 
+    def __del__(self):
+        log.info('__del__ %s', type(self).__name__)
+        getattr(super(Timer, self), '__del__', lambda: None)()
+
     #
     # INTERNAL METHODS FOLLOW.
     #

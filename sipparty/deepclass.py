@@ -241,8 +241,9 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
             return
 
         def _dck_genTopLevelValueFromTLDict(self, tlad, tlsvals):
-            """:param tlad: The Top-Level-Attribute Dictionary, which describes
-            the attribute.
+            """:param tlad:
+                The Top-Level-Attribute Dictionary, which describes
+                the attribute.
             """
             gen = tlad[dck.gen]
             if isinstance(gen, str):
