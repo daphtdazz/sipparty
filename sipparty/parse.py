@@ -69,10 +69,13 @@ class ParsedProperty(object):
 
 def ParsedPropertyOfClass(cls):
 
-    def ParsedPropertyOfClassGenerator(name):
-        return ParsedProperty(name, cls)
+    class _ParsedPropertyOfClass(ParsedProperty):
 
-    return ParsedPropertyOfClassGenerator
+        def __init__(self, name, *args, **kwargs):
+            super(_ParsedPropertyOfClass, self).__init__(
+                name, cls, *args, **kwargs)
+
+    return _ParsedPropertyOfClass
 
 
 class Parser(object):

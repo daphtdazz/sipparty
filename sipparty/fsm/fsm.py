@@ -499,7 +499,7 @@ class FSM(object):
 
                 dele = getattr(self, "delegate", None)
                 if dele is not None:
-                    method = getattr(dele, action, None)
+                    method = getattr(dele, action_name, None)
                     if isinstance(method, Callable):
                         log.debug(
                             "Call self.delegate.%s(*%s)", action_name,
@@ -513,10 +513,10 @@ class FSM(object):
                     # The action could not be resolved.
                     raise AttributeError(
                         "Action %r is not a callable or a method on %r object "
-                        "or its delegate %r." %
+                        "(attribute value was %s) or its delegate %r." %
                         (action, self.__class__.__name__,
-                         self.delegate
-                         if hasattr(self, "delegate") else None))
+                         getattr(self, action_name, '<not present>'),
+                         getattr(self, 'delegate', None)))
 
             del self
             if run_self:

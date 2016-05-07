@@ -41,8 +41,7 @@ log = logging.getLogger(__name__)
 @TwoCompatibleThree
 class Header(
         DeepClass("_hdr_", {
-            "header_value": {dck.gen: lambda: None},
-            "type": {dck.descriptor: lambda x: ClassType("Header")}
+            "header_value": {dck.gen: lambda: None}
         }),
         Parser, BytesGenner, ValueBinder):
     """A SIP header.
@@ -62,6 +61,7 @@ class Header(
     # The `types` class attribute is used by the attributesubclassgen
     # metaclass to know what types of subclass may be created.
     types = HeaderTypes.enum()
+    type = ClassType('Header')
 
     parseinfo = {
         Parser.Pattern:
@@ -83,16 +83,19 @@ class Header(
 class FieldsBasedHeader(
         DeepClass("_dnurh_", OrderedDict((
             ("fields", {dck.gen: list, dck.descriptor: None}),
-            ("field", {
-                dck.descriptor: lambda x: FirstListItemProxy("fields"),
-                dck.gen: "GenerateField"
-            }),
         ))),
         Header):
 
     @classmethod
     def GenerateField(cls):
         return cls.FieldClass()
+
+    field = FirstListItemProxy("fields")
+
+    def __init__(self, **kwargs):
+        super(FieldsBasedHeader, self).__init__(**kwargs)
+        if getattr(self, 'field', None) is None:
+            self.field = self.GenerateField()
 
     def parsecust(self, string, mo):
         data = self.header_value

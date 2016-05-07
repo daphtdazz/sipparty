@@ -601,7 +601,12 @@ class CheckingProperty(object):
 
     def __init__(self, *args, **kwargs):
         self.check = kwargs.pop('check', None)
-        super(CheckingProperty, self).__init__(*args, **kwargs)
+        args = list(args)
+        if len(args) > 0:
+            name = args.pop(0)
+        else:
+            name = kwargs.pop('name')
+        super(CheckingProperty, self).__init__(name, *args, **kwargs)
 
     def __set__(self, obj, value):
         check = self.check
