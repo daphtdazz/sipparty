@@ -143,11 +143,10 @@ class Transaction(
             },
             'remote_port': {
                 dck.check: IsValidPortNum
-            },
-            'tu_data': {},
-            'tt_data': {}
+            }
         }),
         AsyncFSM):
+    """Base class for all SIP transactions."""
 
     def __init__(self, *args, **kwargs):
         super(Transaction, self).__init__(*args, **kwargs)
@@ -158,19 +157,23 @@ class Transaction(
         log.info('__del__ %s', type(self).__name__)
         getattr(super(Transaction, self), '__del__', lambda: None)()
 
-    """Base class for all SIP transactions."""
     def send_message(self, message):
         log.debug('send %s message', message.type)
         self.last_message = message
-        self.transport.send_message(
+        ad = self.transport.send_message(
             message, self.remote_name, self.remote_port)
+        self.remote_name = ad.remote_name
+        self.remote_port = ad.remote_port
 
     def resend_message(self):
         msg = self.last_message
         assert msg is not None, (
             "Can't resend in a transaction before the first send.")
         log.debug('resend message %s', msg.type)
-        self.send_message(msg)
+        ad = self.transport.send_message(
+            msg, self.remote_name, self.remote_port)
+        self.remote_name = ad.remote_name
+        self.remote_port = ad.remote_port
 
     def giveup(self):
         self.hit('timer_giveup')

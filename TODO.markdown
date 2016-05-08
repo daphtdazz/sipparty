@@ -3,6 +3,9 @@
 ## List. ##
 
 1. UDP transport retrying.
+   a.  Should have a dialog manager. -- initial done 8/5/2016
+   b.  Party should have transaction manager, dialog manager, transport -- initial done 8/5/2016
+   c.  Need to check flows are now correct and transaction lifetimes work. In particular UTs for dialog + transaction interactions (check transaction retries for all types, + 1XX provisional responses)
 2. REGISTER dialogues.
 3. TCP support.
 4. Move "Programming guides" into a section of the documentation.

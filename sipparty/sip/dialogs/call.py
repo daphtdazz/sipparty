@@ -1,6 +1,4 @@
-"""call.py
-
-Standard dialog definitions (call, register etc.).
+"""Standard dialog definitions (call, register etc.).
 
 Copyright 2015 David Park.
 
@@ -28,9 +26,6 @@ from ..transform import TransformKeys
 S = Enum((
     InitialState, "InitiatingDialog", "InDialog", "TerminatingDialog", "Error",
     "Terminated"))
-A = Enum((
-    "sendRequestINVITE", "sendResponse200", "errorResponse", "sendRequestBYE",
-    "hasTerminated", "session_listen"))
 I = Enum((
     "initiate", "receiveRequestINVITE", "receiveResponse18",
     "receiveResponse2", "receiveResponse4", "terminate", "receiveRequestBYE"))
@@ -47,11 +42,11 @@ class SimpleCall(Dialog):
         S.Initial: {
             I.initiate: {
                 tsk.NewState: S.InitiatingDialog,
-                tsk.Action: [A.session_listen, A.sendRequestINVITE]
+                tsk.Action: ['session_listen', ('send_request', 'INVITE')]
             },
             I.receiveRequestINVITE: {
                 tsk.NewState: S.InDialog,
-                tsk.Action: A.sendResponse200
+                tsk.Action: (('send_response', 200),)
             }
         },
         S.InitiatingDialog: {
@@ -59,11 +54,12 @@ class SimpleCall(Dialog):
                 tsk.NewState: S.InitiatingDialog
             },
             I.receiveResponse2: {
-                tsk.NewState: S.InDialog
+                tsk.NewState: S.InDialog,
+                tsk.Action: 'send_ack'
             },
             I.receiveResponse4: {
                 tsk.NewState: S.Error,
-                tsk.Action: A.errorResponse
+                tsk.Action: 'errorResponse'
             }
         },
         S.InDialog: {
@@ -72,11 +68,11 @@ class SimpleCall(Dialog):
             },
             I.terminate: {
                 tsk.NewState: S.TerminatingDialog,
-                tsk.Action: A.sendRequestBYE
+                tsk.Action: (('send_request', 'BYE'),)
             },
             I.receiveRequestBYE: {
                 tsk.NewState: S.Terminated,
-                tsk.Action: A.sendResponse200,
+                tsk.Action: (('send_response', 200),)
             }
         },
         S.TerminatingDialog: {

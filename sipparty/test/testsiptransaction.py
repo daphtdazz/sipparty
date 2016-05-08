@@ -29,6 +29,7 @@ from ..sip.siptransaction import (
     TransactionManager,
     TransactionTransport, TransactionUser, NonInviteClientTransaction)
 from ..sip.siptransport import SIPTransport
+from ..transport import ConnectedAddressDescription
 from ..util import WaitFor
 from .setup import (MagicMock, patch, SIPPartyTestCase)
 
@@ -82,6 +83,8 @@ class TransactionTest(
 
     def send_message(self, msg, remote_name, remote_port):
         self.msgs_sent.append(msg)
+        return ConnectedAddressDescription(
+            remote_name=remote_name, remote_port=remote_port)
 
     def consumeMessage(self, msg, tu_data=None):
         self.msg_tu_datas.append((msg, tu_data))
@@ -135,6 +138,7 @@ class TestTransactionManager(TransactionTest):
         super(TestTransactionManager, self).tearDown()
 
     def test_basic(self):
+
         tm = TransactionManager()
 
         log.info('First invite')

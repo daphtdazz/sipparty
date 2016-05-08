@@ -102,6 +102,7 @@ class SIPTransport(Transport):
     # =================== AOR MANAGER INTERFACE ===============================
     #
     def addDialogHandlerForAOR(self, aor, handler):
+        #TODO: Should be changed to add_aor_handler
         """Register a handler to call."""
         if not isinstance(handler, AORHandler):
             raise TypeError('%s instance is not of type AORHandler' % (
@@ -120,7 +121,7 @@ class SIPTransport(Transport):
                 [str(key) for key in self._sptr_dialogHandlers.keys()]))
 
     def removeDialogHandlerForAOR(self, aor):
-
+        #TODO: should be changed to remove_aor_handler
         hdlrs = self._sptr_dialogHandlers
         if aor not in hdlrs:
             raise KeyError(
