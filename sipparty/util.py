@@ -556,7 +556,7 @@ def OnlyWhenLocked(method):
             getattr(self, '_fsm_name', None) or
             self)
 
-        if not hasattr(self, "_lock") or not self._lock:
+        if not getattr(self, "_lock", False):
             log.debug(
                 "No locking in %s instance %s.", self.__class__.__name__,
                 obj_name)

@@ -50,10 +50,10 @@ class Timer(object):
         elif isinstance(retryer, collections.Callable):
             titer = retryer()
             if not isinstance(titer, collections.Iterator):
-                raise ValueError("retryer callable is not a generator.")
+                raise TypeError("retryer callable is not a generator.")
             retry_generator = retryer
         else:
-            raise ValueError("retryer is not a generator or iterable.")
+            raise TypeError("retryer is not a generator or iterable.")
 
         self._tmr_retryer = retry_generator
         self._tmr_currentPauseIter = None
@@ -96,36 +96,17 @@ class Timer(object):
         self.__stop()
 
     def check(self):
-        """Checks the timer, and if it has expired runs the action."""
+        """Check the timer, and if it has expired runs the action.
 
-        with self._lock:
-            if not self.was_started:
-                raise NotRunning(
-                    "%r instance named %r not yet started." % (
-                        self.__class__.__name__, self._tmr_name))
-
-            if self.has_expired:
-                log.debug('Timer %s has already expired', self._tmr_name)
-                return
-
-            now = Clock()
-
-            log.debug("Check timer %s at time %r", self._tmr_name, now)
-
-            res = None
-            should_pop = now >= self._tmr_alarmTime
-            if should_pop:
-                log.debug('Going to pop')
-                self._tmr_setNextPopTime()
-
-        if should_pop:
+        :returns:
+            `None`, as there's no easy way of telling whether it popped or not.
+        """
+        if self.__should_pop_and_set_next_timer():
             # The actual timer pop is done without the lock as it may recurse
             # to hit this fsm, which may cause this timer to be stopped, which
-            # needs the lock.
+            # needs the lock.
             log.debug('Perform timer pop')
-            res = self._tmr_pop()
-
-        return res
+            self._tmr_pop()
 
     #
     # --------------------- MAGIC METHODS -------------------------------------
@@ -174,3 +155,24 @@ class Timer(object):
     def __stop(self):
         self._tmr_alarmTime = None
         self._tmr_currentPauseIter = None
+
+    @OnlyWhenLocked
+    def __should_pop_and_set_next_timer(self):
+        if not self.was_started:
+            raise NotRunning(
+                "%r instance named %r not yet started." % (
+                    self.__class__.__name__, self._tmr_name))
+
+        if self.has_expired:
+            log.debug('Timer %s has already expired', self._tmr_name)
+            return False
+
+        now = Clock()
+
+        log.debug("Check timer %s at time %r", self._tmr_name, now)
+
+        if now >= self._tmr_alarmTime:
+            log.debug('Going to pop')
+            self._tmr_setNextPopTime()
+            return True
+        return False
