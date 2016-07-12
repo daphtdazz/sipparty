@@ -58,7 +58,7 @@ class TransactionManager(object):
         self.transactions = {}
 
     def __del__(self):
-        log.info('__del__ TransactionManager')
+        log.debug('__del__ TransactionManager')
         getattr(
             super(TransactionManager, self), '__del__', lambda: None)()
 
@@ -154,7 +154,7 @@ class Transaction(
         self.last_message = None
 
     def __del__(self):
-        log.info('__del__ %s', type(self).__name__)
+        log.debug('__del__ %s', type(self).__name__)
         getattr(super(Transaction, self), '__del__', lambda: None)()
 
     def send_message(self, message):

@@ -53,7 +53,7 @@ class TransactionTest(
 
         def retry_thread_select(self, *args, **kwargs):
             log.debug('Wait for the select semaphore')
-            if sema.acquire(timeout=0.01):
+            if sema.acquire(blocking=False):
                 log.debug('select semaphore acquired')
             else:
                 log.debug('select semaphore timeout')
@@ -75,7 +75,7 @@ class TransactionTest(
         #
         # That's also why this inline function is used, so that we use separate
         # semaphores for each test.
-        log.info('tear down')
+        log.debug('tear down')
         for ii in range(1000):
             self.select_semaphore.release()
         self.select_patch.stop()
@@ -121,7 +121,7 @@ class TestNonInviteTransaction(TransactionTest):
                 (11.5, 6),
                 (31.9, 11)):
             self.Clock.return_value = time
-            log.info('Release semaphore for resend')
+            log.debug('Release semaphore for resend')
             self.select_semaphore.release()
             WaitFor(lambda: len(self.msgs_sent) == resend_count)
 
@@ -134,7 +134,7 @@ class TestNonInviteTransaction(TransactionTest):
 class TestTransactionManager(TransactionTest):
 
     def tearDown(self):
-        log.info('tearing down tm test')
+        log.debug('tearing down tm test')
         super(TestTransactionManager, self).tearDown()
 
     def test_basic(self):

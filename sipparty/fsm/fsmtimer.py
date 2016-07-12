@@ -128,7 +128,7 @@ class Timer(object):
             self._tmr_retryer)
 
     def __del__(self):
-        log.info('__del__ %s', type(self).__name__)
+        log.debug('__del__ %s', type(self).__name__)
         getattr(super(Timer, self), '__del__', lambda: None)()
 
     #

@@ -70,6 +70,10 @@ class TestParty(SIPPartyTestCase):
         self.subTestBasicParty(
             SOCK_DGRAM, '127.0.0.1', stop_point='after first listen')
 
+    def test_basic_party_udpipv4_stop_after_call(self):
+        self.subTestBasicParty(
+            SOCK_DGRAM, '127.0.0.1', stop_point='after first call')
+
     def subTestBasicParty(self, sock_type, contact_name, stop_point=None):
 
         assert sock_type == SOCK_DGRAM
@@ -118,7 +122,7 @@ class TestParty(SIPPartyTestCase):
 
         if stop_point == 'after first invite':
             del p1, p2, invD
-            for wrf in (wp1, wp2, winvD):
+            for wrf in (wp1, wp2, winvD, wtp):
                 log.info('check wrf %s is free', wrf)
                 self.assertIsNone(wrf())
             return
@@ -129,6 +133,13 @@ class TestParty(SIPPartyTestCase):
         log.info('p1 terminates')
         invD.terminate()
         WaitFor(lambda: winvD().state == winvD().States.Terminated, 1)
+
+        if stop_point == 'after first call':
+            del p1, p2, invD
+            for wrf in (wp1, wp2, winvD, wtp):
+                log.info('check wrf %s is free', wrf)
+                self.assertIsNone(wrf())
+            return
 
         # Try another call.
         p3 = BasicParty(

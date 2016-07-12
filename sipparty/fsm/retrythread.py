@@ -295,7 +295,7 @@ class RetryThread(threading.Thread):
     # =================== MAGIC METHODS =======================================
     #
     def __del__(self):
-        log.info('__del__ %s %s', self.name, self.__class__.__name__)
+        log.debug('__del__ %s %s', self.name, self.__class__.__name__)
 
     #
     # =================== INTERNAL METHODS ====================================
