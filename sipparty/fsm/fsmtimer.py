@@ -90,9 +90,15 @@ class Timer(object):
 
         # Start time must be set after next pop time as otherwise there would
         # be a window where start_time was set but next_time was not, which
-        # would make has_expired evaluate True.
+        # would make has_expired evaluate True. This can be shown in
+        # test_window_expire_property by re-writing:
+        #
+        # self._tmr_startTime = now
+        # sleep 0.000001
+        # self._tmr_setNextPopTime(start_time=now)
         self._tmr_setNextPopTime(start_time=now)
         self._tmr_startTime = now
+
         log.debug("Start timer %s at clock %s.", self._tmr_name, now)
 
     @OnlyWhenLocked
