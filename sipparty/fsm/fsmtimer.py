@@ -75,6 +75,7 @@ class Timer(object):
 
     @property
     def has_expired(self):
+        # See comment in start.
         return self.was_started and self._tmr_alarmTime is None
 
     @property
@@ -84,11 +85,15 @@ class Timer(object):
     @OnlyWhenLocked
     def start(self):
         """Start the timer."""
-        now = Clock()
-        log.debug("Start timer %s at clock %s.", self._tmr_name, now)
-        self._tmr_startTime = now
         self._tmr_currentPauseIter = self._tmr_retryer()
-        self._tmr_setNextPopTime()
+        now = Clock()
+
+        # Start time must be set after next pop time as otherwise there would
+        # be a window where start_time was set but next_time was not, which
+        # would make has_expired evaluate True.
+        self._tmr_setNextPopTime(start_time=now)
+        self._tmr_startTime = now
+        log.debug("Start timer %s at clock %s.", self._tmr_name, now)
 
     @OnlyWhenLocked
     def stop(self):
@@ -123,12 +128,10 @@ class Timer(object):
     #
     # -----------------------INTERNAL METHODS----------------------------------
     #
-    def _tmr_setNextPopTime(self):
+    def _tmr_setNextPopTime(self, start_time=None):
         """Set up the next pop time."""
-        if not self.was_started:
-            # Not running (perhaps the number of times to retry expired).
-            return
-
+        start_time = (
+            start_time if start_time is not None else self._tmr_startTime)
         try:
             wait_time = next(self._tmr_currentPauseIter)
         except StopIteration:
@@ -136,11 +139,11 @@ class Timer(object):
             return
 
         if self._tmr_alarmTime is None:
-            self._tmr_alarmTime = self._tmr_startTime + wait_time
+            self._tmr_alarmTime = start_time + wait_time
         else:
             self._tmr_alarmTime += wait_time
 
-        log.debug("Start time was %r, next pop is now %r", self._tmr_startTime,
+        log.debug("Start time was %r, next pop is now %r", start_time,
                   self._tmr_alarmTime)
 
     def _tmr_pop(self):

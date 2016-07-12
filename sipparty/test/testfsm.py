@@ -160,7 +160,7 @@ class TestFSM(SIPPartyTestCase):
         nf = FSM(name="TestTimerFSM")
 
         self.assertRaises(
-            ValueError,
+            TypeError,
             lambda: Timer("retry", lambda: self, 1))
 
         def pop_func():
@@ -242,7 +242,7 @@ class TestFSM(SIPPartyTestCase):
         # Check trying to create a timer with a time that isn't iterable
         # ("1") fails.
         self.assertRaises(
-            ValueError,
+            TypeError,
             lambda: Timer("retry", lambda: self, 1))
 
         def pop_func():
