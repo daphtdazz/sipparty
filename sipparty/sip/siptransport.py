@@ -25,7 +25,7 @@ from ..transport import (
     UnregisteredPortGenerator)
 from ..util import (abytes, DerivedProperty, WeakMethod)
 from . import prot
-from .components import Host
+from .components import AOR, Host
 from .message import Message
 from .siptransaction import TransactionTransport
 from . import Incomplete
@@ -105,6 +105,9 @@ class SIPTransport(Transport):
         if not isinstance(handler, AORHandler):
             raise TypeError('%s instance is not of type AORHandler' % (
                 type(handler).__name__,))
+
+        if not isinstance(aor, AOR):
+            raise TypeError('%s instance is not an AOR' % type(aor).__name__)
 
         hdlrs = self._sptr_dialogHandlers
         aor_bytes = bytes(aor)

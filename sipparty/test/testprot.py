@@ -23,7 +23,7 @@ from ..parse import ParseError
 from ..sdp import sdpsyntax
 from ..sip import (prot, components, Message, Header)
 from ..sip.body import Body
-from ..sip.components import URI
+from ..sip.components import AOR, URI
 from ..sip.header import ContactHeader
 from ..sip.param import Parameters
 from ..sip.prot import (Incomplete)
@@ -50,6 +50,14 @@ class TestProtocol(SIPPartyTestCase):
         self.assertEqual(
             stra, strb, "\n{0!r}\nvs\n{1!r}\n---OR---\n{0}\nvs\n{1}"
             "".format(stra, strb))
+
+    def test_aor(self):
+        a1 = AOR()
+        a1.username = 'alice'
+        self.assertRaises(Incomplete, bytes, a1)
+
+        u1 = URI(aor=a1)
+        self.assertRaises(Incomplete, bytes, u1)
 
     def testGeneral(self):
         aliceAOR = components.AOR(b"alice", b"atlanta.com")

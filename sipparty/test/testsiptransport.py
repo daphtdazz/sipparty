@@ -65,6 +65,10 @@ class TestSIPTransport(AORHandler, SIPPartyTestCase):
         msg.ContactHeader.field.value.uri.aor.host.address = b'127.0.0.1'
         msg.ContactHeader.field.value.uri.aor.host.port = l_desc.port
 
+        log.info('Check add dialog handler requires an AOR')
+        self.assertRaises(
+            TypeError, tp.addDialogHandlerForAOR, 'bob@biloxi.com', self)
+
         log.info('Add Dialog Handler for our AOR')
         tp.addDialogHandlerForAOR(msg.ToHeader.aor, self)
         log.info('Send the message')

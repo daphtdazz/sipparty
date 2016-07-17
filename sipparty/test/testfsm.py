@@ -38,8 +38,13 @@ class TestFSMBase(SIPPartyTestCase):
     def setUp(self):
         self.retry = 0
         self.cleanup = 0
+        self.done = False
 
         self.Clock.return_value = 0
+
+    def do_and_mark_completion(self, func):
+        func()
+        self.done = True
 
 
 class TestFSM(TestFSMBase):
@@ -474,7 +479,10 @@ class TestFSM(TestFSMBase):
         self.assertRaises(
             TypeError, fsm.waitForStateCondition, 'This is not a Callable')
 
+    def test_async_timers(self):
         self.subTestWaitFor(async_timers=True)
+
+    def test_sync_timers(self):
         self.subTestWaitFor(async_timers=False)
 
     def subTestWaitFor(self, async_timers):
@@ -516,12 +524,50 @@ class TestFSM(TestFSMBase):
             FSMTimeout,
             lambda: fsm1.waitForStateCondition(
                 lambda state: state == "in progress", timeout=0.1))
-        log.info("EXPECT EXCEPTION IN ASYNC MODE")
+        self.expect_log("UnexpectedInput")
         fsm1.hit("cancel_to_null_state")
         if not async_timers:
             self.assertRaises(UnexpectedInput,
                               lambda: fsm1.hit("bad input"))
-        log.info("END EXPECT EXCEPTION IN ASYNC MODE")
+
+    def test_async_wait_for(self):
+        class TFSM(AsyncFSM):
+            FSMDefinitions = {
+                InitialStateKey: {
+                    "input": {
+                        TransitionKeys.NewState: "in progress"
+                    },
+                    "cancel": {
+                        TransitionKeys.NewState: "end"
+                    }
+                },
+                "in progress": {
+                    "input": {
+                        TransitionKeys.NewState: "end"
+                    }
+                },
+                "end": {
+                    "reset": {
+                        TransitionKeys.NewState:
+                        InitialStateKey
+                    },
+                    "cancel_to_null_state": {
+                        TransitionKeys.NewState: "null"
+                    }
+                },
+                "null": {}
+            }
+
+        log.info('Show that wait for works over more than one transition')
+        fsm2 = TFSM()
+        thr = threading.Thread(target=self.do_and_mark_completion, args=(
+            lambda: fsm2.waitForStateCondition(
+                lambda state: state == fsm2.States.end),))
+        thr.start()
+        fsm2.hit('input')
+        fsm2.hit('input')
+        WaitFor(lambda: self.done)
+        thr.join()
 
     def test_lifetimes(self):
 

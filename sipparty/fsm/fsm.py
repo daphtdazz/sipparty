@@ -793,6 +793,12 @@ class AsyncFSM(LockedFSM):
         if self._fsm_thread is not threading.currentThread():
             self._fsm_thread.join()
 
+    @class_or_instance_method
+    def _fsm_setState(self, new_state):
+        with self._fsm_stateChangeCondition:
+            super(AsyncFSM, self)._fsm_setState(new_state)
+            self._fsm_stateChangeCondition.notify_all()
+
     def __backgroundTimerPop(self):
         log.debug("__backgroundTimerPop")
 

@@ -46,6 +46,9 @@ class ParsedProperty(object):
         return getattr(obj, self._pp_attr)
 
     def __set__(self, obj, val):
+        log.debug(
+            'Set %s instance for attribute %s on %s instance',
+            type(val).__name__, self._pp_attr, type(obj).__name__)
         atr = self._pp_attr
         if val is None:
             log.debug(
