@@ -36,7 +36,7 @@ tsk = TransitionKeys
 tfk = TransformKeys
 
 
-class SimpleCall(Dialog):
+class SimpleCallDialog(Dialog):
 
     FSMDefinitions = {
         S.Initial: {

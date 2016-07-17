@@ -20,7 +20,7 @@ import logging
 from weakref import ref
 from .setup import SIPPartyTestCase
 from ..sip.components import (AOR, Host, URI)
-from ..sip.dialogs import SimpleCall
+from ..sip.dialogs import SimpleCallDialog
 from ..sip.siptransaction import TransactionManager
 from ..sip.siptransport import SIPTransport
 
@@ -32,7 +32,7 @@ class TestDialog(SIPPartyTestCase):
     def testStandardDialog(self):
         tp = SIPTransport()
         tm = TransactionManager()
-        dl = SimpleCall(tp, tm)
+        dl = SimpleCallDialog(tp, tm)
         self.assertRaises(AttributeError, lambda: dl.asdf)
 
         self.expect_log('ValueError exception')
@@ -51,9 +51,10 @@ class TestDialog(SIPPartyTestCase):
             dl.from_uri.aor)
 
     def sub_test_transaction_creation(self, depth):
+        log.info('sub_test_transaction_creation %d' % depth)
         tp = SIPTransport()
         tm = TransactionManager()
-        dl = SimpleCall(tp, tm)
+        dl = SimpleCallDialog(tp, tm)
         dl.from_uri = 'sip:user1@host'
         dl.to_uri = 'sip:user2@nowhere'
         dl.contact_uri = 'sip:user1'

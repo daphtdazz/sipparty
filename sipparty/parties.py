@@ -17,7 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 from six import itervalues
-from .sip.dialogs import SimpleCall
+from .sip.dialogs import SimpleCallDialog
 from .media.sessions import SingleRTPSession
 from .party import Party
 
@@ -27,11 +27,11 @@ class NoMediaSimpleCallsParty(Party):
     for testing that the signaling works.
     """
     MediaSession = None
-    InviteDialog = SimpleCall
+    InviteDialog = SimpleCallDialog
 
 
 class SingleRTPSessionSimplenParty(Party):
-    InviteDialog = SimpleCall
+    InviteDialog = SimpleCallDialog
     MediaSession = SingleRTPSession
 
 AllPartyTypes = [

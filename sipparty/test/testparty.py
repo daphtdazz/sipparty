@@ -23,7 +23,7 @@ from weakref import ref
 from ..media.sessions import SingleRTPSession
 from ..party import (Party)
 from ..parties import (NoMediaSimpleCallsParty)
-from ..sip.dialogs import SimpleCall
+from ..sip.dialogs import SimpleCallDialog
 from ..sip.prot import Incomplete
 from ..sip.siptransport import SIPTransport
 from ..transport import (IsValidPortNum, NameLoopbackAddress)
@@ -81,7 +81,7 @@ class TestParty(SIPPartyTestCase):
 
         BasicParty = type(
             'BasicParty', (Party,), {
-                'InviteDialog': SimpleCall,
+                'InviteDialog': SimpleCallDialog,
                 'MediaSession': type(
                     'LoopbackSingleRTPSession', (SingleRTPSession,), {
                         'DefaultName': NameLoopbackAddress
