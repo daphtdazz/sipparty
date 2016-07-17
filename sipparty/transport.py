@@ -46,7 +46,7 @@ SOCK_FAMILIES = Enum((AF_INET, AF_INET6))
 SOCK_FAMILY_NAMES = AsciiBytesEnum((b"IPv4", b"IPv6"))
 DEFAULT_SOCK_FAMILY = AF_INET
 log = logging.getLogger(__name__)
-prot_log = logging.getLogger("messages")
+prot_log = logging.getLogger(__name__ + ".messages")
 
 # RFC 2373 IPv6 address format definitions.
 digitrange = b"0-9"

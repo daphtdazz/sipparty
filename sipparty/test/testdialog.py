@@ -34,10 +34,13 @@ class TestDialog(SIPPartyTestCase):
         tm = TransactionManager()
         dl = SimpleCall(tp, tm)
         self.assertRaises(AttributeError, lambda: dl.asdf)
+
+        self.expect_log('ValueError exception')
         self.assertRaises(ValueError, dl.hit, 'initiate')
         self.assertEqual(dl.state, dl.States.Initial)
 
         dl.from_uri = 'sip:user1@host'
+        self.expect_log('ValueError exception')
         self.assertRaises(ValueError, dl.hit, 'initiate')
         log.info('%r', dl.from_uri)
         self.assertEqual(
@@ -69,7 +72,7 @@ class TestDialog(SIPPartyTestCase):
         for wrf in wrfs:
             self.assertIsNone(wrf())
 
-    def create_sub_test(func, static_args):
+    def create_sub_test(func, static_args):  # noqa
         def dummy(self, *args):
             return func(self, *(static_args + args))
         return dummy

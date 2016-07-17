@@ -31,8 +31,6 @@ from .siptransaction import TransactionTransport
 from . import Incomplete
 
 log = logging.getLogger(__name__)
-prot_log = logging.getLogger("messages")
-prot_log.setLevel(logging.INFO)
 
 
 @add_metaclass(ABCMeta)

@@ -42,6 +42,21 @@ then
     exit 0
 fi
 
+colorize () {
+    while read line
+    do
+        if [[ $line =~ ERROR ]]
+        then
+            echo -n $'\033[41m'
+        elif [[ $line =~ WARNING ]]
+        then
+            echo -n $'\033[43m'
+        fi
+        echo "$line"
+        echo -n $'\033[0m'
+    done
+}
+
 killchildren () {
     local ppid=$1
     local signal=$2
@@ -53,7 +68,7 @@ killchildren () {
     fi
     local children=$(pgrep -P ${ppid})
     echo "Children are $children"
-    for cpid in $children 
+    for cpid in $children
     do
         killchildren "${cpid}" "$signal"
         echo "killing $cpid" >&2
@@ -80,7 +95,7 @@ find . -name "*.pyc" -delete
 
 if (( ${#tests} > 0 ))
 then
-    python -m unittest unittest_logging "${tests[@]}" &
+    python -m unittest unittest_logging "${tests[@]}" 2>&1 | colorize >&2 &
     child_pid=$!
 else
     if (( pymajver > 2 ))

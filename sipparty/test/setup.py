@@ -33,10 +33,48 @@ sipparty = sys.modules['sipparty']
 
 class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
 
+    default_logging_config = {
+        'version': 1,
+        # 'disable_existing_loggers': False,
+        'formatters': {
+            'console': {
+                'format':
+                    '%(levelname)s +%(relativeCreated)d %(name)s.%(lineno)d: '
+                    '%(message)s'
+            },
+        },
+        'handlers': {
+            'console': {
+                'level': 'DEBUG',
+                'formatter': 'console',
+                'class': 'logging.StreamHandler',
+            },
+        },
+        'loggers': {
+            '': {
+                'handlers': ['console'],
+                'level': 'WARNING',
+            },
+            'sipparty.fsm.fsm': {
+                'level': 'INFO',
+            },
+            'sipparty.transport': {
+                'level': 'INFO'
+            },
+            'sipparty.test': {
+                'level': 'INFO'
+            }
+        }
+    }
+
     def __init__(self, *args, **kwargs):
         super(SIPPartyTestCase, self).__init__(*args, **kwargs)
         self._sptc_logLevels = {}
         self._sptc_searchedModules = None
+        logging.config.dictConfig(self.default_logging_config)
+
+    def expect_log(self, log_info):
+        log.warning('EXPECT LOG %s', log_info)
 
     def tearDown(self):
         self.popAllLogLevels()

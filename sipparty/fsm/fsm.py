@@ -666,8 +666,8 @@ class FSM(object):
             try:
                 action(*args, **kwargs)
             except Exception as exc:
-                log.error("Hit exception processing FSM action %r: %s" % (
-                    action, exc))
+                log.error("Hit %s processing FSM action %r: %s" % (
+                    type(exc).__name__, action, exc))
                 raise
 
         for st in res[self.KeyStartTimers]:
