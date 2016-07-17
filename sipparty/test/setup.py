@@ -35,7 +35,7 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
 
     default_logging_config = {
         'version': 1,
-        # 'disable_existing_loggers': False,
+        'disable_existing_loggers': False,
         'formatters': {
             'console': {
                 'format':
@@ -50,11 +50,11 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
                 'class': 'logging.StreamHandler',
             },
         },
+        'root': {
+            'handlers': ['console'],
+            'level': 'WARNING'
+        },
         'loggers': {
-            '': {
-                'handlers': ['console'],
-                'level': 'WARNING',
-            },
             'sipparty.fsm.fsm': {
                 'level': 'INFO',
             },

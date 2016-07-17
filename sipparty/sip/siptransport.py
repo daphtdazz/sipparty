@@ -107,26 +107,28 @@ class SIPTransport(Transport):
                 type(handler).__name__,))
 
         hdlrs = self._sptr_dialogHandlers
-        if aor in hdlrs:
+        aor_bytes = bytes(aor)
+        if aor_bytes in hdlrs:
             raise KeyError(
-                "Handler already registered for AOR %r" % bytes(aor))
+                "Handler already registered for AOR %r" % aor_bytes)
 
-        log.debug("Adding handler %r for AOR %r", handler, aor)
-        hdlrs[aor] = handler
+        log.debug("Adding handler %r for AOR %r", handler, aor_bytes)
+        hdlrs[aor_bytes] = handler
 
         if log.getEffectiveLevel() <= logging.DETAIL:
             log.detail('All aors to handle now: %s', ', '.join(
-                [str(key) for key in self._sptr_dialogHandlers.keys()]))
+                [str(key) for key in hdlrs.keys()]))
 
     def removeDialogHandlerForAOR(self, aor):
         #TODO: should be changed to remove_aor_handler
         hdlrs = self._sptr_dialogHandlers
-        if aor not in hdlrs:
+        aor_bytes = bytes(aor)
+        if aor_bytes not in hdlrs:
             raise KeyError(
-                "AOR handler not registered for AOR %r" % bytes(aor))
+                "AOR handler not registered for AOR %r" % aor_bytes)
 
-        log.debug("Remove handler for AOR %r", aor)
-        del hdlrs[aor]
+        log.debug("Remove handler for AOR %r", aor_bytes)
+        del hdlrs[aor_bytes]
 
     def updateDialogGrouping(self, dlg):
         log.detail("Update grouping for dlg %r", dlg)
@@ -223,14 +225,14 @@ class SIPTransport(Transport):
         eoleol_index = data.find(eoleol)
         if eoleol_index == -1:
             # No possibility of a full message yet.
-            log.debug("Data not a full SIP message.")
+            log.warning("Data not a full SIP message.")
             return 0
 
         # We've probably got a full message, so parse it.
         log.debug("Full message")
         try:
             msg = Message.Parse(data)
-            log.info("Message parsed.")
+            log.debug("Message parsed.")
         except ParseError as pe:
             log.error("Parse errror %s parsing message.", pe)
             return 0
@@ -244,18 +246,19 @@ class SIPTransport(Transport):
 
     def consumeMessage(self, msg):
         self._sptr_messages.append(msg)
-
         if msg.type == 'ACK':
+            log.warning('FIX ME: Dumping ACK')
             return
 
         if not hasattr(msg.FromHeader.parameters, "tag"):
             log.debug("FromHeader: %r", msg.FromHeader)
-            log.info("Message with no from tag is discarded.")
+            log.warning("Message with no From: tag is discarded.")
             return
+
         if (not hasattr(msg, "Call_IDHeader") or
                 len(msg.Call_IdHeader.value) == 0):
             log.debug("Call-ID: %r", msg.Call_IDHeader)
-            log.info("Message with no Call-ID is discarded.")
+            log.warning("Message with no Call-ID is discarded.")
             return
 
         if not hasattr(msg.ToHeader.parameters, "tag"):
@@ -270,15 +273,17 @@ class SIPTransport(Transport):
         hdlrs = self._sptr_dialogHandlers
 
         log.debug("Find handler for %r", toAOR)
-        if toAOR not in hdlrs:
-            log.info("Message for unregistered AOR %r discarded.", toAOR)
+        to_aor_bytes = bytes(toAOR)
+        if to_aor_bytes not in hdlrs:
+            log.warning(
+                "Message for unregistered AOR %r discarded.", to_aor_bytes)
             return
 
-        hdlr = hdlrs[toAOR]
+        hdlr = hdlrs[to_aor_bytes]
 
         dlg = hdlr.new_dialog_from_request(msg)
         if dlg is None:
-            log.info(
+            log.warning(
                 'Dropped dialog creating %s message as not wanted by AOR '
                 'handler', msg.type)
             return

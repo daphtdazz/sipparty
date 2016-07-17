@@ -752,12 +752,16 @@ def WeakMethod(object, method, static_args=None, static_kwargs=None,
         log.debug("args: %r", args)
         sr = wr()
         if sr is None:
+            log.warning(
+                'Method %s cannot be called as its object has been released.',
+                method)
             return default_rc
 
         pass_args = (list(static_args) + list(args))
         log.debug("pass_args: %r", pass_args)
         pass_kwargs = dict(static_kwargs)
         pass_kwargs.update(kwargs)
+        log.info('Call method %s of %s instance', method, type(sr).__name__)
         return getattr(sr, method)(*pass_args, **pass_kwargs)
 
     return weak_method

@@ -670,6 +670,7 @@ class SocketProxy(
         if dc is None:
             raise NotImplementedError('No data callback specified.')
 
+        log.debug('Passing data to callback %r', dc)
         dc(self, addr, data)
 
 
