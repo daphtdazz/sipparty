@@ -43,7 +43,7 @@ then
 fi
 
 colorize () {
-    while read line
+    while read -r line
     do
         if [[ $line =~ ERROR ]]
         then
@@ -52,8 +52,9 @@ colorize () {
         then
             echo -n $'\033[43m'
         fi
-        echo "$line"
+        echo -n "$line"
         echo -n $'\033[0m'
+        echo
     done
 }
 

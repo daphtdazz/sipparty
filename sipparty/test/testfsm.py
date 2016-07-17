@@ -32,8 +32,7 @@ from .setup import (MagicMock, patch, SIPPartyTestCase)
 log = logging.getLogger(__name__)
 
 
-class TestFSM(SIPPartyTestCase):
-
+class TestFSMBase(SIPPartyTestCase):
     Clock = MagicMock()
 
     def setUp(self):
@@ -42,13 +41,16 @@ class TestFSM(SIPPartyTestCase):
 
         self.Clock.return_value = 0
 
+
+class TestFSM(TestFSMBase):
+
     def testSimple(self):
         nf = FSM(name="testfsm")
         self.assertEqual(
             str(nf),
             "'FSM' 'testfsm':\n"
-            "  (No states or transitions.)\n"
-            "Current state: None")
+            "  (No transitions.)\n"
+            "Current state: 'Initial'")
 
         nf.addTransition("initial", "start", "starting")
         nf.addTransition("starting", "start", "starting")
@@ -154,8 +156,8 @@ class TestFSM(SIPPartyTestCase):
 
         self.assertEqual(lfsm.state, 'end')
 
-    @patch.object(fsmtimer, 'Clock', new=Clock)
-    @patch.object(retrythread, 'Clock', new=Clock)
+    @patch.object(fsmtimer, 'Clock', new=TestFSMBase.Clock)
+    @patch.object(retrythread, 'Clock', new=TestFSMBase.Clock)
     def testTimer(self):
         nf = FSM(name="TestTimerFSM")
 
@@ -301,8 +303,8 @@ class TestFSM(SIPPartyTestCase):
     def testAsyncFSMClass(self):
         self.subtest_FSM_class(async=True)
 
-    @patch.object(fsmtimer, 'Clock', new=Clock)
-    @patch.object(retrythread, 'Clock', new=Clock)
+    @patch.object(fsmtimer, 'Clock', new=TestFSMBase.Clock)
+    @patch.object(retrythread, 'Clock', new=TestFSMBase.Clock)
     def subtest_FSM_class(self, async):
         actnow_hit = [0]
 
@@ -577,8 +579,8 @@ class TestFSM(SIPPartyTestCase):
         tfsm.meth1.assert_called_once_with()
         tfsm.meth2.assert_called_once_with()
 
-    @patch.object(fsmtimer, 'Clock', new=Clock)
-    @patch.object(retrythread, 'Clock', new=Clock)
+    @patch.object(fsmtimer, 'Clock', new=TestFSMBase.Clock)
+    @patch.object(retrythread, 'Clock', new=TestFSMBase.Clock)
     def test_timer_definitions(self):
 
         class TimerFSM(FSM):
@@ -658,8 +660,8 @@ class TestFSM(SIPPartyTestCase):
         tfsm.meth2.assert_called_once_with()
         tfsm.meth3.assert_called_once_with()
 
-    @patch.object(fsmtimer, 'Clock', new=Clock)
-    @patch.object(retrythread, 'Clock', new=Clock)
+    @patch.object(fsmtimer, 'Clock', new=TestFSMBase.Clock)
+    @patch.object(retrythread, 'Clock', new=TestFSMBase.Clock)
     def test_async_timer_lifetime(self):
 
         class TimerFSM(AsyncFSM):
@@ -693,3 +695,23 @@ class TestFSM(SIPPartyTestCase):
         wtfsm = ref(tfsm)
         del tfsm
         self.assertIsNone(wtfsm())
+
+
+class TestFSMDelegate(TestFSMBase):
+
+    def setUp(self):
+        getattr(super(TestFSMDelegate, self), 'setUp', lambda: None)()
+        self.dele_action_called = 0
+
+    def dele_action(self, fsm):
+        self.assertTrue(isinstance(fsm, FSM))
+        self.dele_action_called += 1
+
+    def test_delegate(self):
+        tfsm = FSM()
+        tfsm.delegate = self
+        tfsm.addTransition(
+            tfsm.States.Initial, 'start', 'Running', action='dele_action')
+        self.assertEqual(self.dele_action_called, 0)
+        tfsm.hit('start')
+        self.assertEqual(self.dele_action_called, 1)

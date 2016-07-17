@@ -67,7 +67,7 @@ class FSMClassInitializer(type):
         self._fsm_transitions = {}
         self._fsm_timers = {}
         self._fsm_name = self.__name__
-        self._fsm_state = None
+        self._fsm_state = InitialStateKey
 
         # Add any predefined timers.
         self.AddTimers()
@@ -149,11 +149,6 @@ class FSM(object):
                     start_threads=transdef.get(tsk.StartThreads, None),
                     start_timers=transdef.get(tsk.StartTimers, None),
                     stop_timers=transdef.get(tsk.StopTimers, None))
-
-        # If the special initial state is specified, set that.
-        if InitialStateKey in definition_dict:
-            log.debug("Set initial state of %r to isk.", cls.__name__)
-            cls._fsm_state = InitialStateKey
 
     @classmethod
     def AddClassTransitions(cls):
@@ -310,8 +305,9 @@ class FSM(object):
 
     @state.setter
     def state(self, value):
-        assert self._fsm_state is None, (
-            "Only allowed to set the state of an FSM once at initialization.")
+        assert self._fsm_state == InitialStateKey, (
+            "Only allowed to set the state of an FSM when it is in its "
+            "initial state.")
         if value not in self.States:
             raise ValueError('State %r is not one of %r' % (
                 value, self.States))
@@ -356,7 +352,7 @@ class FSM(object):
         self._fsm_timers = {}
         self.Inputs = copy(self.Inputs)
 
-        self._fsm_state = getattr(self, '_fsm_state', None)
+        self._fsm_state = getattr(self, '_fsm_state')
         log.debug("Initial state of %r instance is %r.",
                   self.__class__.__name__, self._fsm_state)
 
@@ -524,7 +520,7 @@ class FSM(object):
                             action_partial_args)
 
                         run_delegate = True
-                        drv = partial(method, *action_partial_args)(
+                        drv = partial(method, self, *action_partial_args)(
                             *args, **kwargs)
 
                 if not (run_self or run_delegate):
@@ -611,7 +607,7 @@ class FSM(object):
     def _fsm_strgen(self):
         yield "{0!r} {1!r}:".format(self.__class__.__name__, self._fsm_name)
         if len(self._fsm_transitions) == 0:
-            yield "  (No states or transitions.)"
+            yield "  (No transitions.)"
         for old_state, transitions in iteritems(self._fsm_transitions):
             yield "  {0!r}:".format(old_state)
             for input, result in iteritems(transitions):
