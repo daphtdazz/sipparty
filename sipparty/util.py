@@ -556,7 +556,7 @@ class class_or_instance_method(object):  # noqa
         return class_or_instance_wrapper
 
 
-def OnlyWhenLocked(method):
+def OnlyWhenLocked(method, allow_recursion=False):
     """This decorator sees if the owner of method has a _lock attribute, and
     if so locks it before calling method, releasing it after."""
 
@@ -585,10 +585,15 @@ def OnlyWhenLocked(method):
         hthr = self._lock_holdingThread
 
         if cthr is hthr:
+            if allow_recursion:
+                log.debug('Thread legally holding lock, call method')
+                return method(self, *args, **kwargs)
+
             raise RuntimeError(
                 "Thread %s attempting to get FSM lock when it already has "
                 "it." % cthr.name)
 
+        # We needed the lock and we have it.
         log.debug("Thread %s get lock for %s instance (held by %s).",
                   cthr.name, self.__class__.__name__,
                   hthr.name if hthr is not None else None)
