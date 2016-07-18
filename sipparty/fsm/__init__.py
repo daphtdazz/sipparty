@@ -55,13 +55,27 @@ effects.
 
             2.  The FSM instance is asked for an attribute called delegate.
 
-                If one is found, it is asked for an attribute with the same
-                name as the action. If found, that is called.
+                If one is found, it is asked for an attribute named
+                ``'fsm_dele_' + action_name``. If found, that is called.
 
-            Note that if both the FSM instance and its delegate have attributes
-            with the same name as the action, both will be called.
+            3.  If the FSM delegate was not present, or not called, the
+                instance is asked for an attribute named
+                ``'fsm_dele_' + action_name`` as well. If found, it is called.
+                This allows default behaviour to be implemented in the
+                instance, and easy fallback to the default behaviour.
 
-        *   Invalid input.
+                E.g. a delegate could fallback to the default instance
+                behaviour like so::
+
+                    class FSMDelegate:
+                        def fsm_dele_action_name(self, fsm, *args, **kwargs):
+                            if self.some_condition_is_not_met():
+                                return fsm.fsm_dele_action_name(
+                                    *args, **kwargs)
+
+                            # Otherwise do some custom action.
+                            return
+
 
 3.  If no transition is found for the state / input pair,
     :py:exception:`UnexpectedInput` is raised.

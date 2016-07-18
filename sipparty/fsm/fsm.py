@@ -131,6 +131,10 @@ class FSM(object):
     Actions = Enum(tuple())
 
     @classmethod
+    def delegate_method_name(cls, action_name):
+        return 'fsm_dele_' + action_name
+
+    @classmethod
     def PopulateWithDefinition(cls, definition_dict):
         cls._fsm_definitionDictionary = definition_dict
         for old_state, stdict in iteritems(definition_dict):
@@ -512,25 +516,43 @@ class FSM(object):
                     srv = partial(func, *action_partial_args)(*args, **kwargs)
 
                 dele = getattr(self, "delegate", None)
+                delegate_method_name = FSM.delegate_method_name(action_name)
                 if dele is not None:
-                    method = getattr(dele, action_name, None)
+                    method = getattr(dele, delegate_method_name, None)
                     if isinstance(method, Callable):
                         log.debug(
-                            "Call self.delegate.%s(*%s)", action_name,
+                            "Call self.delegate.%s(*%s)", delegate_method_name,
                             action_partial_args)
 
                         run_delegate = True
                         drv = partial(method, self, *action_partial_args)(
                             *args, **kwargs)
 
+                if not run_delegate:
+                    # The delegate was not run, so see if we have a default
+                    # delegate method.
+                    method = getattr(self, delegate_method_name, None)
+                    if isinstance(method, Callable):
+                        log.debug(
+                            "Call self.%s(*%s)", delegate_method_name,
+                            action_partial_args)
+
+                        run_delegate = True
+                        drv = partial(method, *action_partial_args)(
+                            *args, **kwargs)
+
                 if not (run_self or run_delegate):
                     # The action could not be resolved.
                     raise AttributeError(
-                        "Action %r is not a callable or a method on %r object "
-                        "(attribute value was %s) or its delegate %r." %
-                        (action, self.__class__.__name__,
-                         getattr(self, action_name, '<not present>'),
-                         getattr(self, 'delegate', None)))
+                        "Action {0!r} is not a callable or a method on the "
+                        "{1} instance "
+                        "(attribute value was {2}) and its delegate {3!r} "
+                        "had no "
+                        "such attribute and no default delegate method on "
+                        "the {1!r} instance was implemented.".format(
+                            action_name, self.__class__.__name__,
+                            getattr(self, action_name, '<not present>'),
+                            getattr(self, 'delegate', None)))
 
             del self
             if run_self:
