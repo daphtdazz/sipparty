@@ -376,7 +376,7 @@ class FSM(object):
                 os, inp, ns, self._fsm_makeAction(act), start_tmrs, stop_tmrs,
                 strt_thrs)
 
-        self._fsm_inputQueue = queue.Queue()
+        self.__input_queue = queue.Queue()
         self._fsm_oldThreadQueue = queue.Queue()
 
         log.detail(
@@ -384,26 +384,23 @@ class FSM(object):
         return
 
     def hit(self, input, *args, **kwargs):
-        """Hit the FSM with input `input`.
+        """Hit the FSM with `input`.
+
+        It is illegal to hit an FSM during processing of an action, and this is
+        guarded against. The reason for this is that it is not obvious whether
+        or not the state should change before or after the actions are
+        processed. If an action wishes to cause another FSM hit, it should use
+        :py:method:`queue_hit`.
 
         args and kwargs are passed through to the action.
         """
         log.debug("Queuing input %r", input)
 
-        if self.__processing_hit:
-            raise RuntimeError(
-                'Illegal re-hit of %r instance during a hit. Most likely '
-                '\'hit\' has been called from an action. This is illegal, use '
-                '\'hitAfterCurrentTransition\' to schedule a new hit straight '
-                'from an action.' % self.__class__.__name__)
-        try:
-            self.__processing_hit = True
-            return self._fsm_hit(input, *args, **kwargs)
-        finally:
-            self.__processing_hit = False
+        self.__queue_next_hit((input, args, kwargs))
+        self.__process_queued_hits()
 
-    def hitAfterCurrentTransition(self, input, *args, **kwargs):
-        raise NotImplemented("'hitAfterCurrentTransition'")
+    def queue_hit(self, input, *args, **kwargs):
+        self.__queue_next_hit((input, args, kwargs))
 
     def start_timer(self, timer):
         """Signals the timer that it should start.
@@ -638,6 +635,28 @@ class FSM(object):
             yield ""
         yield "Current state: %r" % self._fsm_state
 
+    def __queue_next_hit(self, hit_tuple):
+        self.__input_queue.put(hit_tuple)
+
+    def __process_queued_hits(self):
+        while not self.__input_queue.empty():
+            if self.__processing_hit:
+                raise RuntimeError(
+                    'Illegal re-hit of %r instance during a hit. Most likely '
+                    '\'hit\' has been called from an action. This is illegal, '
+                    'use \'queue_hit\' to schedule a new hit straight '
+                    'from an action.' % self.__class__.__name__)
+
+            input, args, kwargs = self.__input_queue.get()
+            log.debug("Process input %r.", input)
+            try:
+                self.__processing_hit = True
+                self._fsm_hit(input, *args, **kwargs)
+            finally:
+                self.__processing_hit = False
+                log.debug("Items left on queue: %d",
+                          self.__input_queue.qsize())
+
     def _fsm_hit(self, input, *args, **kwargs):
         """When the FSM is hit, the following actions are taken in the
         following order:
@@ -823,17 +842,6 @@ class AsyncFSM(LockedFSM):
 
     def __backgroundTimerPop(self):
         log.debug("__backgroundTimerPop")
-
-        while not self._fsm_inputQueue.empty():
-            input, args, kwargs = self._fsm_inputQueue.get()
-            log.debug("Process input %r.", input)
-            try:
-                self._fsm_hit(input, *args, **kwargs)
-            finally:
-                self._fsm_inputQueue.task_done()
-                log.debug("Items left on queue: %d",
-                          self._fsm_inputQueue.qsize())
-
         self.checkTimers()
         self._fsm_garbageCollect()
 

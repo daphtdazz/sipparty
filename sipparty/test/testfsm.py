@@ -749,7 +749,7 @@ class TestFSMDelegate(TestFSMBase):
         getattr(super(TestFSMDelegate, self), 'setUp', lambda: None)()
         self.dele_action_called = 0
 
-    def dele_action(self, fsm):
+    def fsm_dele_action(self, fsm):
         self.assertTrue(isinstance(fsm, FSM))
         self.dele_action_called += 1
 
@@ -757,7 +757,7 @@ class TestFSMDelegate(TestFSMBase):
         tfsm = FSM()
         tfsm.delegate = self
         tfsm.addTransition(
-            tfsm.States.Initial, 'start', 'Running', action='dele_action')
+            tfsm.States.Initial, 'start', 'Running', action='action')
         self.assertEqual(self.dele_action_called, 0)
         tfsm.hit('start')
         self.assertEqual(self.dele_action_called, 1)
