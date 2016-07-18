@@ -104,7 +104,7 @@ else
         python -m unittest &
         child_pid=$!
     else
-        python -m unittest discover &
+        python -m unittest discover 2>&1 | colorize >&2 &
         child_pid=$!
     fi
 fi

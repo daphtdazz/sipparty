@@ -606,6 +606,7 @@ class SocketProxy(
     # =================== MAGIC METHODS =======================================
     #
     def __del__(self):
+        log.info('DELETE %s instance', type(self).__name__)
         sck = self.socket
         if isinstance(sck, socket_class):
 
@@ -620,10 +621,7 @@ class SocketProxy(
             except:
                 log.debug('Exception closing socket', exc_info=True)
 
-        assert isinstance(SocketProxy, type)
-        dtr = getattr(super(SocketProxy, self), '__del__', None)
-        if dtr is not None:
-            dtr()
+        getattr(super(SocketProxy, self), '__del__', lambda: None)()
 
     #
     # =================== INTERNAL METHODS ====================================

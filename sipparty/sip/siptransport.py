@@ -76,8 +76,8 @@ class SIPTransport(Transport):
         super(SIPTransport, self).__init__()
         self._sptr_messageConsumer = None
         self._sptr_messages = []
-        self._sptr_provisionalDialogs = WeakValueDictionary()
-        self._sptr_establishedDialogs = WeakValueDictionary()
+        self._sptr_provisionalDialogs = {}
+        self._sptr_establishedDialogs = {}
 
         # Dialog handler is keyed by AOR. This can't be a WeakValueDictionary
         # because generally methods are transient objects which will get

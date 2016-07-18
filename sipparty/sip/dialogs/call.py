@@ -14,6 +14,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+import logging
+
 from ...fsm import (InitialStateKey as InitialState, TransitionKeys)
 from ...util import Enum
 from ..dialog import Dialog
@@ -21,13 +23,16 @@ from ..header import ContactHeader
 from ..param import Param
 from ..transform import TransformKeys
 
+log = logging.getLogger(__name__)
 
 # States, Actions and Inputs.
 S = Enum((
-    InitialState, "InitiatingDialog", "InDialog", "TerminatingDialog", "Error",
+    InitialState, 'ReceivedInvite', "SentInvite", "InDialog",
+    "TerminatingDialog", "Error",
     "Terminated"))
 I = Enum((
-    "initiate", "receiveRequestINVITE", "receiveResponse18",
+    "initiate", 'accept', 'reject', "receiveRequestINVITE",
+    "receiveResponse18",
     "receiveResponse2", "receiveResponse4", "terminate", "receiveRequestBYE"))
 
 for transitionKey in TransitionKeys:
@@ -41,17 +46,27 @@ class SimpleCallDialog(Dialog):
     FSMDefinitions = {
         S.Initial: {
             I.initiate: {
-                tsk.NewState: S.InitiatingDialog,
+                tsk.NewState: S.SentInvite,
                 tsk.Action: ['session_listen', ('send_request', 'INVITE')]
             },
             I.receiveRequestINVITE: {
-                tsk.NewState: S.InDialog,
-                tsk.Action: (('send_response', 200),)
+                tsk.NewState: S.ReceivedInvite,
+                tsk.Action: 'handle_invite',
             }
         },
-        S.InitiatingDialog: {
+        S.ReceivedInvite: {
+            I.accept: {
+                tsk.NewState: S.InDialog,
+                tsk.Action: (('send_response', 200),),
+            },
+            I.reject: {
+                tsk.NewState: S.Terminated,
+                tsk.Action: 'send_response',
+            }
+        },
+        S.SentInvite: {
             I.receiveResponse18: {
-                tsk.NewState: S.InitiatingDialog
+                tsk.NewState: S.SentInvite
             },
             I.receiveResponse2: {
                 tsk.NewState: S.InDialog,
@@ -110,3 +125,7 @@ class SimpleCallDialog(Dialog):
             ]
         },
     }
+
+    def fsm_dele_handle_invite(self, *args, **kwargs):
+        log.warning('default delegate handling invite')
+        self.queue_hit(self.Inputs.accept, *args, **kwargs)

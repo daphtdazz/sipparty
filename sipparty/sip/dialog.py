@@ -19,14 +19,12 @@ limitations under the License.
 from copy import deepcopy
 import logging
 import numbers
-import re
 from .. import vb
 from ..fsm import (AsyncFSM, InitialStateKey, UnexpectedInput)
 from ..deepclass import DeepClass, dck
 from ..parse import ParsedPropertyOfClass
 from ..sdp import (sdpsyntax, SDPIncomplete)
-from ..transport import IsValidPortNum
-from ..util import (abytes, astr, Enum, WeakMethod, WeakProperty)
+from ..util import (abytes, astr, Enum, WeakProperty)
 from .transform import (Transform, TransformKeys)
 from .components import URI
 from .header import Call_IdHeader
@@ -40,7 +38,7 @@ from . import prot
 log = logging.getLogger(__name__)
 
 States = Enum((
-    InitialStateKey, "InitiatingDialog", "InDialog", "TerminatingDialog",
+    InitialStateKey, "SentInvite", "InDialog", "TerminatingDialog",
     "SuccessCompletion", "ErrorCompletion"))
 Inputs = Enum(("initiate", "receiveRequest", "terminate"))
 
@@ -66,7 +64,8 @@ class Dialog(
         DeepClass("_dlg_", {
             "from_uri": {dck.descriptor: ParsedPropertyOfClass(URI)},
             "to_uri": {dck.descriptor: ParsedPropertyOfClass(URI)},
-            "contact_uri": {dck.descriptor: ParsedPropertyOfClass(URI)},
+            "contact_uri": {
+                dck.descriptor: ParsedPropertyOfClass(URI), dck.gen: URI},
             "localTag": {dck.gen: TagParam},
             "remoteTag": {},
             "transport": {dck.descriptor: WeakProperty},
@@ -270,6 +269,9 @@ class Dialog(
     #
     # =================== MAGIC METHODS =======================================
     #
+    def __del__(self):
+        log.info('DELETE %s instance', type(self).__name__)
+        getattr(super(Dialog, self), '__del__', lambda: None)()
 
     #
     # =================== INTERNAL METHODS ====================================

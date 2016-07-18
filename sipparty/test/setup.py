@@ -63,7 +63,7 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
             },
             'sipparty.test': {
                 'level': 'INFO'
-            }
+            },
         }
     }
 
