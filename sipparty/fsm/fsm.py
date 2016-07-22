@@ -68,6 +68,7 @@ class FSMClassInitializer(type):
         self._fsm_timers = {}
         self._fsm_name = self.__name__
         self._fsm_state = InitialStateKey
+        self._fsm_state_entry_actions = {}
 
         # Add any predefined timers.
         self.AddTimers()
@@ -76,6 +77,9 @@ class FSMClassInitializer(type):
         self.AddClassTransitions()
         log.debug("FSMClass inputs / states after AddClassTransitions: %r / "
                   "%r", self.States, self.Inputs)
+
+        # Add any predefined actions on state entry.
+        self.AddActionsOnStateEntry()
 
 
 FSMType = type(
@@ -168,6 +172,12 @@ class FSM(object):
         tmrs = getattr(cls, 'FSMTimers', {})
         for tname, (act, retryer) in iteritems(tmrs):
             cls.addTimer(tname, act, retryer)
+
+    @classmethod
+    def AddActionsOnStateEntry(cls):
+        state_acts = getattr(cls, 'FSMStateEntryActions', [])
+        for state, act in state_acts:
+            cls.add_action_on_state_entry(state, act)
 
     #
     # =================== CLASS OR INSTANCE INTERFACE ========================
@@ -296,6 +306,17 @@ class FSM(object):
         newtimer = fsmtimer.Timer(name, self._fsm_makeAction(action), retryer)
         self._fsm_timers[name] = newtimer
 
+    @class_or_instance_method
+    def add_action_on_state_entry(self, state, action):
+        if state not in self.States:
+            raise ValueError(
+                'Cannot add action for entry into non-existent state %r' % (
+                    state,))
+
+        act_list = self._fsm_state_entry_actions.get(state, [])
+        act_list.append(self._fsm_makeAction(action))
+        self._fsm_state_entry_actions[state] = act_list
+
     #
     # =================== INSTANCE INTERFACE =================================
     #
@@ -375,6 +396,13 @@ class FSM(object):
             self.addTransition(
                 os, inp, ns, self._fsm_makeAction(act), start_tmrs, stop_tmrs,
                 strt_thrs)
+
+        class_state_entries = self._fsm_state_entry_actions
+        self._fsm_state_entry_actions = {}
+        for state, act in (
+                (s, a) for s, acts in iteritems(class_state_entries)
+                for a in acts):
+            self.add_action_on_state_entry(state, act)
 
         self.__input_queue = queue.Queue()
         self._fsm_oldThreadQueue = queue.Queue()
@@ -719,6 +747,11 @@ class FSM(object):
         # It is only when everything has succeeded that we know we can update
         # the state.
         self._fsm_setState(new_state)
+
+        # Perform actions registered for state entry.
+        acts = self._fsm_state_entry_actions.get(new_state, ())
+        for act in acts:
+            act()
 
         log.debug("Done hit.")
 

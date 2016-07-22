@@ -761,3 +761,39 @@ class TestFSMDelegate(TestFSMBase):
         self.assertEqual(self.dele_action_called, 0)
         tfsm.hit('start')
         self.assertEqual(self.dele_action_called, 1)
+
+
+class TestFSMActionsOnEntryToState(TestFSMBase):
+
+    def test_preconfigured_action_on_entry_sync(self):
+        self.subtest_preconfigured_action_on_entry(async=False)
+
+    def test_preconfigured_action_on_entry_async(self):
+        self.subtest_preconfigured_action_on_entry(async=True)
+
+    def subtest_preconfigured_action_on_entry(self, async):
+
+        class TFSM(FSM if not async else AsyncFSM):
+            FSMDefinitions = {
+                InitialStateKey: {
+                    "input": {
+                        TransitionKeys.NewState: "end",
+                    },
+                },
+                'end': {}
+            }
+            FSMStateEntryActions = (
+                ('end', 'action_on_end'),
+            )
+
+            def __init__(self):
+                super(TFSM, self).__init__()
+                self.ended = False
+
+            def action_on_end(self):
+                self.ended = True
+
+        tf = TFSM()
+        self.assertFalse(tf.ended)
+        tf.hit('input')
+        self.assertTrue(tf.ended)
