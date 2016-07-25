@@ -22,7 +22,7 @@ from weakref import ref
 from .setup import SIPPartyTestCase
 from ..sip.components import (AOR, Host, URI)
 from ..sip.dialogs import SimpleCallDialog
-from ..sip.siptransaction import TransactionManager
+from ..sip.transaction import TransactionManager
 from ..sip.siptransport import AORHandler, SIPTransport
 from ..util import WaitFor
 
@@ -78,9 +78,7 @@ class TestDialog(AORHandler, SIPPartyTestCase):
         log.info('sub_test_transaction_creation %d' % depth)
         tp = SIPTransport()
         self.wtp = ref(tp)
-        tm = TransactionManager()
-        self.wtm = ref(tm)
-        dl = SimpleCallDialog(tp, tm)
+        dl = SimpleCallDialog(tp)
         dl.from_uri = 'sip:user1@host'
         dl.to_uri = 'sip:user2@host'
         tp.addDialogHandlerForAOR(dl.to_uri.aor, self)

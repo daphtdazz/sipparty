@@ -32,7 +32,7 @@ from .request import Request
 from .message import Message, MessageResponse
 from .param import TagParam
 from .body import Body
-from .siptransaction import TransactionUser
+from .transaction import TransactionUser
 from . import prot
 
 log = logging.getLogger(__name__)
@@ -69,7 +69,6 @@ class Dialog(
             "localTag": {dck.gen: TagParam},
             "remoteTag": {},
             "transport": {dck.descriptor: WeakProperty},
-            'transaction_manager': {dck.descriptor: WeakProperty},
             "localSession": {},
             "remoteSession": {},
             'callIDHeader': {}}),
@@ -113,10 +112,9 @@ class Dialog(
         return prot.EstablishedDialogID(
             self._dlg_callIDHeader.value, self.localTag.value, rt.value)
 
-    def __init__(self, transport, transaction_manager, **kwargs):
-
+    def __init__(self, transport, **kwargs):
+        log.info('New %s instance', type(self).__name__)
         kwargs['transport'] = transport
-        kwargs['transaction_manager'] = transaction_manager
         super(Dialog, self).__init__(**kwargs)
         self._dlg_requests = []
 
@@ -341,7 +339,7 @@ class Dialog(
             raise
 
     def __send_msg_through_trns(self, msg, trns):
-        trns.send_message(msg)
+        trns.hit('request', msg)
         self.remote_name = trns.remote_name
         self.remote_port = trns.remote_port
 

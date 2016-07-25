@@ -27,7 +27,7 @@ from ..util import (abytes, DerivedProperty, WeakMethod)
 from . import prot
 from .components import AOR, Host
 from .message import Message
-from .siptransaction import TransactionTransport
+from .transaction import TransactionManager, TransactionTransport
 from . import Incomplete
 
 log = logging.getLogger(__name__)
@@ -84,6 +84,7 @@ class SIPTransport(Transport):
         # released if we don't store strong references to them. Therefore if
         # you want a weak reference, use WeakMethod.
         self._sptr_dialogHandlers = {}
+        self.transaction_manager = TransactionManager()
 
     def listen_for_me(self, **kwargs):
 

@@ -158,6 +158,9 @@ class Enum(set):
         super(Enum, self).__init__(vlist)
         self._en_list = vlist
 
+    def __or__(self, other):
+        return Enum(set(self) | set(other))
+
     def __contains__(self, name):
         nn = self._en_fixAttr(name)
         return super(Enum, self).__contains__(nn)

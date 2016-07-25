@@ -20,7 +20,7 @@ from weakref import proxy
 from .deepclass import (DeepClass, dck)
 from .parse import (ParsedPropertyOfClass)
 from .sip import DNameURI, URI, Host, Incomplete, Request, Message
-from .sip.siptransaction import TransactionManager
+from .sip.transaction import TransactionManager
 from .sip.siptransport import AORHandler, SIPTransport
 from .transport import (IPaddress_re, IsSpecialName)
 from .util import abytes

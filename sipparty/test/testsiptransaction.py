@@ -25,9 +25,9 @@ from ..fsm import retrythread
 from ..sip.message import Message
 from ..sip.prot import (
     DefaultGiveupTimeMS, DefaultMaximumRetryTimeMS, DefaultRetryTimeMS)
-from ..sip.siptransaction import (
-    TransactionManager,
-    TransactionTransport, TransactionUser, NonInviteClientTransaction)
+from ..sip.transaction import (
+    TransactionManager, TransactionTransport, TransactionUser)
+from ..sip.transaction.client import NonInviteClientTransaction
 from ..sip.siptransport import SIPTransport
 from ..transport import ConnectedAddressDescription
 from ..util import WaitFor
