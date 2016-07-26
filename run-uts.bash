@@ -72,8 +72,26 @@ killchildren () {
     for cpid in $children
     do
         killchildren "${cpid}" "$signal"
-        echo "killing $cpid" >&2
-        kill -${signal} ${cpid}
+        echo "killing $cpid..." >&2
+        kill_attempts=0
+        while kill -${signal} ${cpid}
+        do
+            (( kill_attempts++ ))
+            sleep 0.1
+            if ! kill -0 ${cpid}
+            then
+                echo "dead" >&2
+                break
+            fi
+            sleep 1
+            if (( kill_attempts > 3 ))
+            then
+                echo "Tried 3 times, using KILL" >&2
+                signal=KILL
+            else
+                echo "Child not dead yet, try again..." >&2
+            fi
+        done
     done
 }
 
@@ -89,7 +107,7 @@ do
     trap \
 "echo \"Kill children $signal\";"\
 "killchildren $$ ${signal};"\
-"trap \"echo Kill children KILL; killchildren $$ KILL\" ${signal}" $signal
+ $signal
 done
 
 find . -name "*.pyc" -delete

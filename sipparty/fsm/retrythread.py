@@ -264,7 +264,7 @@ class RetryThread(threading.Thread):
     def addRetryTime(self, ctime):
         """Add a time when we should retry the action. If the time is already
         in the list, then the new time is not re-added."""
-        log.debug("Add retry time %d to %r", ctime, self._rthr_retryTimes)
+        log.debug("Add retry time %f to %r", ctime, self._rthr_retryTimes)
         with self._rthr_nextTimesLock:
             ii = 0
             for ii, time in zip(
@@ -313,6 +313,7 @@ class RetryThread(threading.Thread):
         except (OSError, socket_error):
             log.debug('Thread already shut down')
             pass
+        log.debug('Triggered.')
 
     def _rthr_shouldKeepRunning(self):
         return not self._rthr_cancelled and self._rthr_masterThread.isAlive()

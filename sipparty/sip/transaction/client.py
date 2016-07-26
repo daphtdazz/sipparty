@@ -83,7 +83,7 @@ class InviteClientTransaction(ClientTransaction):
             },
             Inputs.response_2: {
                 tsk.NewState: States.terminated,
-                tsk.Action: (('inform_tu', 'response'),),
+                tsk.Action: [('inform_tu', 'response')],
                 tsk.StopTimers: ['a_timer_retry', 'b_timer_giveup'],
             },
             Inputs.response_xxx: {

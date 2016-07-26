@@ -373,7 +373,7 @@ def ProvisionalDialogIDFromEstablishedID(est_did):
     return est_did[:2]
 
 
-def TransactionID(branch, cseq_method):
-    return (branch, cseq_method)
+def TransactionID(ttype, branch, cseq_method):
+    return (ttype, branch, cseq_method)
 
 bdict = bglobals()

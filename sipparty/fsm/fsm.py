@@ -830,10 +830,12 @@ class AsyncFSM(LockedFSM):
         self._fsm_thread.addRetryTime(timer.nextPopTime)
 
     def checkTimers(self):
-        "Check all the timers that are running."
+        """Check all the timers."""
         log.debug('check timers on fsm %s', self.name)
         for name, timer in iteritems(self._fsm_timers):
-            timer.check()
+            # Squelch the exception if the timer isn't running yet, because
+            # that's easier than checking each one first.
+            timer.check(exception_if_not_running=False)
             if timer.nextPopTime is not None:
                 self._fsm_thread.addRetryTime(timer.nextPopTime)
 
@@ -862,10 +864,12 @@ class AsyncFSM(LockedFSM):
         self._fsm_thread.rmInputFD(fd)
 
     def __del__(self):
-        log.debug("Deleting FSM")
+        log.info("DELETE FSM %s", self.name)
         self._fsm_thread.cancel()
         if self._fsm_thread is not threading.currentThread():
+            log.debug('Join retrythread...')
             self._fsm_thread.join()
+            log.debug('Joined.')
 
     @class_or_instance_method
     def _fsm_setState(self, new_state):

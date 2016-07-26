@@ -50,21 +50,27 @@ class TransactionTest(SIPPartyTestCase):
         self.msgs_sent = []
         self.msg_tu_datas = []
 
-        def retry_thread_select(self, *args, **kwargs):
+        def retry_thread_select(in_, out, error, wait):
+            assert wait >= 0
+
             log.debug('Wait for the select semaphore')
-            if sema.acquire(blocking=False):
-                log.debug('select semaphore acquired')
-            else:
-                log.debug('select semaphore timeout')
+            time_to_sleep = 0.001
+            total_slept_time = 0
+            while not sema.acquire(blocking=False) and total_slept_time < 0.1:
+                sleep(time_to_sleep)
+                total_slept_time += time_to_sleep
+
+            log.debug('select semaphore acquired')
 
             # small sleep to improve chance of garbage collection before the
             # semaphore is exhausted.
             sleep(0.0001)
             return [], [], []
 
-        self.select_patch = patch.object(
+        select_patch = patch.object(
             retrythread, 'select', new=retry_thread_select)
-        self.select_patch.start()
+        select_patch.start()
+        self.addCleanup(select_patch.stop)
 
         # TU interface
         self.request = MagicMock()
@@ -87,7 +93,6 @@ class TransactionTest(SIPPartyTestCase):
         log.debug('tear down')
         for ii in range(1000):
             self.select_semaphore.release()
-        self.select_patch.stop()
         super(TransactionTest, self).tearDown()
 
 TransactionUser.register(TransactionTest)
@@ -109,14 +114,12 @@ class TestNonInviteTransaction(TransactionTest):
         non_inv_trans = NonInviteClientTransaction(
             transaction_user=self, transport=self,
             remote_name='nowhere.com', remote_port=5060)
-        non_inv_trans.hit('request', FakeMessage())
-
-        # Test that the standard timers work OK.
-        self.assertEqual(DefaultRetryTimeMS, 500)
-        self.assertEqual(DefaultMaximumRetryTimeMS, 4000)
+        fm = FakeMessage()
+        non_inv_trans.hit('request', fm)
+        self.send_message.assert_called_with(fm, 'nowhere.com', 5060)
+        self.assertEqual(self.send_message.call_count, 1)
 
         for time, resend_count in (
-                (0, 1),
                 (0.5, 2),
                 (1.5, 3),
                 (3.5, 4),
@@ -127,12 +130,13 @@ class TestNonInviteTransaction(TransactionTest):
             self.Clock.return_value = time
             log.debug('Release semaphore for resend')
             self.select_semaphore.release()
-            WaitFor(lambda: len(self.msgs_sent) == resend_count)
+            WaitFor(lambda: self.send_message.call_count == resend_count)
+            self.send_message.assert_called_with(fm, 'nowhere.com', 5060)
 
         self.assertEqual(non_inv_trans.state, non_inv_trans.States.trying)
         self.Clock.return_value = 32
         WaitFor(lambda: non_inv_trans.state == non_inv_trans.States.terminated)
-        self.assertEqual(len(self.msgs_sent), resend_count)
+        self.assertEqual(self.send_message.call_count, resend_count)
 
 
 class TestTransactionManager(TransactionTest):

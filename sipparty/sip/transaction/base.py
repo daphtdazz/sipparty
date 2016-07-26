@@ -53,13 +53,17 @@ class TransactionUser(object):
     def transport_error(self, error):
         raise NotImplemented
 
+    @abstractmethod
+    def timeout(self):
+        raise NotImplemented
+
 
 @add_metaclass(ABCMeta)
 class TransactionTransport(object):
     """This is what a transport object for the transaction must look like."""
 
     @abstractmethod
-    def send_message(self, msg, tt_data=None):
+    def send_message(self, msg):
         """Send a SIP message.
 
         :param msg: The message to send.
@@ -99,7 +103,7 @@ class Transaction(
 
     # Default action on entering terminated state is to inform the TU.
     FSMStateEntryActions = (
-        (States.terminated, ('inform_tu', 'transaction_terminated')),
+        (States.terminated, [('inform_tu', 'transaction_terminated')]),
     )
 
     # Default timer durations (seconds)
@@ -116,6 +120,7 @@ class Transaction(
         super(Transaction, self).__init__(*args, **kwargs)
 
         self.last_message = None
+        self.last_socket = None
 
     #
     # ---------------------------- TRANSPORT INTERFACE ------------------------
@@ -124,7 +129,7 @@ class Transaction(
         if message.isrequest():
             if message.type == 'ACK':
                 return self.hit('ack', message)
-            return self.hit('request', message)
+            return self.hit(self.Inputs.request, message)
 
         inp = self.__most_specific_input_for_inbound_response(message.type)
         return self.hit(inp, message)
@@ -132,9 +137,17 @@ class Transaction(
     #
     # ---------------------------- TU INTERFACE -------------------------------
     #
-    def respond(self, message):
+    def request(self, message, **kwargs):
+        return self.hit(self.Inputs.request, message, **kwargs)
+
+    def respond(self, message, **kwargs):
         inp = self.__most_specific_input_for_outbound_response(message.type)
-        self.hit(inp, message)
+        return self.hit(inp, message, **kwargs)
+
+    def handle_outbound_message(self, message, **kwargs):
+        if message.isrequest(message):
+            return self.request(message, **kwargs)
+        return self.respond(message, **kwargs)
 
     #
     # ---------------------------- FSM ACTIONS --------------------------------
@@ -155,10 +168,16 @@ class Transaction(
         log.debug('resend message')
         self.transmit(self.last_message)
 
-    def transmit(self, message):
+    def transmit(self, message, remote_name=None, remote_port=None):
         log.debug('send %s message', message.type)
         self.last_message = message
-        self.transport.send_message(
+        if remote_name is not None:
+            log.debug('Update remote name: %s', remote_name)
+            self.remote_name = remote_name
+        if remote_port is not None:
+            self.remote_port = remote_port
+            log.debug('Update remote port: %s', remote_port)
+        self.last_socket = self.transport.send_message(
             message, self.remote_name, self.remote_port)
 
     #
