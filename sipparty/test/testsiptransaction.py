@@ -45,26 +45,12 @@ class TransactionTest(SIPPartyTestCase):
         self.cleanup = 0
 
         self.Clock.return_value = 0
-        sema = Semaphore(0)
-        self.select_semaphore = sema
         self.msgs_sent = []
         self.msg_tu_datas = []
 
         def retry_thread_select(in_, out, error, wait):
             assert wait >= 0
 
-            log.debug('Wait for the select semaphore')
-            time_to_sleep = 0.001
-            total_slept_time = 0
-            while not sema.acquire(blocking=False) and total_slept_time < 0.1:
-                sleep(time_to_sleep)
-                total_slept_time += time_to_sleep
-
-            log.debug('select semaphore acquired')
-
-            # small sleep to improve chance of garbage collection before the
-            # semaphore is exhausted.
-            sleep(0.0001)
             return [], [], []
 
         select_patch = patch.object(
@@ -81,19 +67,6 @@ class TransactionTest(SIPPartyTestCase):
 
         # Transport Interface.
         self.send_message = MagicMock()
-
-    def tearDown(self):
-        # Given the unpredicatibility of python object lifetimes we don't know
-        # exactly when the retry threads will be garbage collected and stop, so
-        # flood the semaphore to endeavour to make sure they don't deadlock on
-        # it before being tidied.
-        #
-        # That's also why this inline function is used, so that we use separate
-        # semaphores for each test.
-        log.debug('tear down')
-        for ii in range(1000):
-            self.select_semaphore.release()
-        super(TransactionTest, self).tearDown()
 
 TransactionUser.register(TransactionTest)
 TransactionTransport.register(TransactionTest)
@@ -128,8 +101,6 @@ class TestNonInviteTransaction(TransactionTest):
                 (11.5, 6),
                 (31.9, 11)):
             self.Clock.return_value = time
-            log.debug('Release semaphore for resend')
-            self.select_semaphore.release()
             WaitFor(lambda: self.send_message.call_count == resend_count)
             self.send_message.assert_called_with(fm, 'nowhere.com', 5060)
 
