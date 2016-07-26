@@ -21,7 +21,7 @@ from __future__ import print_function
 import logging
 from threading import Semaphore, Thread
 from ..fsm import fsmtimer
-from ..fsm.fsmtimer import Timer
+from ..fsm.fsmtimer import NotRunning, Timer
 from ..util import WaitFor
 from .setup import (MagicMock, patch, SIPPartyTestCase)
 
@@ -37,13 +37,16 @@ class TestFSMTimer(SIPPartyTestCase):
         self.timer_pops = 0
         self.sema = Semaphore()
         self.Clock.return_value = 0
+        fsmtimer_clock_patch = patch.object(
+            fsmtimer, 'Clock', new=TestFSMTimer.Clock)
+        fsmtimer_clock_patch.start()
+        self.addCleanup(fsmtimer_clock_patch.stop)
 
     def timer_pop(self):
         self.timer_pops += 1
         self.sema.acquire()
         self.sema.release()
 
-    @patch.object(fsmtimer, 'Clock', new=Clock)
     def test_window_expire_property(self):
         """Test that we can't move to expired state until we have expired!"""
         tm = Timer('test has_expired window', self.timer_pop, [0, 4])
@@ -67,3 +70,8 @@ class TestFSMTimer(SIPPartyTestCase):
         td2.join()
         self.sema.acquire()
         self.assertEqual(self.timer_pops, 1)
+
+    def test_check_when_not_running(self):
+        tm = Timer('test check when not running', self.timer_pop, [])
+        self.assertIsNone(tm.check(exception_if_not_running=False))
+        self.assertRaises(NotRunning, tm.check)

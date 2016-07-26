@@ -106,13 +106,13 @@ class Timer(object):
         """Stop the timer."""
         self.__stop()
 
-    def check(self):
+    def check(self, exception_if_not_running=True):
         """Check the timer, and if it has expired runs the action.
 
         :returns:
             `None`, as there's no easy way of telling whether it popped or not.
         """
-        if self.__should_pop_and_set_next_timer():
+        if self.__should_pop_and_set_next_timer(exception_if_not_running):
             # The actual timer pop is done without the lock as it may recurse
             # to hit this fsm, which may cause this timer to be stopped, which
             # needs the lock.
@@ -166,8 +166,11 @@ class Timer(object):
         self._tmr_currentPauseIter = None
 
     @OnlyWhenLocked
-    def __should_pop_and_set_next_timer(self):
+    def __should_pop_and_set_next_timer(self, exception_if_not_running=True):
         if not self.was_started:
+            if not exception_if_not_running:
+                return
+
             raise NotRunning(
                 "%r instance named %r not yet started." % (
                     self.__class__.__name__, self._tmr_name))
