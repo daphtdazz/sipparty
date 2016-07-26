@@ -19,7 +19,7 @@ from .base import Transaction
 
 
 class OneShotTransaction(Transaction):
-    """Transaction that constitutes an unreliable single request send."""
+    """Transaction that constitutes a single unreliable request send."""
 
     type = Transaction.types.oneshot
     FSMDefinitions = {

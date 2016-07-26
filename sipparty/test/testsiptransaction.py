@@ -22,11 +22,11 @@ from time import sleep
 
 from ..fsm import fsmtimer
 from ..fsm import retrythread
-from ..sip.message import Message
+from ..sip.message import Message, MessageResponse
 from ..sip.prot import (
     DefaultGiveupTimeMS, DefaultMaximumRetryTimeMS, DefaultRetryTimeMS)
 from ..sip.transaction import (
-    TransactionManager, TransactionTransport, TransactionUser)
+    Transaction, TransactionManager, TransactionTransport, TransactionUser)
 from ..sip.transaction.client import NonInviteClientTransaction
 from ..sip.siptransport import SIPTransport
 from ..transport import ConnectedAddressDescription
@@ -36,8 +36,7 @@ from .setup import (MagicMock, patch, SIPPartyTestCase)
 log = logging.getLogger(__name__)
 
 
-class TransactionTest(
-        TransactionTransport, TransactionUser, SIPPartyTestCase):
+class TransactionTest(SIPPartyTestCase):
 
     Clock = MagicMock()
 
@@ -67,6 +66,16 @@ class TransactionTest(
             retrythread, 'select', new=retry_thread_select)
         self.select_patch.start()
 
+        # TU interface
+        self.request = MagicMock()
+        self.response = MagicMock()
+        self.transport_error = MagicMock()
+        self.timeout = MagicMock()
+        self.transaction_terminated = MagicMock()
+
+        # Transport Interface.
+        self.send_message = MagicMock()
+
     def tearDown(self):
         # Given the unpredicatibility of python object lifetimes we don't know
         # exactly when the retry threads will be garbage collected and stop, so
@@ -81,13 +90,8 @@ class TransactionTest(
         self.select_patch.stop()
         super(TransactionTest, self).tearDown()
 
-    def send_message(self, msg, remote_name, remote_port):
-        self.msgs_sent.append(msg)
-        return ConnectedAddressDescription(
-            remote_name=remote_name, remote_port=remote_port)
-
-    def consumeMessage(self, msg, tu_data=None):
-        self.msg_tu_datas.append((msg, tu_data))
+TransactionUser.register(TransactionTest)
+TransactionTransport.register(TransactionTest)
 
 
 class TestNonInviteTransaction(TransactionTest):
@@ -137,23 +141,44 @@ class TestTransactionManager(TransactionTest):
         log.debug('tearing down tm test')
         super(TestTransactionManager, self).tearDown()
 
-    def test_basic(self):
+    def test_client_transaction(self):
 
-        tm = TransactionManager()
+        tm = TransactionManager(self)
 
         log.info('First invite')
         invite = Message.invite()
         self.assertEqual(invite.CseqHeader.reqtype, 'INVITE')
+        self.assertRaises(
+            ValueError, tm.transaction_for_outbound_message, invite)
         invite.ViaHeader.parameters.branch = b'branch1'
 
-        self.assertRaises(KeyError, tm.lookup_transaction, invite)
-        inv_trns = tm.new_transaction_for_request(invite, self, self)
+        inv_trns = tm.transaction_for_outbound_message(invite)
         self.assertIsNotNone(inv_trns)
-        inv_trns2 = tm.lookup_transaction(invite)
+        self.assertEqual(inv_trns.type, Transaction.types.client)
+        inv_trns2 = tm.transaction_for_outbound_message(invite)
         self.assertIs(inv_trns, inv_trns2)
 
         log.info('Second invite')
         inv2 = Message.invite()
-        invite.ViaHeader.parameters.branch = b'branch2'
-        inv_trns2 = tm.new_transaction_for_request(inv2, self, self)
+        inv2.ViaHeader.parameters.branch = b'branch2'
+        inv_trns2 = tm.transaction_for_outbound_message(inv2)
         self.assertIsNot(inv_trns2, inv_trns)
+
+        log.info('Get the transaction from a response')
+        resp = MessageResponse(200)
+        resp.CseqHeader = invite.CseqHeader
+        resp.ViaHeader = invite.ViaHeader
+        self.assertIs(tm.transaction_for_inbound_message(resp), inv_trns)
+
+        log.info(
+            'Show we get a server transaction if we pretend the first message '
+            'was inbound')
+        server_trns = tm.transaction_for_inbound_message(invite)
+        self.assertIsNot(server_trns, inv_trns)
+        self.assertEqual(server_trns.type, Transaction.types.server)
+
+        log.info(
+            'And that we get the same transaction if we attempt to send the '
+            'same response')
+        server_trns2 = tm.transaction_for_outbound_message(resp)
+        self.assertIs(server_trns, server_trns2)
