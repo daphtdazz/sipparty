@@ -34,6 +34,12 @@ log = logging.getLogger(__name__)
 Clock = timeit.default_timer
 
 
+def append_to_exception_message(exc, message):
+    exc_str = str(exc)
+    exc_str += message
+    exc.args = (exc_str,) + tuple(exc.args[1:])
+
+
 class attributesubclassgen(type):  # noqa
     """This is used as a metaclass to give automatic subclass creation from
     attribute access.
@@ -167,6 +173,8 @@ class Enum(set):
 
     def __getattr__(self, attr):
         log.detail('%s instance getattr %r', self.__class__.__name__, attr)
+        assert not attr.startswith('_en'), attr
+        assert hasattr(self, '_en_aliases'), attr
         nn = self._en_fixAttr(attr)
         if super(Enum, self).__contains__(nn):
             return nn
