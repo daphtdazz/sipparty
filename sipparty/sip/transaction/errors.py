@@ -22,3 +22,7 @@ class TransactionError(Exception):
 
 class TransactionTimeout(TransactionError):
     pass
+
+
+class NoTransport(TransactionError):
+    pass

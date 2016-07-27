@@ -147,7 +147,8 @@ class TransactionManager(object):
         assert ttype in Transaction.types
 
         # Call the appropriate specialist method.
-        trans = getattr(self, '_new_transaction_' + ttype)(msg, **kwargs)
+        trans = getattr(self, '_new_transaction_' + ttype)(
+            msg, transport=self.transport, **kwargs)
         self.add_transaction_for_message(ttype, msg, trans)
         return trans
 

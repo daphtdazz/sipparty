@@ -24,6 +24,8 @@ from ...transport import IsValidPortNum
 from ...util import Enum, WeakProperty
 from ...fsm import AsyncFSM, UnexpectedInput
 
+from .errors import NoTransport
+
 log = logging.getLogger(__name__)
 
 
@@ -145,7 +147,7 @@ class Transaction(
         return self.hit(inp, message, **kwargs)
 
     def handle_outbound_message(self, message, **kwargs):
-        if message.isrequest(message):
+        if message.isrequest():
             return self.request(message, **kwargs)
         return self.respond(message, **kwargs)
 
@@ -158,9 +160,10 @@ class Transaction(
     def inform_tu(self, method_name, *args, **kwargs):
         tu = self.transaction_user
         if tu is None:
-            raise TypeError(
-                'No transaction user set on the %s instance' % (
-                    type(self).__name__))
+            log.warning(
+                'No transaction user set on %s instance, inform action %s is '
+                'not being honoured.', type(self).__name__, method_name)
+            return
 
         getattr(tu, method_name)(*args, **kwargs)
 
@@ -177,7 +180,14 @@ class Transaction(
         if remote_port is not None:
             self.remote_port = remote_port
             log.debug('Update remote port: %s', remote_port)
-        self.last_socket = self.transport.send_message(
+        tp = self.transport
+        if tp is None:
+            self.hit(
+                self.Inputs.transport_error,
+                NoTransport('Transport has been deleted under us.'))
+            return
+
+        self.last_socket = tp.send_message(
             message, self.remote_name, self.remote_port)
 
     #

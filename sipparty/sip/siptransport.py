@@ -84,7 +84,7 @@ class SIPTransport(Transport):
         # released if we don't store strong references to them. Therefore if
         # you want a weak reference, use WeakMethod.
         self._sptr_dialogHandlers = {}
-        self.transaction_manager = TransactionManager()
+        self.transaction_manager = TransactionManager(self)
 
     def listen_for_me(self, **kwargs):
 
@@ -168,6 +168,13 @@ class SIPTransport(Transport):
                 del eds[did]
         except AttributeError:
             pass
+
+    def send_message_with_transaction(self, msg, **kwargs):
+        """Send a message reliabily using an appropriate transaction."""
+        log.debug('Find the transaction')
+
+        trns = self.transaction_manager.transaction_for_outbound_message(msg)
+        trns.handle_outbound_message(msg, **kwargs)
 
     #
     # =================== TRANSPORT SENDER INTERFACE ==========================
@@ -265,14 +272,28 @@ class SIPTransport(Transport):
             log.warning("Message with no Call-ID is discarded.")
             return
 
+        # See if we have a transaction
+        trns = self.transaction_manager.transaction_for_inbound_message(msg)
+        assert trns is not None
+
+        if trns.state != trns.States.Initial:
+            log.debug('Message for current transaction.')
+            if msg.isrequest():
+                trns.response(msg)
+                return
+
+            trns.request(msg)
+            return
+
         if not hasattr(msg.ToHeader.parameters, "tag"):
             log.debug("Dialog creating message")
-            self.consumeDialogCreatingMessage(msg)
-        else:
-            log.debug("In dialog message")
-            self.consumeInDialogMessage(msg)
+            self.consumeDialogCreatingMessage(msg, trns)
+            return
 
-    def consumeDialogCreatingMessage(self, msg):
+        log.debug("In dialog message")
+        self.consumeInDialogMessage(msg, trns)
+
+    def consumeDialogCreatingMessage(self, msg, trns):
         toAOR = msg.ToHeader.field.value.uri.aor
         hdlrs = self._sptr_dialogHandlers
 
@@ -292,10 +313,11 @@ class SIPTransport(Transport):
                 'handler', msg.type)
             return
 
-        dlg.consume_message(msg)
+        trns.transaction_user = dlg
+        trns.consume_message(msg)
         self.updateDialogGrouping(dlg)
 
-    def consumeInDialogMessage(self, msg):
+    def consumeInDialogMessage(self, msg, trns):
         estDs = self.establishedDialogs
 
         if msg.isresponse():
@@ -310,24 +332,28 @@ class SIPTransport(Transport):
                 msg.FromHeader.parameters.tag.value)
 
         log.detail("Is established dialog %r in %r?", did, estDs)
-        if did in estDs:
+        dlg = estDs.get(did)
+        if dlg is not None:
             log.debug("Found established dialog for %r", did)
-            return estDs[did].consume_message(msg)
+            trns.transaction_user = dlg
+            trns.consume_message(msg)
+            return
 
         # Couldn't find an established dialog, so perhaps this is the
         # establishing response for a provisional dialog we started before.
         pdid = prot.ProvisionalDialogIDFromEstablishedID(did)
         provDs = self.provisionalDialogs
         log.detail("Is provisional dialog %r in %r?", pdid, provDs)
-        if pdid in provDs:
+        dlg = provDs.get(pdid)
+        if dlg is not None:
             log.debug("Found provisional dialog for %r", pdid)
-            return provDs[pdid].consume_message(msg)
+            trns.transaction_user = dlg
+            trns.consume_message(msg)
+            return
 
-        log.warning(
-            "Unable to find a dialog for message with dialog ID %r", did)
-        assert 0, (dict(provDs), dict(estDs))
-        log.detail("  Current provisional dialogs: %r", provDs)
-        log.detail("  Current establishedDialogs dialogs: %r", estDs)
-        return
+        raise RuntimeError(
+            'Unable to find a dialog for message with dialog ID %r, '
+            'provisional dialogs: %r, established dialogs: %r' % (
+                did, provDs, estDs))
 
 TransactionTransport.register(SIPTransport)
