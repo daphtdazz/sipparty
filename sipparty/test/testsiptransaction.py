@@ -17,19 +17,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-from threading import Semaphore
-from time import sleep
 
 from ..fsm import fsmtimer
 from ..fsm import retrythread
 from ..sip.message import Message, MessageResponse
-from ..sip.prot import (
-    DefaultGiveupTimeMS, DefaultMaximumRetryTimeMS, DefaultRetryTimeMS)
 from ..sip.transaction import (
     Transaction, TransactionManager, TransactionTransport, TransactionUser)
 from ..sip.transaction.client import NonInviteClientTransaction
-from ..sip.siptransport import SIPTransport
-from ..transport import ConnectedAddressDescription
 from ..util import WaitFor
 from .setup import (MagicMock, patch, SIPPartyTestCase)
 
