@@ -12,6 +12,7 @@ And many thanks to him because this solves a thorny problem, good work!
 
 from functools import partial
 import inspect
+from six import iteritems
 import types
 # import __builtin__
 
@@ -71,19 +72,27 @@ def classmaker(left_metas=(), right_metas=()):
     return make_class
 
 
-# Utilities added to Michele's recipe make it easier to write python2 and
+# Utilities added to Michele's recipe to make it easier to write python2 and
 # python3 compatible classes without metaclass conflicts.
 def _full_class_builder(mc, bases, shell_class):
 
     bases = [
-        bb for bs in ([shell_class], bases) for bb in bs
+        bb for bb in bases
         if bb is not object
     ]
     bases.append(object)
     bases = tuple(bases)
 
     lms = (mc,) if isinstance(mc, type) else mc
-    return classmaker(left_metas=lms)(shell_class.__name__, bases, {})
+
+    # We can't just put the shell class in the inheritance hierarchy,
+    # because this will break super() within the shell class, so rip out its
+    # innards to create an entirely new class.
+    new_class = classmaker(left_metas=lms)(
+        shell_class.__name__, bases, {
+            k: v for k, v in iteritems(shell_class.__dict__)
+            if k != '__dict__'})
+    return new_class
 
 
 def classbuilder(bases=(), mc=()):

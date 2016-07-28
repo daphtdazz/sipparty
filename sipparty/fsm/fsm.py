@@ -192,7 +192,9 @@ class FSM:
         stop_timers: list of timer names to stop when doing this transition
         (must have already been added with addTimer).
         """
-        log.detail("addTransition self: %r", self)
+        log.detail(
+            "addTransition self: %r %s:%s->%s", self, input, old_state,
+            new_state)
 
         self_is_class = isinstance(self, type)
         timrs_dict = self._fsm_timers
@@ -388,8 +390,7 @@ class FSM:
                 for os, state_trans in iteritems(class_transitions)
                 for inp, result in iteritems(state_trans)]:
             self.addTransition(
-                os, inp, ns, self._fsm_makeAction(act), start_tmrs, stop_tmrs,
-                strt_thrs)
+                os, inp, ns, act, start_tmrs, stop_tmrs, strt_thrs)
 
         class_state_entries = self._fsm_state_entry_actions
         self._fsm_state_entry_actions = {}
@@ -404,6 +405,12 @@ class FSM:
         log.detail(
             "  %r instance after init: %r", self.__class__.__name__, self)
         return
+
+    def checkTimers(self):
+        "Check all the timers that are running."
+        log.debug('check timers on fsm %s', self.name)
+        for name, timer in iteritems(self._fsm_timers):
+            timer.check()
 
     def hit(self, input, *args, **kwargs):
         """Hit the FSM with `input`.
@@ -424,6 +431,10 @@ class FSM:
     def queue_hit(self, input, *args, **kwargs):
         self.__queue_next_hit((input, args, kwargs))
 
+    def raise_unexpected_input(self, input):
+        raise(UnexpectedInput("%r instance fsm has no input %s." % (
+            type(self).__name__, input)))
+
     def start_timer(self, timer):
         """Signals the timer that it should start.
         :param timer: The FSMTimer to start.
@@ -443,12 +454,6 @@ class FSM:
         """
         log.debug("Stop timer %r", timer.name)
         timer.stop()
-
-    def checkTimers(self):
-        "Check all the timers that are running."
-        log.debug('check timers on fsm %s', self.name)
-        for name, timer in iteritems(self._fsm_timers):
-            timer.check()
 
     #
     # ======================= INTERNAL METHODS ===============================
@@ -588,6 +593,7 @@ class FSM:
                 "This is a bug. Actions shouldn't exist unless they have more "
                 "than one subactions to perform.")
 
+        weak_perform_actions.action_list = str(action_list)
         return weak_perform_actions
 
     @class_or_instance_method
@@ -725,8 +731,8 @@ class FSM:
             try:
                 action(*args, **kwargs)
             except Exception as exc:
-                log.error("Hit %s processing FSM action %r: %s" % (
-                    type(exc).__name__, action, exc))
+                log.error("Hit %s processing FSM actions %r: %s" % (
+                    type(exc).__name__, action.action_list, exc))
                 raise
 
         for st in res[self.KeyStartTimers]:

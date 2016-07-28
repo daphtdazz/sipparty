@@ -344,8 +344,7 @@ class Dialog:
             raise
 
     def __send_msg_through_trns(self, msg, trns):
+        assert 0
         trns.hit('request', msg)
         self.remote_name = trns.remote_name
         self.remote_port = trns.remote_port
-
-TransactionUser.register(Dialog)
