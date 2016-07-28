@@ -128,4 +128,4 @@ class SimpleCallDialog(Dialog):
 
     def fsm_dele_handle_invite(self, *args, **kwargs):
         log.debug('default delegate handling invite')
-        self.queue_hit(self.Inputs.accept, *args, **kwargs)
+        self.hit(self.Inputs.accept, *args, **kwargs)

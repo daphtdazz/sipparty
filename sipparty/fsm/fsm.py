@@ -434,9 +434,6 @@ class FSM:
         self.__queue_next_hit((input, args, kwargs))
         self.__process_queued_hits()
 
-    def queue_hit(self, input, *args, **kwargs):
-        self.__queue_next_hit((input, args, kwargs))
-
     def raise_unexpected_input(self, input):
         raise(UnexpectedInput("%r instance fsm has no input %s." % (
             type(self).__name__, input)))
