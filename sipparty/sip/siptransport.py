@@ -170,7 +170,8 @@ class SIPTransport(Transport):
             pass
 
     def send_message_with_transaction(
-            self, msg, remote_name=None, remote_port=None, **kwargs):
+            self, msg, transaction_user, remote_name=None, remote_port=None,
+            **kwargs):
         """Send a message reliabily using an appropriate transaction."""
         log.debug('Find the transaction')
 
@@ -180,7 +181,8 @@ class SIPTransport(Transport):
                 ('remote_name', remote_name), ('remote_port', remote_port)
             ) if v is not None
         })
-        trns = self.transaction_manager.transaction_for_outbound_message(msg)
+        trns = self.transaction_manager.transaction_for_outbound_message(
+            msg, transaction_user=transaction_user)
         trns.handle_outbound_message(msg, **kwargs)
 
     #

@@ -139,7 +139,9 @@ class Dialog:
             AckTransforms, msg, mtype, ack, abytes(ack.type),
             request=self._dlg_requests[-1])
 
-        self.__send_message(ack)
+        self.transport.send_message_with_transaction(
+            ack, self, remote_name=self.remote_name,
+            remote_port=self.remote_port)
 
     def send_request(self, req_type, remote_name=None, remote_port=None):
 
@@ -181,7 +183,7 @@ class Dialog:
             self.addLocalSessionSDP(req)
 
         self.transport.send_message_with_transaction(
-            req, self.remote_name, self.remote_port)
+            req, self, self.remote_name, self.remote_port)
         req.unbindAll()
         self._dlg_requests.append(req)
         self.transport.updateDialogGrouping(self)
@@ -193,7 +195,7 @@ class Dialog:
         self.configureResponse(resp, req)
         vh = req.viaheader
         self.transport.send_message_with_transaction(
-            resp, astr(vh.address), vh.port)
+            resp, self, astr(vh.address), vh.port)
 
     def configureResponse(self, resp, req):
         log.debug('Transform %s to %s', req.type, resp.type)
@@ -271,17 +273,6 @@ class Dialog:
         rinp = self._fix_response_input(503)
         self.hit(rinp, error)
 
-    def _fix_response_input(self, mtype):
-        while mtype >= 1:
-            attr = "receiveResponse%d" % mtype
-            if attr in self.Inputs:
-                log.debug("Response input found: %d", mtype)
-                return attr
-
-            mtype /= 10
-        else:
-            self.raise_unexpected_input('response code %d' % mtype)
-
     #
     # =================== MAGIC METHODS =======================================
     #
@@ -321,45 +312,13 @@ class Dialog:
         self.remote_name = target
         return target
 
-    def __send_message(self, msg):
-        # At this point we have transformed if necessary.
-        # Get a transaction for this message.
-        return self.transport.send_message(msg)
+    def _fix_response_input(self, mtype):
+        while mtype >= 1:
+            attr = "receiveResponse%d" % mtype
+            if attr in self.Inputs:
+                log.debug("Response input found: %d", mtype)
+                return attr
 
-        tm = self.transaction_manager
-        if tm is not None:
-            try:
-                trns = self.transaction_manager.lookup_transaction(msg)
-            except KeyError as exc:
-                log.debug(
-                    'No existing transaction for message, error: %s', exc)
-            else:
-                return self.__send_msg_through_trns(msg, trns)
-
-        if tm is not None and msg.isrequest():
-            trns = tm.new_transaction_for_request(
-                msg, self.transport, self, remote_name=self.remote_name,
-                remote_port=self.remote_port)
-            if trns is not None:
-                log.debug('Got new transaction for request')
-                return self.__send_msg_through_trns(msg, trns)
-
-        tp = self.transport
-        if tp is None:
-            raise AttributeError(
-                '%r instance has no transport attribute or transactions so '
-                'cannot send a message.' % (type(self).__name__,))
-
-        try:
-            ad = tp.send_message(msg, self.remote_name, self.remote_port)
-            self.remote_name = ad.remote_name
-            self.remote_port = ad.remote_port
-        except prot.Incomplete:
-            log.error("Incomplete message of type %s", msg.type)
-            raise
-
-    def __send_msg_through_trns(self, msg, trns):
-        assert 0
-        trns.hit('request', msg)
-        self.remote_name = trns.remote_name
-        self.remote_port = trns.remote_port
+            mtype /= 10
+        else:
+            self.raise_unexpected_input('response code %d' % mtype)

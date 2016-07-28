@@ -73,7 +73,7 @@ class TestSIPTransport(AORHandler, SIPPartyTestCase):
         tp.addDialogHandlerForAOR(msg.ToHeader.aor, self)
         log.info('Send the message')
         tp.send_message_with_transaction(
-            msg, remote_name='127.0.0.1', remote_port=l_desc.port)
+            msg, self, remote_name='127.0.0.1', remote_port=l_desc.port)
 
         log.info('Receive the message.')
         WaitFor(lambda: len(self.rcvd_messages) > 0, 1)
