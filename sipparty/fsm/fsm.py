@@ -26,6 +26,7 @@ from six.moves import queue
 import time
 import threading
 from weakref import ref
+from ..classmaker import classbuilder
 from ..util import (CCPropsFor, class_or_instance_method, Enum, OnlyWhenLocked)
 from . import (fsmtimer, retrythread)
 
@@ -82,16 +83,9 @@ class FSMClassInitializer(type):
         self.AddActionsOnStateEntry()
 
 
-FSMType = type(
-    # The FSM type needs both the FSMClassInitializer and the cumulative
-    # properties tool.
-    'FSMType',
-    (CCPropsFor(("States", "Inputs", "Actions")), FSMClassInitializer),
-    dict())
-
-
-@add_metaclass(FSMType)
-class FSM(object):
+@classbuilder(mc=(
+    CCPropsFor(("States", "Inputs", "Actions")), FSMClassInitializer))
+class FSM:
     """Interface:
 
     Class:

@@ -169,10 +169,17 @@ class SIPTransport(Transport):
         except AttributeError:
             pass
 
-    def send_message_with_transaction(self, msg, **kwargs):
+    def send_message_with_transaction(
+            self, msg, remote_name=None, remote_port=None, **kwargs):
         """Send a message reliabily using an appropriate transaction."""
         log.debug('Find the transaction')
 
+        kwargs.update({
+            k: v
+            for k, v in (
+                ('remote_name', remote_name), ('remote_port', remote_port)
+            ) if v is not None
+        })
         trns = self.transaction_manager.transaction_for_outbound_message(msg)
         trns.handle_outbound_message(msg, **kwargs)
 

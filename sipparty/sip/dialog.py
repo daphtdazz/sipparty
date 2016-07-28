@@ -19,12 +19,15 @@ limitations under the License.
 from copy import deepcopy
 import logging
 import numbers
+
 from .. import vb
+from ..classmaker import classbuilder
 from ..fsm import (AsyncFSM, InitialStateKey, UnexpectedInput)
 from ..deepclass import DeepClass, dck
 from ..parse import ParsedPropertyOfClass
 from ..sdp import (sdpsyntax, SDPIncomplete)
 from ..util import (abytes, astr, Enum, WeakProperty)
+from .transaction import TransactionUser
 from .transform import (Transform, TransformKeys)
 from .components import URI
 from .header import Call_IdHeader
@@ -32,7 +35,6 @@ from .request import Request
 from .message import Message, MessageResponse
 from .param import TagParam
 from .body import Body
-from .transaction import TransactionUser
 from . import prot
 
 log = logging.getLogger(__name__)
@@ -60,19 +62,20 @@ AckTransforms = {
 }
 
 
-class Dialog(
-        DeepClass("_dlg_", {
-            "from_uri": {dck.descriptor: ParsedPropertyOfClass(URI)},
-            "to_uri": {dck.descriptor: ParsedPropertyOfClass(URI)},
-            "contact_uri": {
-                dck.descriptor: ParsedPropertyOfClass(URI), dck.gen: URI},
-            "localTag": {dck.gen: TagParam},
-            "remoteTag": {},
-            "transport": {dck.descriptor: WeakProperty},
-            "localSession": {},
-            "remoteSession": {},
-            'callIDHeader': {}}),
-        AsyncFSM, vb.ValueBinder):
+@classbuilder(bases=(
+    DeepClass("_dlg_", {
+        "from_uri": {dck.descriptor: ParsedPropertyOfClass(URI)},
+        "to_uri": {dck.descriptor: ParsedPropertyOfClass(URI)},
+        "contact_uri": {
+            dck.descriptor: ParsedPropertyOfClass(URI), dck.gen: URI},
+        "localTag": {dck.gen: TagParam},
+        "remoteTag": {},
+        "transport": {dck.descriptor: WeakProperty},
+        "localSession": {},
+        "remoteSession": {},
+        'callIDHeader': {}}),
+    TransactionUser, AsyncFSM, vb.ValueBinder))
+class Dialog:
     """`Dialog` class has a slightly wider scope than a strict SIP dialog, to
     include one-off request response pairs (e.g. OPTIONS) as well as long-lived
     stateful relationships (Calls, Registrations etc.).
@@ -227,7 +230,8 @@ class Dialog(
         if req.type == req.types.invite:
             self.addLocalSessionSDP(req)
 
-        self.__send_message(req)
+        self.transport.send_message_with_transaction(
+            req, self.remote_name, self.remote_port)
         req.unbindAll()
         self._dlg_requests.append(req)
         self.transport.updateDialogGrouping(self)
@@ -238,7 +242,8 @@ class Dialog(
         resp = MessageResponse(response)
         self.configureResponse(resp, req)
         vh = req.viaheader
-        self.transport.send_message(resp, astr(vh.address), vh.port)
+        self.transport.send_message_with_transaction(
+            resp, astr(vh.address), vh.port)
 
     def configureResponse(self, resp, req):
         log.debug('Transform %s to %s', req.type, resp.type)

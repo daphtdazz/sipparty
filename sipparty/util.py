@@ -28,6 +28,8 @@ import timeit
 from traceback import extract_stack
 from weakref import (ref as weakref, WeakValueDictionary)
 
+from .classmaker import classmaker
+
 log = logging.getLogger(__name__)
 
 # The clock. Defined here so that it can be overridden in the testbed.
@@ -450,7 +452,7 @@ def CCPropsFor(props):
                 return super(CumulativeClassProperties, cls).__new__(
                     cls, name, bases, class_dict)
 
-            dummy_class = type(dprefix + name, bases, {})
+            dummy_class = classmaker()(dprefix + name, bases, {})
             mro = dummy_class.__mro__
 
             log.debug("Class dictionary: %r.", class_dict)

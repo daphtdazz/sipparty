@@ -43,7 +43,7 @@ then
 fi
 
 colorize () {
-    while read -r line
+    while IFS= read -r line
     do
         if [[ $line =~ ERROR ]]
         then

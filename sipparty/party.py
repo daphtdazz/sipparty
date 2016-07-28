@@ -59,8 +59,7 @@ class Party(
                     underlying if underlying is not None else
                     self.contact_uri.address)
             },
-            "transport": {dck.gen: SIPTransport},
-            'transaction_manager': {dck.gen: TransactionManager}
+            "transport": {dck.gen: SIPTransport}
         }),
         AORHandler, ValueBinder):
     """A party in a sip call, aka an endpoint, caller or callee etc."""
@@ -202,8 +201,7 @@ class Party(
 
         invD = InviteDialog(
             from_uri=self.uri, to_uri=to_uri, contact_uri=self.contact_uri,
-            transport=self.transport, localSession=self.newSession(),
-            transaction_manager=self.transaction_manager)
+            transport=self.transport, localSession=self.newSession())
         ids = self._pt_inviteDialogs
         if to_uri not in ids:
             ids[to_uri] = [invD]

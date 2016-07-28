@@ -22,7 +22,8 @@ from contextlib import contextmanager
 from copy import deepcopy
 import logging
 from six import (iteritems, iterkeys)
-from .util import (CheckingProperty, Enum, DerivedProperty)
+from .util import (
+    append_to_exception_message, CheckingProperty, Enum, DerivedProperty)
 from .vb import ValueBinder
 
 log = logging.getLogger(__name__)
@@ -241,10 +242,6 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
             return
 
         def _dck_genTopLevelValueFromTLDict(self, tlad, tlsvals):
-            """:param tlad:
-                The Top-Level-Attribute Dictionary, which describes
-                the attribute.
-            """
             gen = tlad[dck.gen]
             if isinstance(gen, str):
                 genAttr = getattr(self.__class__, gen)
@@ -255,7 +252,12 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
 
                 return genAttr
 
-            return gen(**tlsvals)
+            try:
+                return gen(**tlsvals)
+            except Exception as exc:
+                append_to_exception_message(
+                    exc, ' - processing constructor %s' % gen)
+                raise
 
         @contextmanager
         def _dc_enter_repr(self):
