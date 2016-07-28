@@ -16,7 +16,7 @@ limitations under the License.
 """
 import logging
 
-from ...util import WeakProperty
+from ...util import WeakMethod, WeakProperty
 from ..prot import TransactionID
 from .base import Transaction
 from .client import InviteClientTransaction, NonInviteClientTransaction
@@ -125,6 +125,9 @@ class TransactionManager(object):
         assert ttype in Transaction.types
         tk = self.transaction_key_for_message(ttype, message)
         self.transactions[tk] = trans
+        trans.add_action_on_state_entry(
+            trans.States.terminated,
+            WeakMethod(self, 'transaction_terminated', static_args=(tk,)))
 
     def lookup_transaction(self, ttype, message, default=lookup_sentinel,
                            raise_on_missing=True):
@@ -142,6 +145,10 @@ class TransactionManager(object):
                 'No %s transaction for key %s, message type %s' % (
                     ttype, tk, message.type))
         return trans
+
+    def transaction_terminated(self, key):
+        log.info('Dropping terminated transaction %s', key)
+        del self.transactions[key]
 
     def _new_transaction(self, ttype, msg, **kwargs):
         assert ttype in Transaction.types

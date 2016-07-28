@@ -103,11 +103,6 @@ class Transaction(
     Inputs = Enum(('request', 'transport_error'))
     States = Enum(('proceeding', 'completed', 'terminated'))
 
-    # Default action on entering terminated state is to inform the TU.
-    FSMStateEntryActions = (
-        (States.terminated, [('inform_tu', 'transaction_terminated')]),
-    )
-
     # Default timer durations (seconds)
     T1 = 0.5
     T2 = 4

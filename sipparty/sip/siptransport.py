@@ -285,11 +285,7 @@ class SIPTransport(Transport):
 
         if trns.state != trns.States.Initial:
             log.debug('Message for current transaction.')
-            if msg.isrequest():
-                trns.response(msg)
-                return
-
-            trns.request(msg)
+            trns.consume_message(msg)
             return
 
         if not hasattr(msg.ToHeader.parameters, "tag"):

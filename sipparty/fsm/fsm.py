@@ -33,7 +33,7 @@ from . import (fsmtimer, retrythread)
 log = logging.getLogger(__name__)
 
 __all__ = [
-    'AsyncFSM', 'FSMError', 'UnexpectedInput', 'FSMTimeout', 'FSM', 'FSMType',
+    'AsyncFSM', 'FSMError', 'UnexpectedInput', 'FSMTimeout', 'FSM',
     'FSMClassInitializer', 'InitialStateKey', 'LockedFSM', 'TransitionKeys',
     'tsk']
 
@@ -57,6 +57,8 @@ TransitionKeys = Enum((
     'StopTimers',
     'StartThreads'
 ))
+# Abbreviation for TransitionKeys
+tsk = TransitionKeys
 
 
 class FSMClassInitializer(type):
@@ -90,7 +92,8 @@ class FSM:
 
     Class:
     `AddClassTransitions` - for subclassing; if a subclass declares this then
-    it is called when the class is created (using the FSMType metaclass) and
+    it is called when the class is created (using the
+    :py:class:`FSMClassInitializer` metaclass) and
     is used to set up the standard transitions and timers for a class.
 
     Class or instance:
@@ -309,9 +312,12 @@ class FSM:
                 'Cannot add action for entry into non-existent state %r' % (
                     state,))
 
-        act_list = self._fsm_state_entry_actions.get(state, [])
+        act_list = self._fsm_state_entry_actions.get(state)
+        if act_list is None:
+            act_list = []
+            self._fsm_state_entry_actions[state] = act_list
+
         act_list.append(self._fsm_makeAction(action))
-        self._fsm_state_entry_actions[state] = act_list
 
     #
     # =================== INSTANCE INTERFACE =================================
@@ -667,14 +673,13 @@ class FSM:
         self.__input_queue.put(hit_tuple)
 
     def __process_queued_hits(self):
-        while not self.__input_queue.empty():
-            if self.__processing_hit:
-                raise RuntimeError(
-                    'Illegal re-hit of %r instance during a hit. Most likely '
-                    '\'hit\' has been called from an action. This is illegal, '
-                    'use \'queue_hit\' to schedule a new hit straight '
-                    'from an action.' % self.__class__.__name__)
+        if self.__processing_hit:
+            log.debug(
+                '%s %s already processing hits', type(self).__name__,
+                self.name)
+            return
 
+        while not self.__input_queue.empty():
             input, args, kwargs = self.__input_queue.get()
             log.debug("Process input %r.", input)
             try:
@@ -793,7 +798,7 @@ class LockedFSM(FSM):
 
         log.detail('LockedFSM after init: %r', self)
 
-    hit = OnlyWhenLocked(FSM.hit)
+    hit = OnlyWhenLocked(FSM.hit, allow_recursion=True)
 
 
 class AsyncFSM(LockedFSM):
@@ -881,6 +886,3 @@ class AsyncFSM(LockedFSM):
         log.debug("__backgroundTimerPop")
         self.checkTimers()
         self._fsm_garbageCollect()
-
-# Abbreviation for TransitionKeys
-tsk = TransitionKeys  # noqa

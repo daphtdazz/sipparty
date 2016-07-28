@@ -18,7 +18,7 @@ limitations under the License.
 """
 from copy import deepcopy
 import logging
-import numbers
+from numbers import Integral
 
 from .. import vb
 from ..classmaker import classbuilder
@@ -128,56 +128,6 @@ class Dialog:
     def terminate(self, *args, **kwargs):
         self.hit(Inputs.terminate, *args, **kwargs)
 
-    def consume_message(self, msg):
-
-        log.debug("Dialog receiving message")
-        log.detail("%r", msg)
-        mtype = msg.type
-
-        def RaiseBadInput(msg=b""):
-            raise(UnexpectedInput(
-                "%r instance fsm has no input for message type %r." % (
-                    self.__class__.__name__, mtype)))
-
-        if self.callIDHeader is None:
-            self.callIDHeader = msg.Call_IDHeader
-
-        if self.remoteTag is None:
-            if msg.isresponse():
-                log.debug("Message is a response")
-                rtag = msg.ToHeader.parameters.tag
-            else:
-                log.debug("Message is a request")
-                rtag = msg.FromHeader.parameters.tag
-            log.debug("Learning remote tag: %s", rtag.value)
-            self.remoteTag = rtag
-            tp = self.transport
-            if tp is not None:
-                tp.updateDialogGrouping(self)
-
-        if self.contact_uri is None:
-            cURI = msg.ContactHeader.uri
-            log.debug("Learning contact_uri: %r", cURI)
-            self.contact_uri = cURI
-
-        if mtype in Request.types:
-            input = "receiveRequest" + getattr(Request.types, mtype)
-            return self.hit(input, msg)
-
-        rcode = mtype
-        if not isinstance(rcode, numbers.Integral):
-            RaiseBadInput()
-
-        while mtype >= 1:
-            attr = "receiveResponse%d" % mtype
-            if attr in self.Inputs:
-                log.debug("Response input found: %d", mtype)
-                return self.hit(attr, msg)
-
-            mtype /= 10
-
-        RaiseBadInput()
-
     def send_ack(self, msg):
         ack = Message.ACK(autofillheaders=False)
         assert len(self._dlg_requests)
@@ -266,8 +216,71 @@ class Dialog:
             self.localSession.listen()
 
     #
-    # =================== DELEGATE METHODS ====================================
+    # =================== TRANSACTION USER METHODS ============================
     #
+    def request(self, msg):
+        log.debug("Dialog receiving message")
+        log.detail("%r", msg)
+        mtype = msg.type
+
+        def RaiseBadInput(msg=b""):
+            raise(UnexpectedInput(
+                "%r instance fsm has no input for message type %r." % (
+                    self.__class__.__name__, mtype)))
+
+        if self.callIDHeader is None:
+            self.callIDHeader = msg.Call_IDHeader
+
+        if self.remoteTag is None:
+            rtag = msg.FromHeader.parameters.tag
+            log.debug("Learning remote tag: %s", rtag)
+            self.remoteTag = rtag
+            tp = self.transport
+            if tp is not None:
+                tp.updateDialogGrouping(self)
+
+        return self.hit(
+            'receiveRequest' + getattr(Request.types, mtype), msg)
+
+    def response(self, msg):
+
+        log.debug("Dialog receiving response")
+        log.detail("%r", msg)
+        mtype = msg.type
+
+        if self.remoteTag is None:
+            rtag = msg.ToHeader.parameters.tag
+            log.debug("Learning remote tag: %s", rtag.value)
+            self.remoteTag = rtag
+            tp = self.transport
+            if tp is not None:
+                tp.updateDialogGrouping(self)
+
+        if not isinstance(mtype, Integral):
+            self.raise_unexpected_input('response %r' % (mtype,))
+
+        rinp = self._fix_response_input(mtype)
+
+        self.hit(rinp, msg)
+
+    def timeout(self, error):
+        rinp = self._fix_response_input(408)
+        self.hit(rinp, error)
+
+    def transport_error(self, error):
+        rinp = self._fix_response_input(503)
+        self.hit(rinp, error)
+
+    def _fix_response_input(self, mtype):
+        while mtype >= 1:
+            attr = "receiveResponse%d" % mtype
+            if attr in self.Inputs:
+                log.debug("Response input found: %d", mtype)
+                return attr
+
+            mtype /= 10
+        else:
+            self.raise_unexpected_input('response code %d' % mtype)
 
     #
     # =================== MAGIC METHODS =======================================
@@ -311,6 +324,8 @@ class Dialog:
     def __send_message(self, msg):
         # At this point we have transformed if necessary.
         # Get a transaction for this message.
+        return self.transport.send_message(msg)
+
         tm = self.transaction_manager
         if tm is not None:
             try:
