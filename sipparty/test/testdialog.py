@@ -20,9 +20,9 @@ limitations under the License.
 import logging
 from weakref import ref
 from .setup import SIPPartyTestCase
+from ..fsm import UnexpectedInput
 from ..sip.components import (AOR, Host, URI)
-from ..sip.dialogs import SimpleCallDialog
-from ..sip.transaction import TransactionManager
+from ..sip.dialogs import SimpleClientDialog, SimpleServerDialog
 from ..sip.siptransport import AORHandler, SIPTransport
 from ..util import WaitFor
 
@@ -45,27 +45,26 @@ class TestDialog(AORHandler, SIPPartyTestCase):
 
     def new_dialog_from_request(self, req):
         log.info('Create new dialog for %s request', req.type)
-        return SimpleCallDialog(
+        return SimpleServerDialog(
             from_uri=req.ToHeader.uri, to_uri=req.FromHeader.uri,
             transport=self.wtp(),
-            transaction_manager=self.wtm(), delegate=self)
+            delegate=self)
 
     #
     # =================== TESTS ===============================================
     #
     def testStandardDialog(self):
         tp = SIPTransport()
-        tm = TransactionManager()
-        dl = SimpleCallDialog(tp, tm)
+        dl = SimpleServerDialog(tp)
         self.assertRaises(AttributeError, lambda: dl.asdf)
 
         self.expect_log('ValueError exception')
-        self.assertRaises(ValueError, dl.hit, 'initiate')
+        self.assertRaises(UnexpectedInput, dl.hit, 'initiate')
         self.assertEqual(dl.state, dl.States.Initial)
 
         dl.from_uri = 'sip:user1@host'
         self.expect_log('ValueError exception')
-        self.assertRaises(ValueError, dl.hit, 'initiate')
+        self.assertRaises(UnexpectedInput, dl.hit, 'initiate')
         log.info('%r', dl.from_uri)
         self.assertEqual(
             dl.from_uri,
@@ -78,12 +77,12 @@ class TestDialog(AORHandler, SIPPartyTestCase):
         log.info('sub_test_transaction_creation %d' % depth)
         tp = SIPTransport()
         self.wtp = ref(tp)
-        dl = SimpleCallDialog(tp)
+        dl = SimpleClientDialog(tp)
         dl.from_uri = 'sip:user1@host'
         dl.to_uri = 'sip:user2@host'
         tp.addDialogHandlerForAOR(dl.to_uri.aor, self)
 
-        wrfs = self.wtp, self.wtm, ref(dl)
+        wrfs = self.wtp, ref(dl)
 
         def inner(tp, dl):
             ld = tp.listen_for_me()
@@ -106,7 +105,6 @@ class TestDialog(AORHandler, SIPPartyTestCase):
         inner(tp, dl)
 
         del tp
-        del tm
         del dl
         WaitFor(lambda: all(wrf() is None for wrf in wrfs))
 

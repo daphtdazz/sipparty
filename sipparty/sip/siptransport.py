@@ -266,9 +266,6 @@ class SIPTransport(Transport):
 
     def consumeMessage(self, msg):
         self._sptr_messages.append(msg)
-        if msg.type == 'ACK':
-            log.warning('FIX ME: Dumping ACK')
-            return
 
         if not hasattr(msg.FromHeader.parameters, "tag"):
             log.debug("FromHeader: %r", msg.FromHeader)

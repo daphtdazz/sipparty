@@ -19,9 +19,12 @@ import logging
 from ...util import WeakMethod, WeakProperty
 from ..prot import TransactionID
 from .base import Transaction
-from .client import InviteClientTransaction, NonInviteClientTransaction
-from .oneshot import OneShotTransaction
-from .server import InviteServerTransaction, NonInviteServerTransaction
+from .client import (
+    InviteClientTransaction, NonInviteClientTransaction,
+    OneShotClientTransaction)
+from .server import (
+    InviteServerTransaction, NonInviteServerTransaction,
+    OneShotServerTransaction)
 
 log = logging.getLogger(__name__)
 
@@ -94,27 +97,7 @@ class TransactionManager(object):
             log.debug('Return existing server transaction for outbound msg')
             return trans
 
-        log.debug('No extant server transaction.')
-        # It's only OK not to have a server transaction for a response
-        # already when the response is a 2xx and the request type was an
-        # INVITE, because RFC3261 says it is the TU's job to ensure 2xxs
-        # are transmitted all the way through, and only then tidy up,
-        # and the only way that can
-        # happen is if the transaction is not responsible for its
-        # transmission. This means the initial server INVITE transaction
-        # is completed when the TU passes in the 2xx, and so cannot be
-        # reused. Therefore we need a one-off transaction
-        #
-        # In this case we return the special one-off transaction object,
-        # which is not (should not be!) retained anywhere.
-        if (200 <= msg.type < 300 and
-                msg.cseqheader.reqtype == msg.types.INVITE):
-            log.debug('INVITE 2xx re-transmission, create transaction')
-            return self._new_transaction(
-                'oneshot', msg, self.transport, **kwargs)
-
-        raise KeyError(
-            'No outbound transaction for %s message' % (msg.type,))
+        return self._new_transaction('server', msg, self.transport, **kwargs)
 
     def __del__(self):
         log.debug('__del__ TransactionManager')
@@ -163,14 +146,39 @@ class TransactionManager(object):
         assert msg.isrequest()
         if msg.type == msg.types.INVITE:
             return InviteClientTransaction(**kwargs)
+        if msg.type == msg.types.ACK:
+            return OneShotClientTransaction(**kwargs)
         return NonInviteClientTransaction(**kwargs)
 
     def _new_transaction_server(self, msg, **kwargs):
-        assert msg.isrequest()
-        if msg.type == msg.types.INVITE:
-            return InviteServerTransaction(**kwargs)
-        return NonInviteServerTransaction(**kwargs)
 
-    def _new_transaction_oneshot(self, msg, **kwargs):
-        assert msg.type == msg.types.ACK
-        return OneShotTransaction(**kwargs)
+        if msg.type == msg.types.INVITE:
+            log.debug('new INVITE server transaction')
+            return InviteServerTransaction(**kwargs)
+        if msg.type == msg.types.ACK:
+            log.debug('new oneshot server transaction for ACK')
+            return OneShotServerTransaction(**kwargs)
+
+        if msg.isrequest():
+            log.debug('new non-INVITE server transaction')
+            return NonInviteServerTransaction(**kwargs)
+
+        # It's only OK not to have a server transaction for a response
+        # already when the response is a 2xx and the request type was an
+        # INVITE, because RFC3261 says it is the TU's job to ensure 2xxs
+        # are transmitted all the way through, and only then tidy up,
+        # and the only way that can
+        # happen is if the transaction is not responsible for its
+        # transmission. This means the initial server INVITE transaction
+        # is completed when the TU passes in the 2xx, and so cannot be
+        # reused.
+        #
+        # In this case we return the special one-off transaction object,
+        # which is not (should not be!) retained anywhere.
+        if (200 <= msg.type < 300 and
+                msg.cseqheader.reqtype == msg.types.INVITE):
+            log.debug('INVITE 2xx re-transmission, make oneshot server trans')
+            return OneShotServerTransaction(**kwargs)
+
+        raise KeyError(
+            'No server transaction could be found for %s message' % msg.type)

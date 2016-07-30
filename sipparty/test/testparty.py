@@ -23,7 +23,7 @@ from weakref import ref
 from ..media.sessions import SingleRTPSession
 from ..party import (Party)
 from ..parties import (NoMediaSimpleCallsParty)
-from ..sip.dialogs import SimpleCallDialog
+from ..sip.dialogs import SimpleClientDialog, SimpleServerDialog
 from ..sip.prot import Incomplete
 from ..sip.siptransport import SIPTransport
 from ..transport import (IsValidPortNum, NameLoopbackAddress)
@@ -81,7 +81,8 @@ class TestParty(SIPPartyTestCase):
 
         BasicParty = type(
             'BasicParty', (Party,), {
-                'InviteDialog': SimpleCallDialog,
+                'ClientDialog': SimpleClientDialog,
+                'ServerDialog': SimpleServerDialog,
                 'MediaSession': type(
                     'LoopbackSingleRTPSession', (SingleRTPSession,), {
                         'DefaultName': NameLoopbackAddress
@@ -127,7 +128,7 @@ class TestParty(SIPPartyTestCase):
                 self.assertIsNone(wrf())
             return
 
-        self.assertEqual(len(p1.inCallDialogs), 1)
+        WaitFor(lambda: len(wp1().inCallDialogs) == 1)
         self.assertEqual(len(p2.inCallDialogs), 1)
 
         log.info('p1 terminates')
@@ -152,7 +153,7 @@ class TestParty(SIPPartyTestCase):
 
         WaitFor(lambda: invD3to2.state == invD3to2.States.InDialog, 1)
 
-        self.assertEqual(len(p3.inCallDialogs), 1)
+        WaitFor(lambda: len(p3.inCallDialogs) == 1)
         self.assertEqual(len(p2.inCallDialogs), 1)
         self.assertEqual(len(p1.inCallDialogs), 0)
 

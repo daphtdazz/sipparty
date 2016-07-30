@@ -23,7 +23,7 @@ from ...deepclass import (dck, DeepClass)
 from ...transport import IsValidPortNum
 from ...util import Enum, WeakProperty
 from ...fsm import AsyncFSM, UnexpectedInput
-
+from ..standardtimers import StandardTimers
 from .errors import NoTransport
 
 log = logging.getLogger(__name__)
@@ -94,19 +94,15 @@ class Transaction(
                 dck.check: IsValidPortNum
             }
         }),
+        StandardTimers,
         AsyncFSM):
     """Base class for all SIP transactions."""
 
-    types = Enum(('client', 'server', 'oneshot'))
+    types = Enum(('client', 'server'))
 
     # States common to all transactions.
     Inputs = Enum(('request', 'transport_error'))
     States = Enum(('proceeding', 'completed', 'terminated'))
-
-    # Default timer durations (seconds)
-    T1 = 0.5
-    T2 = 4
-    T4 = 5
 
     @property
     def type(self):
@@ -186,40 +182,6 @@ class Transaction(
             message, self.remote_name, self.remote_port)
 
     #
-    # ---------------------------- STANDARD TIMERS ----------------------------
-    #
-    StandardTimers = Enum((
-        'standard_timer_retransmit_gen', 'standard_timer_giveup_gen',
-        'standard_timer_stop_squelching_gen'))
-
-    def standard_timer_retransmit_gen(self):
-        """Yield intervals for standard retransmit timer as per RFC3261.
-
-        https://tools.ietf.org/html/rfc3261#section-17.2.1
-
-        After parsing that, the algorithm turns out to be quite simple.
-        """
-        next_interval = self.T1
-        while True:
-            yield next_interval
-            next_interval *= 2
-            next_interval = min(next_interval, self.T2)
-
-    def standard_timer_giveup_gen(self):
-        """Yield the standard giveup interval as per RFC3261.
-
-        https://tools.ietf.org/html/rfc3261#section-17.2.1
-        """
-        yield 64 * self.T1
-
-    def standard_timer_stop_squelching_gen(self):
-        """Yield the giveup interval for timer I as per RFC3261.
-
-        https://tools.ietf.org/html/rfc3261#section-17.2.1
-        """
-        yield self.T4
-
-    #
     # ---------------------------- MAGIC METHODS ------------------------------
     #
     def __del__(self):
@@ -251,7 +213,7 @@ class Transaction(
         next_rtype = int(rtype)
         while next_rtype > 0:
             inp = prepend + str(next_rtype)
-            if inp in self.Inputs:
+            if inp in self._fsm_transitions[self._fsm_state]:
                 return inp
             next_rtype /= 10
 

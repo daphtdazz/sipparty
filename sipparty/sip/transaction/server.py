@@ -18,6 +18,7 @@ import logging
 
 from ...util import Enum
 from ...fsm import InitialStateKey as InitialState, tsk
+from ..standardtimers import StandardTimers
 from .base import Transaction
 from .errors import TransactionTimeout
 
@@ -28,26 +29,25 @@ class ServerTransaction(Transaction):
     """Base class for server transactions"""
 
     type = Transaction.types.server
-    Inputs = Transaction.Inputs | Enum((
-        'ack', 'respond_1', 'respond_2', 'respond_xxx',))
 
 
 class InviteServerTransaction(ServerTransaction):
     """Server Transaction for an INVITE request."""
 
     Inputs = ServerTransaction.Inputs | Enum((
-        'h_timer_giveup', 'i_timer_stop_squelching'))
+        'ack', 'h_timer_giveup', 'respond_1', 'respond_xxx', 'respond_2',
+        'i_timer_stop_squelching'))
     States = ServerTransaction.States | Enum(('confirmed',))
     FSMTimers = {
         'g_timer_retransmit': (
             'retransmit',
-            Transaction.StandardTimers.standard_timer_retransmit_gen),
+            StandardTimers.names.standard_timer_retransmit_gen),
         'h_timer_giveup': (
             [('hit', Inputs.h_timer_giveup)],
-            Transaction.StandardTimers.standard_timer_giveup_gen),
+            StandardTimers.names.standard_timer_giveup_gen),
         'i_timer_stop_ack_squelching': (
             [('hit', Inputs.i_timer_stop_squelching)],
-            Transaction.StandardTimers.standard_timer_stop_squelching_gen),
+            StandardTimers.names.standard_timer_stop_squelching_gen),
     }
     FSMDefinitions = {
         InitialState: {
@@ -114,12 +114,13 @@ class NonInviteServerTransaction(ServerTransaction):
     """Server Transaction for a non-INVITE request."""
 
     Inputs = ServerTransaction.Inputs | Enum((
+        'request', 'respond_1', 'respond_2', 'respond_xxx',
         'j_timer_stop_retransmitting_responses',))
     States = ServerTransaction.States | Enum(('trying',))
     FSMTimers = {
         'j_timer_stop_retransmitting_responses': (
             [('hit', Inputs.j_timer_stop_retransmitting_responses)],
-            Transaction.StandardTimers.standard_timer_giveup_gen),
+            StandardTimers.names.standard_timer_giveup_gen),
     }
     FSMDefinitions = {
         InitialState: {
@@ -171,4 +172,24 @@ class NonInviteServerTransaction(ServerTransaction):
             },
         },
         States.terminated: {},
+    }
+
+
+class OneShotServerTransaction(ServerTransaction):
+    """Transaction that constitutes a single unreliable request send."""
+
+    Inputs = Transaction.Inputs | Enum(('ack', 'response_2'))
+
+    FSMDefinitions = {
+        InitialState: {
+            Inputs.ack: {
+                tsk.NewState: Transaction.States.terminated,
+                tsk.Action: [('inform_tu', 'request')],
+            },
+            Inputs.response_2: {
+                tsk.NewState: Transaction.States.terminated,
+                tsk.Action: [('inform_tu', 'response')],
+            },
+        },
+        Transaction.States.terminated: {},
     }

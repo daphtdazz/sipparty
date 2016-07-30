@@ -27,15 +27,16 @@ from ..deepclass import DeepClass, dck
 from ..parse import ParsedPropertyOfClass
 from ..sdp import (sdpsyntax, SDPIncomplete)
 from ..util import (abytes, astr, Enum, WeakProperty)
-from .transaction import TransactionUser
-from .transform import (Transform, TransformKeys)
+from . import prot
+from .body import Body
 from .components import URI
 from .header import Call_IdHeader
-from .request import Request
 from .message import Message, MessageResponse
 from .param import TagParam
-from .body import Body
-from . import prot
+from .request import Request
+from .standardtimers import StandardTimers
+from .transaction import TransactionUser
+from .transform import (Transform, TransformKeys)
 
 log = logging.getLogger(__name__)
 
@@ -74,7 +75,7 @@ AckTransforms = {
         "localSession": {},
         "remoteSession": {},
         'callIDHeader': {}}),
-    TransactionUser, AsyncFSM, vb.ValueBinder))
+    TransactionUser, StandardTimers, AsyncFSM, vb.ValueBinder))
 class Dialog:
     """`Dialog` class has a slightly wider scope than a strict SIP dialog, to
     include one-off request response pairs (e.g. OPTIONS) as well as long-lived
@@ -120,6 +121,7 @@ class Dialog:
         kwargs['transport'] = transport
         super(Dialog, self).__init__(**kwargs)
         self._dlg_requests = []
+        self.__last_response = None
 
     def initiate(self, *args, **kwargs):
         log.debug("Initiating dialog...")
@@ -127,6 +129,12 @@ class Dialog:
 
     def terminate(self, *args, **kwargs):
         self.hit(Inputs.terminate, *args, **kwargs)
+
+    def resend_response(self):
+        assert self.__last_response is not None
+        self.transport.send_message_with_transaction(
+            self.__last_response, self, remote_name=self.remote_name,
+            remote_port=self.remote_port)
 
     def send_ack(self, msg):
         ack = Message.ACK(autofillheaders=False)
@@ -196,6 +204,7 @@ class Dialog:
         vh = req.viaheader
         self.transport.send_message_with_transaction(
             resp, self, astr(vh.address), vh.port)
+        self.__last_response = resp
 
     def configureResponse(self, resp, req):
         log.debug('Transform %s to %s', req.type, resp.type)
@@ -206,12 +215,6 @@ class Dialog:
 
         resp.FromHeader.parameters.tag = self.remoteTag
         resp.ToHeader.parameters.tag = self.localTag
-
-    def hasTerminated(self):
-        """Dialog is over. Remove it from the transport."""
-        tp = self.transport
-        if tp is not None:
-            tp.removeDialog(self)
 
     def session_listen(self, *args, **kwargs):
         if self.localSession is not None:
@@ -297,20 +300,6 @@ class Dialog:
             sdpBody = None
         if sdpBody is not None:
             msg.addBody(Body(type=sdpsyntax.SIPBodyType, content=sdpBody))
-
-    def _dlg_resolveTarget(self, target):
-        if self.remote_name is None:
-            if target is None:
-                raise ValueError("No target set to send to.")
-
-        if target is None:
-            target = self.remote_name
-            log.debug("Use cached address %r", target)
-            return target
-
-        log.debug("Use supplied target %r", target)
-        self.remote_name = target
-        return target
 
     def _fix_response_input(self, mtype):
         while mtype >= 1:

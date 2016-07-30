@@ -18,6 +18,7 @@ import logging
 
 from ...util import Enum
 from ...fsm import InitialStateKey as InitialState, tsk
+from ..standardtimers import StandardTimers
 from .base import Transaction
 from .errors import TransactionTimeout
 
@@ -49,10 +50,10 @@ class InviteClientTransaction(ClientTransaction):
     FSMTimers = {
         'a_timer_retry': (
             'retransmit',
-            Transaction.StandardTimers.standard_timer_retransmit_gen),
+            StandardTimers.names.standard_timer_retransmit_gen),
         'b_timer_giveup': (
             [('hit', Inputs.b_timer_giveup)],
-            Transaction.StandardTimers.standard_timer_giveup_gen),
+            StandardTimers.names.standard_timer_giveup_gen),
         'd_timer_stop_response_squelching': (
             [('hit', 'd_timer_stop_response_squelching')],
             'd_timer_stop_response_squelching_gen'),
@@ -143,10 +144,10 @@ class NonInviteClientTransaction(ClientTransaction):
         'e_timer_retry': ('retransmit', 'e_timer_retransmit_gen'),
         'f_timer_giveup': (
             [('hit', Inputs.f_timer_giveup)],
-            Transaction.StandardTimers.standard_timer_giveup_gen),
+            StandardTimers.names.standard_timer_giveup_gen),
         'k_timer_stop_response_squelching': (
             [('hit', 'k_timer_stop_response_squelching')],
-            Transaction.StandardTimers.standard_timer_stop_squelching_gen),
+            StandardTimers.names.standard_timer_stop_squelching_gen),
     }
     FSMDefinitions = {
         InitialState: {
@@ -242,3 +243,17 @@ class NonInviteClientTransaction(ClientTransaction):
 
             next_interval *= 2
             next_interval = min(next_interval, self.T2)
+
+
+class OneShotClientTransaction(ClientTransaction):
+    """Transaction that constitutes a single unreliable request send."""
+
+    FSMDefinitions = {
+        InitialState: {
+            Transaction.Inputs.request: {
+                tsk.NewState: Transaction.States.terminated,
+                tsk.Action: 'transmit',
+            },
+        },
+        Transaction.States.terminated: {},
+    }

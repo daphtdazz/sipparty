@@ -10,6 +10,8 @@
 3. TCP support.
 4. Move "Programming guides" into a section of the documentation.
 9. Smarter ACK than simply "ACK all 200s" in dialog.py
+10. expiry timer for invites
+11. The mechanism for determining the correct response type to input is not thread-safe.
 11. Refactor singleton out of util.
 12. message.isrequest replace with property is_request
 13. Make util a package with sub-modules.

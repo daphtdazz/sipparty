@@ -67,7 +67,8 @@ class Party(
     #
     # =================== CLASS INTERFACE ====================================
     #
-    InviteDialog = None
+    ClientDialog = None
+    ServerDialog = None
     MediaSession = None
     DefaultMediaAddress = None
 
@@ -79,7 +80,7 @@ class Party(
     #
     @property
     def inCallDialogs(self):
-        """Return a list dialogs that are currently in call.
+        """Return a list of dialogs that are currently in call.
 
         This is only a snapshot, and nothing should be assumed about how long
         the dialogs will stay in call for!
@@ -154,7 +155,7 @@ class Party(
         else:
             remote_name, remote_port = self._pt_resolveProxyAddress(target)
 
-        invD = self.__new_invite_dialog(to_uri)
+        invD = self.__new_dialog(self.ClientDialog, to_uri)
 
         log.debug("Initialize dialog to %r", ((remote_name, remote_port,)))
         invD.initiate(remote_name=remote_name, remote_port=remote_port)
@@ -179,7 +180,7 @@ class Party(
             log.debug('New INVITE dialog creating message being handled')
             # Note that the tags and call IDs are learnt by the consume message
             # method of the dialog, so we don't have to configure them here.
-            return self.__new_invite_dialog(message.FromHeader.uri)
+            return self.__new_dialog(self.ServerDialog, message.FromHeader.uri)
 
         assert 0, (
             '%s instance only supports new invite dialogs' % (
@@ -188,18 +189,18 @@ class Party(
     #
     # =================== MAGIC METHODS ======================================
     #
+    def __str__(self):
+        return '%s %s' % (type(self).__name__, self.display_name_uri)
 
     #
     # =================== INTERNAL METHODS ===================================
     #
-    def __new_invite_dialog(self, to_uri):
-        InviteDialog = self.InviteDialog
-        if InviteDialog is None:
-            raise AttributeError(
-                "Cannot build an INVITE dialog since we aren't configured "
-                "with a Dialog Type to use!")
+    def __new_dialog(self, dlg_type, to_uri):
+        if dlg_type is None:
+            raise TypeError(
+                "No dialog type specified to create for %s.", self)
 
-        invD = InviteDialog(
+        invD = dlg_type(
             from_uri=self.uri, to_uri=to_uri, contact_uri=self.contact_uri,
             transport=self.transport, localSession=self.newSession())
         ids = self._pt_inviteDialogs
@@ -258,20 +259,3 @@ class Party(
             raise ValueError("Target URI is not complete: %r" % (turi,))
 
         return rtup
-
-    def _pt_resolveProxyHostFromTarget(self, target):
-        try:
-            if hasattr(target, "attributeAtPath"):
-                for apath in ("contact_uri.address", ""):
-                    try:
-                        tcURI = target.attributeAtPath(apath)
-                        return tcURI
-                    except AttributeError:
-                        pass
-
-            assert 0
-        except TypeError:
-            raise TypeError(
-                "%r instance cannot be derived from %r instance." % (
-                    Host.__class__.__name__,
-                    target.__class__.__name__))

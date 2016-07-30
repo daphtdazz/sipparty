@@ -16,7 +16,7 @@ limitations under the License.
 """
 from six import itervalues
 from ..dialog import Dialog
-from .call import (SimpleCallDialog,)
+from .call import (SimpleClientDialog, SimpleServerDialog)
 
 AllDialogsTypes = [
     dlg for dlg in itervalues(dict(locals()))
