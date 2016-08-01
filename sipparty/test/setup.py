@@ -73,6 +73,13 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
         self._sptc_searchedModules = None
         logging.config.dictConfig(self.default_logging_config)
 
+    def assertIsNotNone(self, exp, *args, **kwargs):
+        if hasattr(super(SIPPartyTestCase, self), 'assertIsNotNone'):
+            return super(SIPPartyTestCase, self).assertIsNotNone(
+                exp, *args, **kwargs)
+
+        return self.assertTrue(exp is not None)
+
     def expect_log(self, log_info):
         log.warning('EXPECT LOG %s', log_info)
 

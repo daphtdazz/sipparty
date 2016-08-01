@@ -36,12 +36,6 @@ log.setLevel(logging.INFO)
 
 class TestParty(SIPPartyTestCase):
 
-    def assertIsNotNone(self, exp, *args, **kwargs):
-        if hasattr(super(TestParty, self), 'assertIsNotNone'):
-            return super(TestParty, self).assertIsNotNone(exp, *args, **kwargs)
-
-        return self.assertTrue(exp is not None)
-
     def assertIsNone(self, exp, *args, **kwargs):
         if hasattr(super(TestParty, self), 'assertIsNone'):
             return super(TestParty, self).assertIsNone(exp, *args, **kwargs)
