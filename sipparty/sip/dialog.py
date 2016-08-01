@@ -320,12 +320,16 @@ class Dialog:
             msg.addBody(Body(type=sdpsyntax.SIPBodyType, content=sdpBody))
 
     def _fix_response_input(self, mtype):
+        orig_mtype = mtype
         while mtype >= 1:
-            attr = "receiveResponse%d" % mtype
+            attr = "response_%d" % mtype
             if attr in self.Inputs:
                 log.debug("Response input found: %d", mtype)
                 return attr
 
             mtype /= 10
-        else:
-            self.raise_unexpected_input('response code %d' % mtype)
+
+        # Didn't find one, perhaps there is an xxx response.
+        if 'response_xxx' in self.Inputs:
+            return 'response_xxx'
+        self.raise_unexpected_input('response_%d' % (orig_mtype,))

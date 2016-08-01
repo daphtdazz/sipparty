@@ -55,7 +55,7 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
             'level': 'WARNING'
         },
         'loggers': {
-            'sipparty.fsm.fsm': {
+            'sipparty.fsm': {
                 'level': 'INFO',
             },
             'sipparty.transport': {

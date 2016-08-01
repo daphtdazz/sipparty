@@ -36,8 +36,8 @@ class SimpleClientDialog(Dialog):
 
     Inputs = Enum((
         "initiate",
-        "receiveResponse18",
-        "receiveResponse2", "receiveResponse4",
+        "response_18",
+        "response_2", 'response_xxx',
         "terminate", "receiveRequestBYE"))
     I = Inputs
 
@@ -55,20 +55,20 @@ class SimpleClientDialog(Dialog):
             },
         },
         S.SentInvite: {
-            I.receiveResponse18: {
+            I.response_18: {
                 tsk.NewState: S.SentInvite
             },
-            I.receiveResponse2: {
+            I.response_2: {
                 tsk.NewState: S.InDialog,
                 tsk.Action: 'send_ack'
             },
-            I.receiveResponse4: {
+            I.response_xxx: {
                 tsk.NewState: S.Terminated,
                 tsk.Action: 'errorResponse'
             }
         },
         S.InDialog: {
-            I.receiveResponse2: {
+            I.response_2: {
                 tsk.Action: 'send_ack',
             },
             I.terminate: {
@@ -81,10 +81,10 @@ class SimpleClientDialog(Dialog):
             }
         },
         S.TerminatingDialog: {
-            I.receiveResponse2: {
+            I.response_2: {
                 tsk.Action: 'send_ack',
             },
-            I.receiveResponse2: {
+            I.response_2: {
                 tsk.NewState: S.Terminated
             }
         },
@@ -124,7 +124,7 @@ class SimpleServerDialog(Dialog):
     Inputs = Enum((
         "initiate", 'accept', 'reject',
         "receiveRequestINVITE", 'receiveRequestACK', "receiveRequestBYE",
-        "receiveResponse2", "receiveResponse4",
+        "response_2",
         "terminate", ))
     I = Inputs
 
@@ -187,7 +187,7 @@ class SimpleServerDialog(Dialog):
             },
         },
         S.TerminatingDialog: {
-            I.receiveResponse2: {
+            I.response_2: {
                 tsk.NewState: S.Terminated
             }
         },

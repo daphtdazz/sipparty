@@ -114,11 +114,17 @@ class TestParty(SIPPartyTestCase):
         invD = p2.invite(p1)
         winvD = ref(invD)
         WaitFor(lambda: winvD().state == winvD().States.InDialog, 1)
+        WaitFor(lambda: len(wp1().inCallDialogs) > 0)
+        WaitFor(
+            lambda:
+            wp1().inCallDialogs[0].state ==
+            wp1().inCallDialogs[0].States.InDialog)
 
         if stop_point == 'after first invite':
             del p1, p2, invD
             for wrf in (wp1, wp2, winvD, wtp):
                 log.info('check wrf %s is free', wrf)
+                WaitFor(lambda: wrf() is None)
                 self.assertIsNone(wrf())
             return
 
@@ -133,6 +139,7 @@ class TestParty(SIPPartyTestCase):
             del p1, p2, invD
             for wrf in (wp1, wp2, winvD, wtp):
                 log.info('check wrf %s is free', wrf)
+                WaitFor(lambda: wrf() is None)
                 self.assertIsNone(wrf())
             return
 
