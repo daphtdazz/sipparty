@@ -132,7 +132,15 @@ class Dialog:
 
     def resend_response(self):
         assert self.__last_response is not None
-        self.transport.send_message_with_transaction(
+        tp = self.transport
+        if tp is None:
+            log.warning(
+                'Failed to resend %s response as transport has been '
+                'released.' % (
+                    self.__last_response.type,))
+            return
+
+        tp.send_message_with_transaction(
             self.__last_response, self, remote_name=self.remote_name,
             remote_port=self.remote_port)
 
@@ -147,7 +155,12 @@ class Dialog:
             AckTransforms, msg, mtype, ack, abytes(ack.type),
             request=self._dlg_requests[-1])
 
-        self.transport.send_message_with_transaction(
+        tp = self.transport
+        if tp is None:
+            log.warning('Failed to send ACK as transport has been released.')
+            return
+
+        tp.send_message_with_transaction(
             ack, self, remote_name=self.remote_name,
             remote_port=self.remote_port)
 
@@ -167,9 +180,11 @@ class Dialog:
             attrVal = getattr(self, reqdAttr)
             if attrVal is None:
                 raise ValueError(
-                    "Attribute %r of %r instance required to send a request "
-                    "is None." % (
-                        reqdAttr, self.__class__.__name__))
+                    "Attribute %r of %r instance required to send %s request "
+                    "is None." % (req_type, reqdAttr, self.__class__.__name__))
+            if reqdAttr == 'transport':
+                # Transport is weak so ensure we retain it here.
+                tp = attrVal
 
         req = getattr(Message, req_type)()
         req.startline.uri = deepcopy(self.to_uri)
@@ -190,11 +205,11 @@ class Dialog:
         if req.type == req.types.invite:
             self.addLocalSessionSDP(req)
 
-        self.transport.send_message_with_transaction(
+        tp.send_message_with_transaction(
             req, self, self.remote_name, self.remote_port)
         req.unbindAll()
         self._dlg_requests.append(req)
-        self.transport.updateDialogGrouping(self)
+        tp.updateDialogGrouping(self)
 
     def send_response(self, response, req):
         log.debug("Send response type %r.", response)
@@ -202,6 +217,13 @@ class Dialog:
         resp = MessageResponse(response)
         self.configureResponse(resp, req)
         vh = req.viaheader
+        tp = self.transport
+        if tp is None:
+            log.warning(
+                'Unable to send %s response to %s request as transport has '
+                'been released' % (response.type, req.type))
+            return
+
         self.transport.send_message_with_transaction(
             resp, self, astr(vh.address), vh.port)
         self.__last_response = resp
@@ -240,9 +262,7 @@ class Dialog:
             rtag = msg.FromHeader.parameters.tag
             log.debug("Learning remote tag: %s", rtag)
             self.remoteTag = rtag
-            tp = self.transport
-            if tp is not None:
-                tp.updateDialogGrouping(self)
+            self.transport.updateDialogGrouping(self)
 
         return self.hit(
             'receiveRequest' + getattr(Request.types, mtype), msg)
@@ -257,9 +277,7 @@ class Dialog:
             rtag = msg.ToHeader.parameters.tag
             log.debug("Learning remote tag: %s", rtag.value)
             self.remoteTag = rtag
-            tp = self.transport
-            if tp is not None:
-                tp.updateDialogGrouping(self)
+            self.transport.updateDialogGrouping(self)
 
         if not isinstance(mtype, Integral):
             self.raise_unexpected_input('response %r' % (mtype,))
