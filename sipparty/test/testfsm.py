@@ -239,7 +239,7 @@ class TestFSM(TestFSMBase):
             'bad_action': lambda self: self.hit('hit')})()
         fsm.addTransition('initial', 'hit', 'end', action='bad_action')
         fsm.state = 'initial'
-        self.assertRaises(RuntimeError, fsm.hit, 'hit')
+        self.assertRaises(UnexpectedInput, fsm.hit, 'hit')
 
     def testAsyncFSM(self):
         nf = AsyncFSM(name="TestAsyncFSM")
