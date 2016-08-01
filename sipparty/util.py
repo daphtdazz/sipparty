@@ -634,7 +634,6 @@ class CheckingProperty(object):
                 if not check(value):
                     raise ValueError()
             except (ValueError, TypeError) as exc:
-                log.error(exc.__class__.__name__)
                 exc_type = type(exc)
                 exc_class = (
                     ValueError if issubclass(exc_type, ValueError) else

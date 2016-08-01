@@ -2,13 +2,14 @@
 
 ## List. ##
 
-1. UDP transport retrying.
+1. Don't use 0.0.0.0 DGRAM listen sockets for sending from.
+2. UDP transport retrying.
    a.  Should have a dialog manager. -- initial done 8/5/2016
    b.  Party should have transaction manager, dialog manager, transport -- initial done 8/5/2016
    c.  Need to check flows are now correct and transaction lifetimes work. In particular UTs for dialog + transaction interactions (check transaction retries for all types, + 1XX provisional responses)
-2. REGISTER dialogues.
-3. TCP support.
-4. Move "Programming guides" into a section of the documentation.
+3. REGISTER dialogues.
+4. TCP support.
+5. Move "Programming guides" into a section of the documentation.
 9. Smarter ACK than simply "ACK all 200s" in dialog.py
 10. expiry timer for invites
 11. The mechanism for determining the correct response type to input is not thread-safe.

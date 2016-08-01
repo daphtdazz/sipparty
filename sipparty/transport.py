@@ -643,7 +643,7 @@ class SocketProxy(
                 Transport.FormatBytesForLogging(data))
 
         if not self.is_connected:
-            csp = self.connected_sockets.get(addr, None)
+            csp = self.connected_sockets.get(addr)
             if csp is None:
                 log.debug('First receipt of data on this listen socket')
                 # Therefore need to create a new 'connected' socket proxy that
@@ -672,15 +672,9 @@ class SocketProxy(
         dc(self, addr, data)
 
 
-class ListenSocketProxy(SocketProxy):
-
-    def _stream_socket_selected(self, socket):
-        socket.accept()
-        raise NotImplementedError()
-
-
 class Transport(Singleton):
     """Manages connection state and transport so You don't have to."""
+
     #
     # =================== CLASS INTERFACE =====================================
     #
@@ -787,12 +781,10 @@ class Transport(Singleton):
         for attr in (
                 'sock_type', 'sock_family', 'name', 'port', 'flowinfo',
                 'scopeid', 'port_filter'):
-
             create_kwargs[attr] = locals()[attr]
 
         for remote_attr, to_desc_attr in (
                 ('remote_name', 'name'), ('remote_port', 'port')):
-
             create_kwargs[remote_attr] = locals()[remote_attr]
 
         create_kwargs['sock_type'] = self.fix_sock_type(

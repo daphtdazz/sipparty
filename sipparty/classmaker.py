@@ -12,7 +12,7 @@ And many thanks to him because this solves a thorny problem, good work!
 
 from functools import partial
 import inspect
-from six import iteritems
+from six import iteritems, PY2
 import types
 # import __builtin__
 
@@ -31,7 +31,10 @@ def _skip_redundant(iterable, skipset=None):
 
 
 def _remove_redundant(metaclasses):
-    skipset = set([types.ClassType])
+    if PY2:
+        skipset = set([types.ClassType])
+    else:
+        skipset = set()
     for meta in metaclasses:  # determines the metaclasses to be skipped
         skipset.update(inspect.getmro(meta)[1:])
     return tuple(_skip_redundant(metaclasses, skipset))
