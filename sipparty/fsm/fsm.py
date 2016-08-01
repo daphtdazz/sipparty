@@ -435,7 +435,7 @@ class FSM:
         self.__process_queued_hits()
 
     def raise_unexpected_input(self, input):
-        raise(UnexpectedInput("%r instance fsm has no input %s." % (
+        raise(UnexpectedInput("%r instance fsm has no input %r." % (
             type(self).__name__, input)))
 
     def start_timer(self, timer):

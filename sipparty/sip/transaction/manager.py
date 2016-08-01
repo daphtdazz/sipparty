@@ -100,7 +100,7 @@ class TransactionManager(object):
         return self._new_transaction('server', msg, self.transport, **kwargs)
 
     def __del__(self):
-        log.debug('__del__ TransactionManager')
+        log.info('DELETE TransactionManager')
         getattr(
             super(TransactionManager, self), '__del__', lambda: None)()
 

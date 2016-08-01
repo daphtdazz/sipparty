@@ -130,7 +130,10 @@ class InviteClientTransaction(ClientTransaction):
     }
 
     def d_timer_stop_response_squelching_gen(self):
-        yield min(self.MIN_, )
+        assert 0, "TODO!!! Not yet implemented"
+        min_ = self.MIN_
+        del self
+        yield min(min_, )
 
 
 class NonInviteClientTransaction(ClientTransaction):

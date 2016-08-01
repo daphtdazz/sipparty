@@ -40,22 +40,32 @@ class StandardTimers:
 
         After parsing that, the algorithm turns out to be quite simple.
         """
-        next_interval = self.T1
+        t1 = self.T1
+        t2 = self.T2
+
+        # To avoid these generators delaying release of self, delete it.
+        del self
+        next_interval = t1
         while True:
             yield next_interval
             next_interval *= 2
-            next_interval = min(next_interval, self.T2)
+            next_interval = min(next_interval, t2)
 
     def standard_timer_giveup_gen(self):
         """Yield the standard giveup interval as per RFC3261.
 
         https://tools.ietf.org/html/rfc3261#section-17.2.1
         """
-        yield 64 * self.T1
+        t1 = self.T1
+        # To avoid these generators delaying release of self, delete it.
+        del self
+        yield 64 * t1
 
     def standard_timer_stop_squelching_gen(self):
         """Yield the giveup interval for timer I as per RFC3261.
 
         https://tools.ietf.org/html/rfc3261#section-17.2.1
         """
-        yield self.T4
+        t4 = self.T4
+        del self
+        yield t4

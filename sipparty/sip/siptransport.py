@@ -19,6 +19,7 @@ import logging
 from six import (add_metaclass, binary_type as bytes)
 from socket import SOCK_DGRAM
 from weakref import (WeakValueDictionary)
+from ..classmaker import classbuilder
 from ..parse import ParseError
 from ..transport import (
     IsValidTransportName, Transport, SockTypeFromName,
@@ -47,7 +48,8 @@ class AORHandler(object):
         raise NotImplemented
 
 
-class SIPTransport(Transport):
+@classbuilder(bases=(Transport, TransactionTransport))
+class SIPTransport:
     """SIPTransport."""
 
     #
@@ -357,5 +359,3 @@ class SIPTransport(Transport):
             'Unable to find a dialog for message with dialog ID %r, '
             'provisional dialogs: %r, established dialogs: %r' % (
                 did, provDs, estDs))
-
-TransactionTransport.register(SIPTransport)
