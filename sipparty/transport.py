@@ -49,9 +49,9 @@ log = logging.getLogger(__name__)
 prot_log = logging.getLogger(__name__ + ".messages")
 
 # RFC 2373 IPv6 address format definitions.
-digitrange = b"0-9"
+digitrange = b"0123456789"
 DIGIT = b"[%(digitrange)s]" % bglobals()
-hexrange = b"%(digitrange)sa-fA-F" % bglobals()
+hexrange = b"%(digitrange)sabcdefABCDEF" % bglobals()
 HEXDIG = b"[%(hexrange)s]" % bglobals()
 hex4 = b"%(HEXDIG)s{1,4}" % bglobals()
 IPv4address = b"%(DIGIT)s{1,3}(?:[.]%(DIGIT)s{1,3}){3}" % bglobals()
@@ -82,11 +82,13 @@ IPaddress = b"(?:(%(IPv4address)s)|(%(IPv6address)s))" % bglobals()
 port = b"%(DIGIT)s+" % bglobals()
 
 # Some pre-compiled regular expression versions.
+hex4_re = re.compile(b'(' + hex4 + b')')
 IPv4address_re = re.compile(IPv4address)
 IPv4address_only_re = re.compile(IPv4address + b'$')
 IPv6address_re = re.compile(IPv6address)
 IPv6address_only_re = re.compile(IPv6address + b'$')
 IPaddress_re = re.compile(IPaddress)
+IPaddress_only_re = re.compile(IPaddress + b'$')
 
 first_unregistered_port = 49152
 next_port = first_unregistered_port
@@ -148,7 +150,7 @@ def LoopbackAddressFromFamily(sock_family):
         return '127.0.0.1'
 
     if sock_family == AF_INET6:
-        return '::'
+        return '::1'
 
     return None
 
@@ -174,11 +176,11 @@ def UnregisteredPortGenerator(port_filter=None):
             break
 
 
-def IPAddressFamilyFromName(name):
+def IPAddressFamilyFromName(name, exact=False):
     """Returns the family of the IP address passed in in name, or None if it
     could not be determined.
-    :param name: The IP address or domain name to try and work out the family
-    of.
+    :param name:
+        The IP address or domain name to try and work out the family of.
     :returns: None, AF_INET or AF_INET6.
     """
     if name is None or name in SpecialNames:
@@ -186,7 +188,10 @@ def IPAddressFamilyFromName(name):
     name = abytes(name)
 
     try:
-        mo = IPaddress_re.match(name)
+        if not exact:
+            mo = IPaddress_re.match(name)
+        else:
+            mo = IPaddress_only_re.match(name)
     except (TypeError, ValueError):
         log.error('Bad name: %r', name)
         raise
@@ -468,6 +473,21 @@ class ListenDescription(
             local_address=laddr, socket=lsck, data_callback=data_callback,
             transport=transport)
 
+    def address_as_tuple(self):
+        """For an address such as 127.0.0.1 returns (127, 0, 0, 1).
+        """
+        bname = abytes(self.name)
+        fam = IPAddressFamilyFromName(self.name, exact=True)
+        if fam is None:
+            raise ValueError('%s name %s is not an IP address' % (
+                type(self).__name__, self.name))
+
+        if fam == AF_INET:
+            return self._ipv4_address_as_tuple(bname)
+
+        assert fam == AF_INET6
+        return self._ipv6_address_as_tuple(bname)
+
     def __str__(self):
         if self.sock_family == AF_INET6:
             return '[{self.name}]:{self.port} ({sock_type})'.format(
@@ -479,6 +499,39 @@ class ListenDescription(
 
         return "'{self.name}' (unknown type), port: {self.port}".format(
             self=self)
+
+    def _ipv4_address_as_tuple(self, bname):
+        return tuple(int(num) for num in bname.split(b'.'))
+
+    def _ipv6_address_as_tuple(self, bname):
+
+        nums_list = []
+        zero_squelch_ind = None
+        for gp in hex4_re.split(bname):
+            if not gp:
+                continue
+
+            if gp == b':':
+                continue
+            if gp == b'::':
+                assert zero_squelch_ind is None, (
+                    'unexpected second zero squelcher (::) in ipv6 address '
+                    'lookalike address %s' % (bname,))
+                zero_squelch_ind = len(nums_list)
+                continue
+
+            nums_list.append(int(gp, base=16))
+
+        if zero_squelch_ind is None:
+            assert len(nums_list) == 8, (
+                'bad length (not 8) for expanded ipv6 address: %s' % (
+                    nums_list,))
+            return tuple(nums_list)
+
+        return tuple(
+            nums_list[:zero_squelch_ind] +
+            [0] * (8 - len(nums_list)) +
+            nums_list[zero_squelch_ind:])
 
 
 class ConnectedAddressDescription(
@@ -731,11 +784,9 @@ class Transport(Singleton):
                 '\'callback\' parameter %r is not a Callable' % callback)
 
         if listen_description is None:
-
+            sock_family = self.fix_sock_family(sock_family)
             if sock_family is None:
                 sock_family = IPAddressFamilyFromName(name)
-
-            sock_family = self.fix_sock_family(sock_family)
 
             sock_type = self.fix_sock_type(sock_type)
 

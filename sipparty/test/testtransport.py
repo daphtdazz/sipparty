@@ -202,3 +202,19 @@ class TestTransport(SIPPartyTestCase):
         WaitFor(lambda: len(self.data_call_back_call_args) > 0)
         fromaddr, toaddr, data = self.data_call_back_call_args.pop()
         self.assertEqual(data, b'hello other')
+
+    def test_parsing_ip_addresses(self):
+
+        for bad_name in ('not-an-ip', 'fe80::1::1'):
+            laddr = ListenDescription(name=bad_name)
+            self.assertRaises(ValueError, laddr.address_as_tuple)
+
+        for inp, out in (
+                ('127.0.0.1', (127, 0, 0, 1)),
+                ('0.0.0.0', (0, 0, 0, 0)),
+                ('fe80:12:FFFF::', (0xfe80, 0x12, 0xffff, 0, 0, 0, 0, 0)),
+                ('fe80::1', (0xfe80, 0, 0, 0, 0, 0, 0, 1)),
+                ('::1', (0, 0, 0, 0, 0, 0, 0, 1)),
+                ('::', (0, 0, 0, 0, 0, 0, 0, 0)),):
+            laddr = ListenDescription(name=inp)
+            self.assertEqual(laddr.address_as_tuple(), out)
