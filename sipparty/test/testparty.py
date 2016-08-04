@@ -214,7 +214,7 @@ class TestParty(SIPPartyTestCase):
 
         inv2 = p2.invite(p1)
         WaitFor(lambda: inv2.state == inv2.States.InDialog)
-        self.assertEqual(p3.transport.connected_socket_count, 4)
+        self.assertEqual(p3.transport.connected_socket_count, 2)
 
         log.info(
             "Check that we get a good exception when attempting to invite "
@@ -228,8 +228,8 @@ class TestParty(SIPPartyTestCase):
         log.info("Check we've actually only opened one listen socket")
         self.assertEqual(p3.transport.listen_socket_count, 1)
 
-        log.info("But we have 6 connected sockets (two for each dialog).")
-        self.assertEqual(p3.transport.connected_socket_count, 6)
+        log.info("And still only two connected sockets due to reuse.")
+        self.assertEqual(p3.transport.connected_socket_count, 2)
 
 
 class TestPartyWeakReferences(SIPPartyTestCase):

@@ -17,6 +17,7 @@
 11. Refactor singleton out of util.
 12. message.isrequest replace with property is_request
 13. Make util a package with sub-modules.
+14. packagify transport splitting out the different classes
 10. Get rid of "delegateattributes", use "vb_dependencies". -- ?? semi done?
 12. Move sipheader out of util and probably into prot.
 15. Document and fixing attribute naming convention in vb.py.

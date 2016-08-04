@@ -16,13 +16,16 @@ limitations under the License.
 """
 import logging
 from six import (binary_type as bytes, itervalues)
+from socket import (AF_INET, AF_INET6)
 from weakref import proxy
 from .deepclass import (DeepClass, dck)
 from .parse import (ParsedPropertyOfClass)
-from .sip import DNameURI, URI, Host, Incomplete, Request, Message
-from .sip.transaction import TransactionManager
+from .sip import DNameURI, URI, Incomplete, Message
 from .sip.siptransport import AORHandler, SIPTransport
-from .transport import (IPaddress_re, IsSpecialName)
+from .transport import (
+    IPaddress_re, IPAddressFamilyFromName, is_null_address, IsSpecialName,
+    LoopbackAddressFromFamily,
+)
 from .util import abytes
 from .vb import ValueBinder
 
@@ -233,10 +236,23 @@ class Party(
         return not any(val is None for val in _tuple)
 
     def _pt_resolveProxyAddress(self, target):
+        name, port = self._pt_naive_resolveProxyAddress(target)
+        if is_null_address(name):
+            name = LoopbackAddressFromFamily(IPAddressFamilyFromName(name))
+
+        return name, port
+
+    def _pt_naive_resolveProxyAddress(self, target):
+
         if hasattr(target, "listenAddress"):
             pAddr = target.listenAddress
             if pAddr is not None:
                 log.debug("Target has listen address %r", pAddr)
+                if is_null_address(pAddr[0]):
+                    pAddr = (
+                        LoopbackAddressFromFamily(
+                            IPAddressFamilyFromName(pAddr[0])),
+                        pAddr[1])
                 return pAddr
 
         if hasattr(target, "contact_uri"):
