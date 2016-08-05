@@ -21,6 +21,7 @@ import logging
 from six import (iteritems, PY2)
 import sys
 import unittest
+from ..sip.siptransport import SIPTransport
 from ..util import TestCaseREMixin
 if PY2:
     from mock import (MagicMock, patch)  # noqa
@@ -91,6 +92,7 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
 
         # Speed things up a bit by doing a gc collect.
         gc.collect()
+        SIPTransport.wait_for_no_instances(timeout_s=5)
 
     def pushLogLevelToSubMod(self, module, sub_module_name, level):
 

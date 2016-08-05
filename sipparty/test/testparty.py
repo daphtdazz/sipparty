@@ -102,7 +102,7 @@ class TestParty(SIPPartyTestCase):
             return
 
         log.info('p1 listens')
-        p1.listen(name=contact_name, sock_type=sock_type)
+        p1.listen(name=contact_name, sock_type=sock_type, port=0)
         log.info('p2 invites p1')
 
         if stop_point == 'after first listen':

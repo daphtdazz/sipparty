@@ -918,6 +918,14 @@ class Singleton(object):
     UseStrongReferences = False
     _St_SharedInstances = None
 
+    @classmethod
+    def wait_for_no_instances(cls, **kwargs):
+        assert not cls.UseStrongReferences
+        si = cls._St_SharedInstances
+        if si is None:
+            return
+        WaitFor(lambda: all(wr is None for wr in si.values()), **kwargs)
+
     def __new__(cls, singleton=None, *args, **kwargs):
         log.detail("Singleton.__new__(%r, %r)", args, kwargs)
         if singleton is not None:
