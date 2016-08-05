@@ -624,6 +624,7 @@ class CheckingProperty(object):
             name = args.pop(0)
         else:
             name = kwargs.pop('name')
+        self.__name = name
         super(CheckingProperty, self).__init__(name, *args, **kwargs)
 
     def __set__(self, obj, value):
@@ -642,8 +643,9 @@ class CheckingProperty(object):
                 if exc_type is not None:
                     raise exc_class(
                         "%r instance %r is not an allowed value for attribute "
-                        "of class %r." % (
-                            type(value).__name__, value, type(obj).__name__))
+                        "%s of class %r." % (
+                            type(value).__name__, value,
+                            self.__name, type(obj).__name__))
 
         super(CheckingProperty, self).__set__(obj, value)
 

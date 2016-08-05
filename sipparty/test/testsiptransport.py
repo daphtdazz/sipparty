@@ -20,13 +20,14 @@ import logging
 from socket import (AF_INET, SOCK_DGRAM)
 from .. import (sip, transport)
 from ..sip.siptransport import AORHandler, SIPTransport
+from ..sip.transaction import TransactionUser
 from ..util import WaitFor
 from .setup import (MagicMock, patch, SIPPartyTestCase)
 
 log = logging.getLogger(__name__)
 
 
-class TestSIPTransport(AORHandler, SIPPartyTestCase):
+class TestSIPTransport(TransactionUser, AORHandler, SIPPartyTestCase):
 
     def setUp(self):
         self.def_hname_mock = MagicMock()
@@ -43,6 +44,18 @@ class TestSIPTransport(AORHandler, SIPPartyTestCase):
     def new_dialog_from_request(self, message):
         self.rcvd_messages.append(message)
         log.debug("NewDialogHandler consumed the message.")
+
+    def request(self, req):
+        assert 0
+
+    def response(self, resp):
+        assert 0
+
+    def timeout(self, err):
+        assert 0
+
+    def transport_error(self, err):
+        assert 0
 
     def test_general(self):
 
