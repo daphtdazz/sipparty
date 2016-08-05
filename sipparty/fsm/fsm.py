@@ -21,7 +21,7 @@ from collections import (Callable, Iterable, OrderedDict)
 from copy import copy
 from functools import partial
 import logging
-from six import (iteritems, add_metaclass)
+from six import iteritems
 from six.moves import queue
 import time
 import threading

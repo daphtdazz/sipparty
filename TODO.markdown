@@ -8,9 +8,9 @@
 9. Smarter ACK than simply "ACK all 200s" in dialog.py
 10. expiry timer for invites
 11. The mechanism for determining the correct response type to input is not thread-safe.
-12. the name for inputs into server dialogs to indicate "respond with XXX" is response_XXX when it should be "respond_XXX" which is more consistent with transaction.
 11. Refactor singleton out of util.
 12. message.isrequest replace with property is_request
+13. de-camel-cap methods etc that should be under_scores, e.g. addDialogHandlerForAOR
 13. Make util a package with sub-modules.
 14. packagify transport splitting out the different classes
 10. Get rid of "delegateattributes", use "vb_dependencies". -- ?? semi done?
@@ -58,6 +58,7 @@
 14. Cache Datagram sockets for faster allocation of a socket when sending data - sockets are reused by default 31/1/2016
 15. SIPTransport could allow force override to get a new listen socket - done 31/06/2016: can request not to reuse a socket in `Transport.listen_for_me`
 16. Don't use 0.0.0.0 DGRAM listen sockets for sending from - 5/8/2016
+17. the name for inputs into server dialogs to indicate "respond with XXX" is response_XXX when it should be "respond_XXX" which is more consistent with transaction. -- done ~30/7/2016
 17. UDP transport retrying.
    a.  Should have a dialog manager. -- initial done 8/5/2016
    b.  Party should have transaction manager, dialog manager, transport -- initial done 8/5/2016

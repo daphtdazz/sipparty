@@ -16,10 +16,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from collections import OrderedDict
 import logging
 import random
-from six import (iteritems, binary_type as bytes, add_metaclass)
+from six import binary_type as bytes, add_metaclass
 from ..parse import (Parser)
 from ..util import (
     abytes, astr, Enum, attributesubclassgen, BytesGenner, ClassType,

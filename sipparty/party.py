@@ -16,7 +16,6 @@ limitations under the License.
 """
 import logging
 from six import (binary_type as bytes, itervalues)
-from socket import (AF_INET, AF_INET6)
 from weakref import proxy
 from .deepclass import (DeepClass, dck)
 from .parse import (ParsedPropertyOfClass)

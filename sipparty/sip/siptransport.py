@@ -18,7 +18,6 @@ from abc import ABCMeta, abstractmethod
 import logging
 from six import (add_metaclass, binary_type as bytes)
 from socket import SOCK_DGRAM
-from weakref import (WeakValueDictionary)
 from ..classmaker import classbuilder
 from ..parse import ParseError
 from ..transport import (
@@ -103,7 +102,6 @@ class SIPTransport:
     # =================== AOR MANAGER INTERFACE ===============================
     #
     def addDialogHandlerForAOR(self, aor, handler):
-        #TODO: Should be changed to add_aor_handler
         """Register a handler to call."""
         if not isinstance(handler, AORHandler):
             raise TypeError('%s instance is not of type AORHandler' % (
@@ -126,7 +124,6 @@ class SIPTransport:
                 [str(key) for key in hdlrs.keys()]))
 
     def removeDialogHandlerForAOR(self, aor):
-        #TODO: should be changed to remove_aor_handler
         hdlrs = self._sptr_dialogHandlers
         aor_bytes = bytes(aor)
         if aor_bytes not in hdlrs:
