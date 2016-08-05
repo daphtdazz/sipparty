@@ -2,11 +2,6 @@
 
 ## List. ##
 
-1. Don't use 0.0.0.0 DGRAM listen sockets for sending from.
-2. UDP transport retrying.
-   a.  Should have a dialog manager. -- initial done 8/5/2016
-   b.  Party should have transaction manager, dialog manager, transport -- initial done 8/5/2016
-   c.  Need to check flows are now correct and transaction lifetimes work. In particular UTs for dialog + transaction interactions (check transaction retries for all types, + 1XX provisional responses)
 3. REGISTER dialogues.
 4. TCP support.
 5. Move "Programming guides" into a section of the documentation.
@@ -62,6 +57,11 @@
 13. Example scripts - done initial ipython demo 31/1/2016
 14. Cache Datagram sockets for faster allocation of a socket when sending data - sockets are reused by default 31/1/2016
 15. SIPTransport could allow force override to get a new listen socket - done 31/06/2016: can request not to reuse a socket in `Transport.listen_for_me`
+16. Don't use 0.0.0.0 DGRAM listen sockets for sending from - 5/8/2016
+17. UDP transport retrying.
+   a.  Should have a dialog manager. -- initial done 8/5/2016
+   b.  Party should have transaction manager, dialog manager, transport -- initial done 8/5/2016
+   c.  Need to check flows are now correct and transaction lifetimes work. In particular UTs for dialog + transaction interactions (check transaction retries for all types, + 1XX provisional responses) -- mostly done 5/8/2016
 
 ## Changelog ##
 

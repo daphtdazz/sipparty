@@ -46,7 +46,7 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
         },
         'handlers': {
             'console': {
-                'level': 'DEBUG',
+                'level': 'WARNING',
                 'formatter': 'console',
                 'class': 'logging.StreamHandler',
             },
