@@ -17,6 +17,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
+import logging.config
+import os
+
 assert logging.DEBUG == 10
 logging.DETAIL = 5
 logging.addLevelName(logging.DETAIL, "DETAIL")
@@ -27,3 +30,8 @@ class SPLogger(logging.getLoggerClass()):
         self.log(logging.DETAIL, msg, *args, **kwargs)
 
 logging.setLoggerClass(SPLogger)
+
+LOGGING_CONF_FILE = '.sipparty_logging.conf'
+
+if False and os.path.exists(LOGGING_CONF_FILE):
+    logging.config.fileConfig(LOGGING_CONF_FILE)

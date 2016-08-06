@@ -1,6 +1,4 @@
-"""testdeepclass.py
-
-Unit tests for sip-party.
+"""Unit tests for the deep class.
 
 Copyright 2015 David Park
 
@@ -34,9 +32,9 @@ class TestDeepClass(SIPPartyTestCase):
 
         class TD(object):
 
-            def __init__(self, attr):
+            def __init__(self, name):
                 super(TD, self).__init__()
-                self._td_attr = attr
+                self._td_attr = name
 
             def __get__(self, obj, cls):
                 assert obj is not None
@@ -105,3 +103,28 @@ class TestDeepClass(SIPPartyTestCase):
         self.assertRegexpMatches(
             dc1_repr,
             'TestDeepClass\(attr1=TestDeepClass\(attr1=<DC [0-9a-f]+>\)\)')
+
+    def test_checked_descriptors(self):
+
+        class TestDescriptor(object):
+
+            def __init__(self, name):
+                self.int_name = name
+
+            def __get__(self, obj, cls):
+                return getattr(obj, self.int_name)
+
+            def __set__(self, obj, val):
+                setattr(obj, self.int_name, val / 2)
+
+        class TestDeepClass2(DeepClass('_tdc2_', {
+                'attr1': {
+                    dck.check: lambda x: x % 2 == 0,
+                    dck.descriptor: TestDescriptor}
+        })):
+            pass
+
+        tdc2 = TestDeepClass2()
+        self.assertRaises(ValueError, setattr, tdc2, 'attr1', 1)
+        tdc2.attr1 = 2
+        self.assertEqual(tdc2.attr1, 1)

@@ -6,14 +6,21 @@
 Welcome to sipparty's documentation!
 ====================================
 
-Contents:
+High-level Contents:
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
    intro
    top
    party
+
+Low-level contents:
+
+.. toctree::
+   :maxdepth: 2
+
+   fsm
 
 Indices and tables
 ==================

@@ -46,12 +46,12 @@ SOCK_FAMILIES = Enum((AF_INET, AF_INET6))
 SOCK_FAMILY_NAMES = AsciiBytesEnum((b"IPv4", b"IPv6"))
 DEFAULT_SOCK_FAMILY = AF_INET
 log = logging.getLogger(__name__)
-prot_log = logging.getLogger("messages")
+prot_log = logging.getLogger(__name__ + ".messages")
 
 # RFC 2373 IPv6 address format definitions.
-digitrange = b"0-9"
+digitrange = b"0123456789"
 DIGIT = b"[%(digitrange)s]" % bglobals()
-hexrange = b"%(digitrange)sa-fA-F" % bglobals()
+hexrange = b"%(digitrange)sabcdefABCDEF" % bglobals()
 HEXDIG = b"[%(hexrange)s]" % bglobals()
 hex4 = b"%(HEXDIG)s{1,4}" % bglobals()
 IPv4address = b"%(DIGIT)s{1,3}(?:[.]%(DIGIT)s{1,3}){3}" % bglobals()
@@ -82,11 +82,13 @@ IPaddress = b"(?:(%(IPv4address)s)|(%(IPv6address)s))" % bglobals()
 port = b"%(DIGIT)s+" % bglobals()
 
 # Some pre-compiled regular expression versions.
+hex4_re = re.compile(b'(' + hex4 + b')')
 IPv4address_re = re.compile(IPv4address)
 IPv4address_only_re = re.compile(IPv4address + b'$')
 IPv6address_re = re.compile(IPv6address)
 IPv6address_only_re = re.compile(IPv6address + b'$')
 IPaddress_re = re.compile(IPaddress)
+IPaddress_only_re = re.compile(IPaddress + b'$')
 
 first_unregistered_port = 49152
 next_port = first_unregistered_port
@@ -133,6 +135,55 @@ SpecialNames = set((
 ))
 
 
+def address_as_tuple(addr_name):
+
+    bname = abytes(addr_name)
+    fam = IPAddressFamilyFromName(bname, exact=True)
+    if fam is None:
+        raise ValueError('%s is not an IP address' % (addr_name,))
+
+    if fam == AF_INET:
+        return _ipv4_address_as_tuple(bname)
+
+    assert fam == AF_INET6
+    return _ipv6_address_as_tuple(bname)
+
+
+def _ipv4_address_as_tuple(bname):
+    return tuple(int(num) for num in bname.split(b'.'))
+
+
+def _ipv6_address_as_tuple(bname):
+
+    nums_list = []
+    zero_squelch_ind = None
+    for gp in hex4_re.split(bname):
+        if not gp:
+            continue
+
+        if gp == b':':
+            continue
+        if gp == b'::':
+            assert zero_squelch_ind is None, (
+                'unexpected second zero squelcher (::) in ipv6 address '
+                'lookalike address %s' % (bname,))
+            zero_squelch_ind = len(nums_list)
+            continue
+
+        nums_list.append(int(gp, base=16))
+
+    if zero_squelch_ind is None:
+        assert len(nums_list) == 8, (
+            'bad length (not 8) for expanded ipv6 address: %s' % (
+                nums_list,))
+        return tuple(nums_list)
+
+    return tuple(
+        nums_list[:zero_squelch_ind] +
+        [0] * (8 - len(nums_list)) +
+        nums_list[zero_squelch_ind:])
+
+
 def AllAddressesFromFamily(sock_family):
     if sock_family == AF_INET:
         return '0.0.0.0'
@@ -143,42 +194,16 @@ def AllAddressesFromFamily(sock_family):
     return None
 
 
-def LoopbackAddressFromFamily(sock_family):
-    if sock_family == AF_INET:
-        return '127.0.0.1'
-
-    if sock_family == AF_INET6:
-        return '::'
-
-    return None
+def default_hostname():
+    # This is partly here so we can patch it in UTs.
+    return gethostname()
 
 
-def IsSpecialName(name):
-    return name in SpecialNames
-
-
-def IsValidTransportName(name):
-    return isinstance(name, str) or IsSpecialName(name)
-
-
-def UnregisteredPortGenerator(port_filter=None):
-    global next_port
-    start_port = next_port
-    while True:
-        if port_filter is None or port_filter(next_port):
-            yield next_port
-        next_port += 1
-        if next_port > 0xffff:
-            next_port = first_unregistered_port
-        if next_port == start_port:
-            break
-
-
-def IPAddressFamilyFromName(name):
+def IPAddressFamilyFromName(name, exact=False):
     """Returns the family of the IP address passed in in name, or None if it
     could not be determined.
-    :param name: The IP address or domain name to try and work out the family
-    of.
+    :param name:
+        The IP address or domain name to try and work out the family of.
     :returns: None, AF_INET or AF_INET6.
     """
     if name is None or name in SpecialNames:
@@ -186,7 +211,10 @@ def IPAddressFamilyFromName(name):
     name = abytes(name)
 
     try:
-        mo = IPaddress_re.match(name)
+        if not exact:
+            mo = IPaddress_re.match(name)
+        else:
+            mo = IPaddress_only_re.match(name)
     except (TypeError, ValueError):
         log.error('Bad name: %r', name)
         raise
@@ -201,9 +229,12 @@ def IPAddressFamilyFromName(name):
     return AF_INET6
 
 
-def default_hostname():
-    # This is partly here so we can patch it in UTs.
-    return gethostname()
+def is_null_address(name):
+    return all(num == 0 for num in (address_as_tuple(name) or [1]))
+
+
+def IsSpecialName(name):
+    return name in SpecialNames
 
 
 def IsValidPortNum(port):
@@ -212,6 +243,33 @@ def IsValidPortNum(port):
         # comparison of arbitrary objects with numbers.
         raise TypeError('Port %r is not Integral', port)
     return 0 < port <= 0xffff
+
+
+def IsValidTransportName(name):
+    return isinstance(name, str) or IsSpecialName(name)
+
+
+def LoopbackAddressFromFamily(sock_family):
+    if sock_family == AF_INET:
+        return '127.0.0.1'
+
+    if sock_family == AF_INET6:
+        return '::1'
+
+    return None
+
+
+def UnregisteredPortGenerator(port_filter=None):
+    global next_port
+    start_port = next_port
+    while True:
+        if port_filter is None or port_filter(next_port):
+            yield next_port
+        next_port += 1
+        if next_port > 0xffff:
+            next_port = first_unregistered_port
+        if next_port == start_port:
+            break
 
 
 class TransportException(Exception):
@@ -442,7 +500,7 @@ class ListenDescription(
             port = self.port
 
         if self.sock_family == AF_INET:
-            return (name, self.port)
+            return (name, port)
         fi = self.flowinfo or 0
         scid = self.scopeid or 0
         return (name, port, fi, scid)
@@ -512,8 +570,19 @@ class ConnectedAddressDescription(
 
     def connect(self, data_callback, transport):
         """Attempt to connect this description.
+
         :returns: a SocketProxy object
         """
+        if self.remote_name is None or self.remote_port is None:
+            raise ValueError(
+                'remote_name (%r) or remote_port %r are None' % (
+                    self.remote_name, self.remote_port))
+
+        self.deduce_missing_values()
+
+        if any((self.sock_family is None, self.sock_type is None)):
+            raise ValueError('sock_family (%r) or sock_type (%r) None' % (
+                self.sock_family, self.sock_type))
 
         log.debug('Connect socket using %r', self)
         sck = socket.socket(self.sock_family, self.sock_type)
@@ -540,6 +609,13 @@ class ConnectedAddressDescription(
         return (
             '{sp_str} -> {self.remote_name}:'
             '{self.remote_port:d}'.format(**locals()))
+
+    def deduce_missing_values(self):
+
+        if self.sock_family is None:
+            self.sock_family = IPAddressFamilyFromName(self.remote_name)
+
+        super(ConnectedAddressDescription, self).deduce_missing_values()
 
 
 class SocketProxy(
@@ -602,6 +678,7 @@ class SocketProxy(
     # =================== MAGIC METHODS =======================================
     #
     def __del__(self):
+        log.info('DELETE %s instance', type(self).__name__)
         sck = self.socket
         if isinstance(sck, socket_class):
 
@@ -616,10 +693,7 @@ class SocketProxy(
             except:
                 log.debug('Exception closing socket', exc_info=True)
 
-        assert isinstance(SocketProxy, type)
-        dtr = getattr(super(SocketProxy, self), '__del__', None)
-        if dtr is not None:
-            dtr()
+        getattr(super(SocketProxy, self), '__del__', lambda: None)()
 
     #
     # =================== INTERNAL METHODS ====================================
@@ -641,7 +715,17 @@ class SocketProxy(
                 Transport.FormatBytesForLogging(data))
 
         if not self.is_connected:
-            csp = self.connected_sockets.get(addr, None)
+            lad = self.local_address
+            if is_null_address(lad.name):
+                tsck = socket_class(lad.sock_family, lad.sock_type)
+                tsck.connect(addr)
+                lname = tsck.getsockname()
+                tsck.close()
+            else:
+                lname = lad.sockname_tuple
+            log.debug('Use local address %s', lname)
+
+            csp = self.connected_sockets.get((lname[0], addr))
             if csp is None:
                 log.debug('First receipt of data on this listen socket')
                 # Therefore need to create a new 'connected' socket proxy that
@@ -651,7 +735,7 @@ class SocketProxy(
                     desc = self.local_address
                     cad = ConnectedAddressDescription(
                         sock_family=desc.sock_family, sock_type=desc.sock_type,
-                        name=desc.name, port=desc.port,
+                        name=lname[0], port=desc.port,
                         remote_name=addr[0], remote_port=addr[1])
                     csp = SocketProxy(
                         local_address=cad, socket=self, is_connected=True,
@@ -660,24 +744,19 @@ class SocketProxy(
                         'New connected socket proxy using UDP listen socket: '
                         '%s' % (cad,))
                     tp.add_connected_socket_proxy(csp)
-                    self.connected_sockets[addr] = csp
+                    self.connected_sockets[(lname[0], addr)] = csp
 
         dc = self.data_callback
         if dc is None:
             raise NotImplementedError('No data callback specified.')
 
+        log.debug('Passing data to callback %r', dc)
         dc(self, addr, data)
-
-
-class ListenSocketProxy(SocketProxy):
-
-    def _stream_socket_selected(self, socket):
-        socket.accept()
-        raise NotImplementedError()
 
 
 class Transport(Singleton):
     """Manages connection state and transport so You don't have to."""
+
     #
     # =================== CLASS INTERFACE =====================================
     #
@@ -734,11 +813,9 @@ class Transport(Singleton):
                 '\'callback\' parameter %r is not a Callable' % callback)
 
         if listen_description is None:
-
+            sock_family = self.fix_sock_family(sock_family)
             if sock_family is None:
                 sock_family = IPAddressFamilyFromName(name)
-
-            sock_family = self.fix_sock_family(sock_family)
 
             sock_type = self.fix_sock_type(sock_type)
 
@@ -773,7 +850,10 @@ class Transport(Singleton):
             remote_name=None, remote_port=None, port_filter=None,
             data_callback=None,
             from_description=None, to_description=None):
+        """Get a SocketProxy to send data on.
 
+        :returns: SocketProxy instance.
+        """
         if sock_family is None:
             sock_family = IPAddressFamilyFromName(remote_name)
 
@@ -781,12 +861,10 @@ class Transport(Singleton):
         for attr in (
                 'sock_type', 'sock_family', 'name', 'port', 'flowinfo',
                 'scopeid', 'port_filter'):
-
             create_kwargs[attr] = locals()[attr]
 
         for remote_attr, to_desc_attr in (
                 ('remote_name', 'name'), ('remote_port', 'port')):
-
             create_kwargs[remote_attr] = locals()[remote_attr]
 
         create_kwargs['sock_type'] = self.fix_sock_type(
@@ -930,8 +1008,7 @@ class Transport(Singleton):
         raise(UnresolvableAddress(address=host, port=port))
 
     def close_all(self):
-        """Last ditch attempt to make sure we don't leave sockets lying around.
-        """
+        """Last ditch attempt to avoid leaving sockets lying around."""
         log.info('Closing all sockets.')
         for sock_dicts in (
                 self._tp_listen_sockets, self._tp_connected_sockets):
@@ -951,9 +1028,7 @@ class Transport(Singleton):
         self.close_all()
 
         sp = super(Transport, self)
-        dlr = getattr(sp, '__del__', None)
-        if dlr is not None:
-            dlr()
+        getattr(sp, '__del__', lambda: None)()
 
     #
     # =================== INTERNAL METHODS ====================================
@@ -996,7 +1071,7 @@ class Transport(Singleton):
             return find_first_entry
 
         def find_suitable_port(pdict, port):
-            if port != 0:
+            if port:
                 return None, None
 
             for port, next_dict in iteritems(pdict):

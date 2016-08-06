@@ -21,6 +21,7 @@ import logging
 from six import (iteritems, PY2)
 import sys
 import unittest
+from ..sip.siptransport import SIPTransport
 from ..util import TestCaseREMixin
 if PY2:
     from mock import (MagicMock, patch)  # noqa
@@ -33,10 +34,55 @@ sipparty = sys.modules['sipparty']
 
 class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
 
+    default_logging_config = {
+        'version': 1,
+        'disable_existing_loggers': False,
+        'formatters': {
+            'console': {
+                'format':
+                    '%(levelname)s +%(relativeCreated)d %(name)s.%(lineno)d: '
+                    '%(message)s'
+            },
+        },
+        'handlers': {
+            'console': {
+                'level': 'WARNING',
+                'formatter': 'console',
+                'class': 'logging.StreamHandler',
+            },
+        },
+        'root': {
+            'handlers': ['console'],
+            'level': 'WARNING'
+        },
+        'loggers': {
+            'sipparty.fsm': {
+                'level': 'INFO',
+            },
+            'sipparty.transport': {
+                'level': 'INFO'
+            },
+            'sipparty.test': {
+                'level': 'INFO'
+            },
+        }
+    }
+
     def __init__(self, *args, **kwargs):
         super(SIPPartyTestCase, self).__init__(*args, **kwargs)
         self._sptc_logLevels = {}
         self._sptc_searchedModules = None
+        logging.config.dictConfig(self.default_logging_config)
+
+    def assertIsNotNone(self, exp, *args, **kwargs):
+        if hasattr(super(SIPPartyTestCase, self), 'assertIsNotNone'):
+            return super(SIPPartyTestCase, self).assertIsNotNone(
+                exp, *args, **kwargs)
+
+        return self.assertTrue(exp is not None)
+
+    def expect_log(self, log_info):
+        log.warning('EXPECT LOG %s', log_info)
 
     def tearDown(self):
         self.popAllLogLevels()
@@ -46,10 +92,11 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
 
         # Speed things up a bit by doing a gc collect.
         gc.collect()
+        SIPTransport.wait_for_no_instances(timeout_s=5)
 
-    def pushLogLevelToSubMod(self, module, subModuleName, level):
+    def pushLogLevelToSubMod(self, module, sub_module_name, level):
 
-        firstModule, _, submodules = subModuleName.partition(".")
+        firstModule, _, submodules = sub_module_name.partition(".")
         mdr = dir(module)
         if firstModule in mdr:
             sm = getattr(module, firstModule)
@@ -70,26 +117,26 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
                 continue
 
             log.detail("Look at module %r", attr)
-            res = self.pushLogLevelToSubMod(attr, subModuleName, level)
+            res = self.pushLogLevelToSubMod(attr, sub_module_name, level)
             if res is not None:
                 return res
 
-    def setLogLevel(self, moduleName, level):
+    def setLogLevel(self, module_name, level):
         self._sptc_searchedModules = set()
-        lastLevel = self.pushLogLevelToSubMod(sipparty, moduleName, level)
+        lastLevel = self.pushLogLevelToSubMod(sipparty, module_name, level)
         self._sptc_searchedModules = None
         if lastLevel is None:
-            raise AttributeError("No logger found for module %r" % moduleName)
+            raise AttributeError("No logger found for module %r" % module_name)
         return lastLevel
 
-    def pushLogLevel(self, moduleName, level):
-        log.debug("Push log level %r to %r", level, moduleName)
-        lastLevel = self.setLogLevel(moduleName, level)
-        if moduleName not in self._sptc_logLevels:
-            self._sptc_logLevels[moduleName] = []
+    def pushLogLevel(self, module_name, level):
+        log.debug("Push log level %r to %r", level, module_name)
+        lastLevel = self.setLogLevel(module_name, level)
+        if module_name not in self._sptc_logLevels:
+            self._sptc_logLevels[module_name] = []
 
-        self._sptc_logLevels[moduleName].append(lastLevel)
-        log.debug("Current level for %r %r", moduleName, lastLevel)
+        self._sptc_logLevels[module_name].append(lastLevel)
+        log.debug("Current level for %r %r", module_name, lastLevel)
 
     def popAllLogLevels(self):
         for mod, levels in iteritems(self._sptc_logLevels):

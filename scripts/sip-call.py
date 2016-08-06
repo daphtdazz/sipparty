@@ -74,7 +74,7 @@ log.info("Call beginning...")
 
 dlg.waitForStateCondition(
     lambda state: state not in (
-        dlg.States.Initial, dlg.States.InitiatingDialog))  # noqa
+        dlg.States.Initial, dlg.States.SentInvite))  # noqa
 
 pause_secs = 30
 log.info("Call up, wait for %r seconds, or Ctrl-C", pause_secs)

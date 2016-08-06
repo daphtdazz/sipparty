@@ -32,7 +32,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-import select
+from select import error as select_error, select
+from six import PY2
 from socket import (error as socket_error, socketpair)
 import sys
 import threading
@@ -158,10 +159,10 @@ class RetryThread(threading.Thread):
             rsrckeys = rsrcs.keys()
             log.debug("%s wait on %r.", self, rsrckeys)
             try:
-                rfds, wfds, efds = select.select(
+                rfds, wfds, efds = select(
                     rsrckeys, [], rsrckeys, wait)
                 select_bad_fd_count = 0
-            except select.error:
+            except select_error:
                 # One of the FDs is bad... in general users should remove file
                 # descriptors before shutting them down, and we can't tell
                 # which has failed anyway, so we should just be able to
@@ -223,7 +224,10 @@ class RetryThread(threading.Thread):
                     # resource tidy-up won't happen correctly which means we
                     # may never get cancelled (if the cancel is in the __del__
                     # of one of the objects on the exception stack).
-                    sys.exc_clear()
+                    #
+                    # Python 3 does this for us, thank you Python 3!
+                    if PY2:
+                        sys.exc_clear()
 
             # Immediately respin since we haven't checked the next timer yet.
             wait = 0
@@ -260,7 +264,7 @@ class RetryThread(threading.Thread):
     def addRetryTime(self, ctime):
         """Add a time when we should retry the action. If the time is already
         in the list, then the new time is not re-added."""
-        log.debug("Add retry time %d to %r", ctime, self._rthr_retryTimes)
+        log.debug("Add retry time %f to %r", ctime, self._rthr_retryTimes)
         with self._rthr_nextTimesLock:
             ii = 0
             for ii, time in zip(
@@ -291,7 +295,8 @@ class RetryThread(threading.Thread):
     # =================== MAGIC METHODS =======================================
     #
     def __del__(self):
-        log.info('__del__ %s %s', self.name, self.__class__.__name__)
+        log.info('DELETE %s instance: %s', type(self).__name__, self.name)
+        getattr(super(RetryThread, self), '__del__', lambda: None)()
 
     #
     # =================== INTERNAL METHODS ====================================
@@ -308,6 +313,7 @@ class RetryThread(threading.Thread):
         except (OSError, socket_error):
             log.debug('Thread already shut down')
             pass
+        log.debug('Triggered.')
 
     def _rthr_shouldKeepRunning(self):
         return not self._rthr_cancelled and self._rthr_masterThread.isAlive()

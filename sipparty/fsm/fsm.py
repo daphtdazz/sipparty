@@ -1,7 +1,7 @@
-"""fsm.py
+"""Implements an `FSM` for use with sip party.
 
-Implements an `FSM` for use with sip party. This provides a generic way to
-implement arbitrary state machines, with easy support for timers.
+This provides a generic way to implement arbitrary state machines, with easy
+support for timers.
 
 Copyright 2015 David Park
 
@@ -19,19 +19,21 @@ limitations under the License.
 """
 from collections import (Callable, Iterable, OrderedDict)
 from copy import copy
+from functools import partial
 import logging
-from six import (iteritems, add_metaclass)
+from six import iteritems
 from six.moves import queue
 import time
 import threading
-import weakref
+from weakref import ref
+from ..classmaker import classbuilder
 from ..util import (CCPropsFor, class_or_instance_method, Enum, OnlyWhenLocked)
 from . import (fsmtimer, retrythread)
 
 log = logging.getLogger(__name__)
 
 __all__ = [
-    'AsyncFSM', 'FSMError', 'UnexpectedInput', 'FSMTimeout', 'FSM', 'FSMType',
+    'AsyncFSM', 'FSMError', 'UnexpectedInput', 'FSMTimeout', 'FSM',
     'FSMClassInitializer', 'InitialStateKey', 'LockedFSM', 'TransitionKeys',
     'tsk']
 
@@ -55,6 +57,8 @@ TransitionKeys = Enum((
     'StopTimers',
     'StartThreads'
 ))
+# Abbreviation for TransitionKeys
+tsk = TransitionKeys
 
 
 class FSMClassInitializer(type):
@@ -66,7 +70,8 @@ class FSMClassInitializer(type):
         self._fsm_transitions = {}
         self._fsm_timers = {}
         self._fsm_name = self.__name__
-        self._fsm_state = None
+        self._fsm_state = InitialStateKey
+        self._fsm_state_entry_actions = {}
 
         # Add any predefined timers.
         self.AddTimers()
@@ -76,22 +81,19 @@ class FSMClassInitializer(type):
         log.debug("FSMClass inputs / states after AddClassTransitions: %r / "
                   "%r", self.States, self.Inputs)
 
-
-FSMType = type(
-    # The FSM type needs both the FSMClassInitializer and the cumulative
-    # properties tool.
-    'FSMType',
-    (CCPropsFor(("States", "Inputs", "Actions")), FSMClassInitializer),
-    dict())
+        # Add any predefined actions on state entry.
+        self.AddActionsOnStateEntry()
 
 
-@add_metaclass(FSMType)
-class FSM(object):
+@classbuilder(mc=(
+    CCPropsFor(("States", "Inputs", "Actions")), FSMClassInitializer))
+class FSM:
     """Interface:
 
     Class:
     `AddClassTransitions` - for subclassing; if a subclass declares this then
-    it is called when the class is created (using the FSMType metaclass) and
+    it is called when the class is created (using the
+    :py:class:`FSMClassInitializer` metaclass) and
     is used to set up the standard transitions and timers for a class.
 
     Class or instance:
@@ -130,6 +132,10 @@ class FSM(object):
     Actions = Enum(tuple())
 
     @classmethod
+    def delegate_method_name(cls, action_name):
+        return 'fsm_dele_' + action_name
+
+    @classmethod
     def PopulateWithDefinition(cls, definition_dict):
         cls._fsm_definitionDictionary = definition_dict
         for old_state, stdict in iteritems(definition_dict):
@@ -149,11 +155,6 @@ class FSM(object):
                     start_timers=transdef.get(tsk.StartTimers, None),
                     stop_timers=transdef.get(tsk.StopTimers, None))
 
-        # If the special initial state is specified, set that.
-        if InitialStateKey in definition_dict:
-            log.debug("Set initial state of %r to isk.", cls.__name__)
-            cls._fsm_state = InitialStateKey
-
     @classmethod
     def AddClassTransitions(cls):
         """Subclasses should override this to do initial subclass setup. It
@@ -168,6 +169,12 @@ class FSM(object):
         tmrs = getattr(cls, 'FSMTimers', {})
         for tname, (act, retryer) in iteritems(tmrs):
             cls.addTimer(tname, act, retryer)
+
+    @classmethod
+    def AddActionsOnStateEntry(cls):
+        state_acts = getattr(cls, 'FSMStateEntryActions', [])
+        for state, act in state_acts:
+            cls.add_action_on_state_entry(state, act)
 
     #
     # =================== CLASS OR INSTANCE INTERFACE ========================
@@ -188,7 +195,9 @@ class FSM(object):
         stop_timers: list of timer names to stop when doing this transition
         (must have already been added with addTimer).
         """
-        log.detail("addTransition self: %r", self)
+        log.detail(
+            "addTransition self: %r %s:%s->%s", self, input, old_state,
+            new_state)
 
         self_is_class = isinstance(self, type)
         timrs_dict = self._fsm_timers
@@ -257,8 +266,10 @@ class FSM(object):
 
     @class_or_instance_method
     def addTimer(self, name, action, retryer):
-        """Add a timer with name `name`. Timers must be independent of
-        transitions because they may be stopped or started at any transition.
+        """Add a timer with name `name`.
+
+        Timers must be independent of transitions because they may be stopped
+        or started at any transition.
         """
         if isinstance(self, type):
             # Class, just save the parameters for when we instantiate and
@@ -267,16 +278,46 @@ class FSM(object):
             return
 
         if isinstance(retryer, str):
-            try:
-                retryer = getattr(self, retryer)
-            except AttributeError as exc:
-                exc.args = (
-                    "Can't make an action with string %s as it is not a "
-                    "method;%s" % (retryer, exc.args[0]))
-                raise
+
+            weak_self = ref(self)
+            retryer_name = retryer
+
+            def weak_retry_wrapper():
+                self = weak_self()
+                if self is None:
+                    log.warning(
+                        'Retryer for timer %s has been released, returning '
+                        'empty list of retry times', name)
+                    return iter(())
+
+                try:
+                    retryer = getattr(self, retryer_name)
+                except AttributeError as exc:
+                    exc.args = (
+                        "Can't make an action with string %s as it is not a "
+                        "method;%s" % (retryer, exc.args[0]),)
+                    raise
+
+                return retryer()
+
+            retryer = weak_retry_wrapper
 
         newtimer = fsmtimer.Timer(name, self._fsm_makeAction(action), retryer)
         self._fsm_timers[name] = newtimer
+
+    @class_or_instance_method
+    def add_action_on_state_entry(self, state, action):
+        if state not in self.States:
+            raise ValueError(
+                'Cannot add action for entry into non-existent state %r' % (
+                    state,))
+
+        act_list = self._fsm_state_entry_actions.get(state)
+        if act_list is None:
+            act_list = []
+            self._fsm_state_entry_actions[state] = act_list
+
+        act_list.append(self._fsm_makeAction(action))
 
     #
     # =================== INSTANCE INTERFACE =================================
@@ -291,8 +332,9 @@ class FSM(object):
 
     @state.setter
     def state(self, value):
-        assert self._fsm_state is None, (
-            "Only allowed to set the state of an FSM once at initialization.")
+        assert self._fsm_state == InitialStateKey, (
+            "Only allowed to set the state of an FSM when it is in its "
+            "initial state.")
         if value not in self.States:
             raise ValueError('State %r is not one of %r' % (
                 value, self.States))
@@ -309,7 +351,7 @@ class FSM(object):
         if val is None:
             self._fsm_weakDelegate = None
         else:
-            self._fsm_weakDelegate = weakref.ref(val)
+            self._fsm_weakDelegate = ref(val)
 
     def __init__(self, name=None, delegate=None):
         """
@@ -337,7 +379,7 @@ class FSM(object):
         self._fsm_timers = {}
         self.Inputs = copy(self.Inputs)
 
-        self._fsm_state = getattr(self, '_fsm_state', None)
+        self._fsm_state = getattr(self, '_fsm_state')
         log.debug("Initial state of %r instance is %r.",
                   self.__class__.__name__, self._fsm_state)
 
@@ -354,37 +396,47 @@ class FSM(object):
                 for os, state_trans in iteritems(class_transitions)
                 for inp, result in iteritems(state_trans)]:
             self.addTransition(
-                os, inp, ns, self._fsm_makeAction(act), start_tmrs, stop_tmrs,
-                strt_thrs)
+                os, inp, ns, act, start_tmrs, stop_tmrs, strt_thrs)
 
-        self._fsm_inputQueue = queue.Queue()
+        class_state_entries = self._fsm_state_entry_actions
+        self._fsm_state_entry_actions = {}
+        for state, act in (
+                (s, a) for s, acts in iteritems(class_state_entries)
+                for a in acts):
+            self.add_action_on_state_entry(state, act)
+
+        self.__input_queue = queue.Queue()
         self._fsm_oldThreadQueue = queue.Queue()
 
         log.detail(
             "  %r instance after init: %r", self.__class__.__name__, self)
         return
 
+    def checkTimers(self):
+        "Check all the timers that are running."
+        log.debug('check timers on fsm %s', self.name)
+        for name, timer in iteritems(self._fsm_timers):
+            timer.check()
+
     def hit(self, input, *args, **kwargs):
-        """Hit the FSM with input `input`.
+        """Hit the FSM with `input`.
+
+        It is illegal to hit an FSM during processing of an action, and this is
+        guarded against. The reason for this is that it is not obvious whether
+        or not the state should change before or after the actions are
+        processed. If an action wishes to cause another FSM hit, it should use
+        :py:method:`queue_hit`.
 
         args and kwargs are passed through to the action.
         """
         log.debug("Queuing input %r", input)
 
-        if self.__processing_hit:
-            raise RuntimeError(
-                'Illegal re-hit of %r instance during a hit. Most likely '
-                '\'hit\' has been called from an action. This is illegal, use '
-                '\'hitAfterCurrentTransition\' to schedule a new hit straight '
-                'from an action.' % self.__class__.__name__)
-        try:
-            self.__processing_hit = True
-            return self._fsm_hit(input, *args, **kwargs)
-        finally:
-            self.__processing_hit = False
+        self.__queue_next_hit((input, args, kwargs))
+        self.__process_queued_hits()
 
-    def hitAfterCurrentTransition(self, input, *args, **kwargs):
-        raise NotImplemented("'hitAfterCurrentTransition'")
+    def raise_unexpected_input(self, input):
+        raise(UnexpectedInput("%r instance fsm has no input %r." % (
+            type(self).__name__, input)))
 
     def start_timer(self, timer):
         """Signals the timer that it should start.
@@ -406,19 +458,13 @@ class FSM(object):
         log.debug("Stop timer %r", timer.name)
         timer.stop()
 
-    def checkTimers(self):
-        "Check all the timers that are running."
-        for name, timer in iteritems(self._fsm_timers):
-            timer.check()
-
     #
     # ======================= INTERNAL METHODS ===============================
     #
     @class_or_instance_method
     def _fsm_makeAction(self, action):
-        """action is either a callable, which is called directly, or it is a
-        method name, in which case we bind it to a method if we can.
-        """
+        # action is either a callable, which is called directly, or it is a
+        # method name, in which case we bind it to a method if we can.
         log.debug("make action %r", action)
 
         if action is None:
@@ -428,7 +474,7 @@ class FSM(object):
         if isinstance(action, str) or isinstance(action, Callable):
             action_list = [action]
         else:
-            action_list = action
+            action_list = list(action)
 
         def _raise_ValueError():
             raise ValueError(
@@ -439,8 +485,11 @@ class FSM(object):
         if not isinstance(action_list, Iterable):
             _raise_ValueError()
 
-        if any(not (isinstance(_act, str) or isinstance(_act, Callable))
-               for _act in action_list):
+        if any(
+                not (
+                    isinstance(_act, str) or isinstance(_act, Callable) or
+                    isinstance(_act, list) or isinstance(_act, tuple))
+                for _act in action_list):
             _raise_ValueError()
 
         if isinstance(self, type):
@@ -448,11 +497,12 @@ class FSM(object):
             # for it.
             return action
 
-        weak_self = weakref.ref(self)
+        weak_self = ref(self)
 
         def weak_perform_actions(*args, **kwargs):
-            """Finds the action to run if self has not been released yet and
-            runs it. Lookup order is:
+            """Find action to run if self is not released and run it.
+
+            The Lookup order is:
 
             If self has a method with the correct name, it is run.
             If the delegate exists and has a method with the correct name, it
@@ -478,30 +528,58 @@ class FSM(object):
                     run_callable = True
                     continue
 
-                if hasattr(self, action):
-                    log.debug("  Self has %r.", action)
-                    func = getattr(self, action)
-                    if isinstance(func, Callable):
-                        run_self = True
-                        srv = func(*args, **kwargs)
+                if isinstance(action, str):
+                    action_name = action
+                    action_partial_args = ()
+                else:
+                    action_name = action[0]
+                    action_partial_args = action[1:]
 
-                if hasattr(self, "delegate"):
-                    dele = getattr(self, "delegate")
-                    if dele is not None:
-                        if hasattr(dele, action):
-                            log.debug("  delegate has %r.", action)
-                            method = getattr(dele, action)
-                            run_delegate = True
-                            drv = method(*args, **kwargs)
+                func = getattr(self, action_name, None)
+                if isinstance(func, Callable):
+                    log.debug(
+                        'Call self.%s(*%s)', action_name, action_partial_args)
+                    run_self = True
+                    srv = partial(func, *action_partial_args)(*args, **kwargs)
+
+                dele = getattr(self, "delegate", None)
+                delegate_method_name = FSM.delegate_method_name(action_name)
+                if dele is not None:
+                    method = getattr(dele, delegate_method_name, None)
+                    if isinstance(method, Callable):
+                        log.debug(
+                            "Call self.delegate.%s(*%s)", delegate_method_name,
+                            action_partial_args)
+
+                        run_delegate = True
+                        drv = partial(method, self, *action_partial_args)(
+                            *args, **kwargs)
+
+                if not run_delegate:
+                    # The delegate was not run, so see if we have a default
+                    # delegate method.
+                    method = getattr(self, delegate_method_name, None)
+                    if isinstance(method, Callable):
+                        log.debug(
+                            "Call self.%s(*%s)", delegate_method_name,
+                            action_partial_args)
+
+                        run_delegate = True
+                        drv = partial(method, *action_partial_args)(
+                            *args, **kwargs)
 
                 if not (run_self or run_delegate):
                     # The action could not be resolved.
                     raise AttributeError(
-                        "Action %r is not a callable or a method on %r object "
-                        "or its delegate %r." %
-                        (action, self.__class__.__name__,
-                         self.delegate
-                         if hasattr(self, "delegate") else None))
+                        "Action {0!r} is not a callable or a method on the "
+                        "{1} instance "
+                        "(attribute value was {2}) and its delegate {3!r} "
+                        "had no "
+                        "such attribute and no default delegate method on "
+                        "the {1!r} instance was implemented.".format(
+                            action_name, self.__class__.__name__,
+                            getattr(self, action_name, '<not present>'),
+                            getattr(self, 'delegate', None)))
 
             del self
             if run_self:
@@ -518,6 +596,7 @@ class FSM(object):
                 "This is a bug. Actions shouldn't exist unless they have more "
                 "than one subactions to perform.")
 
+        weak_perform_actions.action_list = str(action_list)
         return weak_perform_actions
 
     @class_or_instance_method
@@ -530,7 +609,7 @@ class FSM(object):
             # the class not the instance.
             return weak_method
 
-        weak_self = weakref.ref(self)
+        weak_self = ref(self)
         owner_thread = threading.currentThread()
 
         def fsmThread():
@@ -578,7 +657,7 @@ class FSM(object):
     def _fsm_strgen(self):
         yield "{0!r} {1!r}:".format(self.__class__.__name__, self._fsm_name)
         if len(self._fsm_transitions) == 0:
-            yield "  (No states or transitions.)"
+            yield "  (No transitions.)"
         for old_state, transitions in iteritems(self._fsm_transitions):
             yield "  {0!r}:".format(old_state)
             for input, result in iteritems(transitions):
@@ -586,6 +665,27 @@ class FSM(object):
                     input, result[self.KeyNewState])
             yield ""
         yield "Current state: %r" % self._fsm_state
+
+    def __queue_next_hit(self, hit_tuple):
+        self.__input_queue.put(hit_tuple)
+
+    def __process_queued_hits(self):
+        if self.__processing_hit:
+            log.debug(
+                '%s %s already processing hits', type(self).__name__,
+                self.name)
+            return
+
+        while not self.__input_queue.empty():
+            input, args, kwargs = self.__input_queue.get()
+            log.debug("Process input %r.", input)
+            try:
+                self.__processing_hit = True
+                self._fsm_hit(input, *args, **kwargs)
+            finally:
+                self.__processing_hit = False
+                log.debug("Items left on queue: %d",
+                          self.__input_queue.qsize())
 
     def _fsm_hit(self, input, *args, **kwargs):
         """When the FSM is hit, the following actions are taken in the
@@ -633,8 +733,8 @@ class FSM(object):
             try:
                 action(*args, **kwargs)
             except Exception as exc:
-                log.error("Hit exception processing FSM action %r: %s" % (
-                    action, exc))
+                log.error("Hit %s processing FSM actions %r: %s" % (
+                    type(exc).__name__, action.action_list, exc))
                 raise
 
         for st in res[self.KeyStartTimers]:
@@ -649,6 +749,11 @@ class FSM(object):
         # It is only when everything has succeeded that we know we can update
         # the state.
         self._fsm_setState(new_state)
+
+        # Perform actions registered for state entry.
+        acts = self._fsm_state_entry_actions.get(new_state, ())
+        for act in acts:
+            act()
 
         log.debug("Done hit.")
 
@@ -690,17 +795,18 @@ class LockedFSM(FSM):
 
         log.detail('LockedFSM after init: %r', self)
 
-    hit = OnlyWhenLocked(FSM.hit)
+    hit = OnlyWhenLocked(FSM.hit, allow_recursion=True)
 
 
 class AsyncFSM(LockedFSM):
 
     def __init__(self, *args, **kwargs):
         super(AsyncFSM, self).__init__(*args, **kwargs)
+
         # If we pass ourselves directly to the RetryThread, then we'll get
         # a retain deadlock so neither us nor the thread can be freed.
         # Fortunately python 2.7 has a nice weak references module.
-        weak_self = weakref.ref(self)
+        weak_self = ref(self)
 
         def check_weak_self_timers():
             self = weak_self()
@@ -724,6 +830,16 @@ class AsyncFSM(LockedFSM):
         log.debug("Start timer %r", timer.name)
         timer.start()
         self._fsm_thread.addRetryTime(timer.nextPopTime)
+
+    def checkTimers(self):
+        """Check all the timers."""
+        log.debug('check timers on fsm %s', self.name)
+        for name, timer in iteritems(self._fsm_timers):
+            # Squelch the exception if the timer isn't running yet, because
+            # that's easier than checking each one first.
+            timer.check(exception_if_not_running=False)
+            if timer.nextPopTime is not None:
+                self._fsm_thread.addRetryTime(timer.nextPopTime)
 
     def waitForStateCondition(self, condition, timeout=5):
         if not isinstance(condition, Callable):
@@ -750,26 +866,20 @@ class AsyncFSM(LockedFSM):
         self._fsm_thread.rmInputFD(fd)
 
     def __del__(self):
-        log.debug("Deleting FSM")
+        log.info("DELETE FSM %s", self.name)
         self._fsm_thread.cancel()
         if self._fsm_thread is not threading.currentThread():
+            log.debug('Join retrythread...')
             self._fsm_thread.join()
+            log.debug('Joined.')
+
+    @class_or_instance_method
+    def _fsm_setState(self, new_state):
+        with self._fsm_stateChangeCondition:
+            super(AsyncFSM, self)._fsm_setState(new_state)
+            self._fsm_stateChangeCondition.notify_all()
 
     def __backgroundTimerPop(self):
         log.debug("__backgroundTimerPop")
-
-        while not self._fsm_inputQueue.empty():
-            input, args, kwargs = self._fsm_inputQueue.get()
-            log.debug("Process input %r.", input)
-            try:
-                self._fsm_hit(input, *args, **kwargs)
-            finally:
-                self._fsm_inputQueue.task_done()
-                log.debug("Items left on queue: %d",
-                          self._fsm_inputQueue.qsize())
-
         self.checkTimers()
         self._fsm_garbageCollect()
-
-# Abbreviation for TransitionKeys
-tsk = TransitionKeys  # noqa

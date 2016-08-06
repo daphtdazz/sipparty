@@ -28,10 +28,18 @@ import timeit
 from traceback import extract_stack
 from weakref import (ref as weakref, WeakValueDictionary)
 
+from .classmaker import classmaker
+
 log = logging.getLogger(__name__)
 
 # The clock. Defined here so that it can be overridden in the testbed.
 Clock = timeit.default_timer
+
+
+def append_to_exception_message(exc, message):
+    exc_str = str(exc)
+    exc_str += message
+    exc.args = (exc_str,) + tuple(exc.args[1:])
 
 
 class attributesubclassgen(type):  # noqa
@@ -158,12 +166,17 @@ class Enum(set):
         super(Enum, self).__init__(vlist)
         self._en_list = vlist
 
+    def __or__(self, other):
+        return Enum(set(self) | set(other))
+
     def __contains__(self, name):
         nn = self._en_fixAttr(name)
         return super(Enum, self).__contains__(nn)
 
     def __getattr__(self, attr):
         log.detail('%s instance getattr %r', self.__class__.__name__, attr)
+        assert not attr.startswith('_en'), attr
+        assert hasattr(self, '_en_aliases'), attr
         nn = self._en_fixAttr(attr)
         if super(Enum, self).__contains__(nn):
             return nn
@@ -439,7 +452,7 @@ def CCPropsFor(props):
                 return super(CumulativeClassProperties, cls).__new__(
                     cls, name, bases, class_dict)
 
-            dummy_class = type(dprefix + name, bases, {})
+            dummy_class = classmaker()(dprefix + name, bases, {})
             mro = dummy_class.__mro__
 
             log.debug("Class dictionary: %r.", class_dict)
@@ -543,7 +556,7 @@ class class_or_instance_method(object):  # noqa
         return class_or_instance_wrapper
 
 
-def OnlyWhenLocked(method):
+def OnlyWhenLocked(method, allow_recursion=False):
     """This decorator sees if the owner of method has a _lock attribute, and
     if so locks it before calling method, releasing it after."""
 
@@ -556,7 +569,7 @@ def OnlyWhenLocked(method):
             getattr(self, '_fsm_name', None) or
             self)
 
-        if not hasattr(self, "_lock") or not self._lock:
+        if not getattr(self, "_lock", False):
             log.debug(
                 "No locking in %s instance %s.", self.__class__.__name__,
                 obj_name)
@@ -572,10 +585,15 @@ def OnlyWhenLocked(method):
         hthr = self._lock_holdingThread
 
         if cthr is hthr:
+            if allow_recursion:
+                log.debug('Thread legally holding lock, call method')
+                return method(self, *args, **kwargs)
+
             raise RuntimeError(
                 "Thread %s attempting to get FSM lock when it already has "
                 "it." % cthr.name)
 
+        # We needed the lock and we have it.
         log.debug("Thread %s get lock for %s instance (held by %s).",
                   cthr.name, self.__class__.__name__,
                   hthr.name if hthr is not None else None)
@@ -597,7 +615,42 @@ def OnlyWhenLocked(method):
     return maybeGetLock
 
 
-class DerivedProperty(object):
+class CheckingProperty(object):
+
+    def __init__(self, *args, **kwargs):
+        self.check = kwargs.pop('check', None)
+        args = list(args)
+        if len(args) > 0:
+            name = args.pop(0)
+        else:
+            name = kwargs.pop('name')
+        self.__name = name
+        super(CheckingProperty, self).__init__(name, *args, **kwargs)
+
+    def __set__(self, obj, value):
+        check = self.check
+        if value is not None and check is not None:
+            exc_type = None
+            try:
+                if not check(value):
+                    raise ValueError()
+            except (ValueError, TypeError) as exc:
+                exc_type = type(exc)
+                exc_class = (
+                    ValueError if issubclass(exc_type, ValueError) else
+                    TypeError)
+            finally:
+                if exc_type is not None:
+                    raise exc_class(
+                        "%r instance %r is not an allowed value for attribute "
+                        "%s of class %r." % (
+                            type(value).__name__, value,
+                            self.__name, type(obj).__name__))
+
+        super(CheckingProperty, self).__set__(obj, value)
+
+
+class _DerivedProperty(object):
 
     def update(self, new_derived_property):
         """Updates the derived property so that subclasses can override
@@ -656,25 +709,6 @@ class DerivedProperty(object):
 
     def __set__(self, obj, value):
         pname = self._rp_propName
-        checker = self._rp_check
-        if value is not None and checker is not None:
-            exc_type = None
-            try:
-                if not checker(value):
-                    raise ValueError()
-            except (ValueError, TypeError) as exc:
-                log.error(exc.__class__.__name__)
-                exc_type = type(exc)
-                exc_class = (
-                    ValueError if issubclass(exc_type, ValueError) else
-                    TypeError)
-            finally:
-                if exc_type is not None:
-                    raise exc_class(
-                        "%r instance is not an allowed value for attribute %r "
-                        "of class %r." % (
-                            value.__class__.__name__, pname,
-                            obj.__class__.__name__))
 
         st = self._rp_set
 
@@ -701,6 +735,10 @@ class DerivedProperty(object):
             "DerivedProperty({_rp_propName!r}, check={_rp_check!r}, "
             "get={_rp_get!r}, set={_rp_set!r})"
             "".format(**self.__dict__))
+
+
+DerivedProperty = type(
+    'DerivedProperty', (CheckingProperty, _DerivedProperty), {})
 
 
 def TwoCompatibleThree(cls):
@@ -733,12 +771,16 @@ def WeakMethod(object, method, static_args=None, static_kwargs=None,
         log.debug("args: %r", args)
         sr = wr()
         if sr is None:
+            log.warning(
+                'Method %s cannot be called as its object has been released.',
+                method)
             return default_rc
 
         pass_args = (list(static_args) + list(args))
         log.debug("pass_args: %r", pass_args)
         pass_kwargs = dict(static_kwargs)
         pass_kwargs.update(kwargs)
+        log.info('Call method %s of %s instance', method, type(sr).__name__)
         return getattr(sr, method)(*pass_args, **pass_kwargs)
 
     return weak_method
@@ -877,6 +919,14 @@ class Singleton(object):
 
     UseStrongReferences = False
     _St_SharedInstances = None
+
+    @classmethod
+    def wait_for_no_instances(cls, **kwargs):
+        assert not cls.UseStrongReferences
+        si = cls._St_SharedInstances
+        if si is None:
+            return
+        WaitFor(lambda: all(wr is None for wr in si.values()), **kwargs)
 
     def __new__(cls, singleton=None, *args, **kwargs):
         log.detail("Singleton.__new__(%r, %r)", args, kwargs)
@@ -1036,6 +1086,8 @@ else:
     def astr(x):
         if x is None:
             return None
+        if isinstance(x, str):
+            return x
         return str(x, encoding='ascii')
 
 

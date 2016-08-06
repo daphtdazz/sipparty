@@ -17,9 +17,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-from socket import (SOCK_STREAM, AF_INET, AF_INET6)
+from socket import (SOCK_DGRAM, SOCK_STREAM, AF_INET, AF_INET6)
 from ..transport import (
-    ConnectedAddressDescription, ListenDescription,
+    address_as_tuple, ConnectedAddressDescription, ListenDescription,
+    NameAll, SendFromAddressNameAny,
     SocketProxy, Transport, IPv6address_re,
     IPv6address_only_re)
 from ..util import WaitFor
@@ -202,3 +203,40 @@ class TestTransport(SIPPartyTestCase):
         WaitFor(lambda: len(self.data_call_back_call_args) > 0)
         fromaddr, toaddr, data = self.data_call_back_call_args.pop()
         self.assertEqual(data, b'hello other')
+
+    def test_parsing_ip_addresses(self):
+
+        for bad_name in ('not-an-ip', 'fe80::1::1'):
+            self.assertRaises(ValueError, address_as_tuple, bad_name)
+
+        for inp, out in (
+                ('127.0.0.1', (127, 0, 0, 1)),
+                ('0.0.0.0', (0, 0, 0, 0)),
+                ('fe80:12:FFFF::', (0xfe80, 0x12, 0xffff, 0, 0, 0, 0, 0)),
+                ('fe80::1', (0xfe80, 0, 0, 0, 0, 0, 0, 1)),
+                ('::1', (0, 0, 0, 0, 0, 0, 0, 1)),
+                ('::', (0, 0, 0, 0, 0, 0, 0, 0)),):
+            self.assertEqual(address_as_tuple(inp), out)
+
+    def test_listen_dgram_dont_connect(self):
+        tp = Transport()
+        laddr = ListenDescription(
+            name=NameAll, sock_family=AF_INET6, sock_type=SOCK_DGRAM)
+        lprx = laddr.listen(lambda x: None, tp)
+
+        log.info('Create cad')
+        cad = ConnectedAddressDescription(
+            remote_name='127.0.0.1',
+            name=SendFromAddressNameAny, sock_type=SOCK_DGRAM)
+
+        # ValueError since remote_port is None
+        self.assertRaises(ValueError, cad.connect, lambda x: None, tp)
+
+        log.info('Connect cad')
+        cad.remote_port = lprx.local_address.port
+        cprx = cad.connect(lambda x: None, tp)
+        tp.add_connected_socket_proxy(cprx)
+
+        log.info('Re-find connected proxy with %s', cad)
+        cprx2 = tp.find_or_create_send_from_socket(cad, None)
+        self.assertIs(cprx, cprx2)

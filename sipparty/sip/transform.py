@@ -43,6 +43,7 @@ def Transform(tform_dict, inobj, intype, outobj, outtype, **sources):
             if len(actTp) < 2:
                 raiseActTupleError(actTp, "No path to copy.")
             path = actTp[1]
+            log.debug('copy %s', path)
             val = inobj.attributeAtPath(path)
             outobj.setAttributePath(path, val)
             continue
@@ -51,6 +52,7 @@ def Transform(tform_dict, inobj, intype, outobj, outtype, **sources):
             if len(actTp) < 3:
                 raiseActTupleError(actTp, "No generator for Add action.")
             path = actTp[1]
+            log.debug('generate %s', path)
             gen = actTp[2]
             outobj.setAttributePath(path, gen(inobj))
             continue
@@ -65,12 +67,13 @@ def Transform(tform_dict, inobj, intype, outobj, outtype, **sources):
                 raiseActTupleError(
                     actTp, "Source %r not passed into %r action." % (
                         source, Tfk.CopyFrom))
-            tobj = sources[source]
             path = actTp[2]
+            log.debug('copy from source %s to %s', source, path)
+            tobj = sources[source]
             val = tobj.attributeAtPath(path)
             outobj.setAttributePath(path, val)
             continue
-        assert 0
+        raise ValueError('Unrecognised action %r' % (action,))
 
 
 def LookupTransform(transforms, qutype, anstype):

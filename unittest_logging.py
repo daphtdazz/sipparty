@@ -1,4 +1,6 @@
-"""__init__.py
+"""unittest_logging.py
+
+Configuration for logging while using unittest to test
 
 Copyright 2015 David Park
 
@@ -14,12 +16,5 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from six import itervalues
-from ..dialog import Dialog
-from .call import (SimpleClientDialog, SimpleServerDialog)
-
-AllDialogsTypes = [
-    dlg for dlg in itervalues(dict(locals()))
-    if isinstance(dlg, type) and issubclass(dlg, Dialog) and dlg is not Dialog]
-del Dialog
-del itervalues
+import logging
+logging.basicConfig(level=logging.INFO)

@@ -18,28 +18,30 @@ limitations under the License.
 """
 from copy import deepcopy
 import logging
-import numbers
-import re
+from numbers import Integral
+
 from .. import vb
+from ..classmaker import classbuilder
 from ..fsm import (AsyncFSM, InitialStateKey, UnexpectedInput)
 from ..deepclass import DeepClass, dck
 from ..parse import ParsedPropertyOfClass
 from ..sdp import (sdpsyntax, SDPIncomplete)
-from ..transport import IsValidPortNum
-from ..util import (abytes, astr, Enum, WeakMethod)
-from .transform import (Transform, TransformKeys)
+from ..util import (abytes, astr, Enum, WeakProperty)
+from . import prot
+from .body import Body
 from .components import URI
 from .header import Call_IdHeader
-from .request import Request
 from .message import Message, MessageResponse
 from .param import TagParam
-from .body import Body
-from . import prot
+from .request import Request
+from .standardtimers import StandardTimers
+from .transaction import TransactionUser
+from .transform import (Transform, TransformKeys)
 
 log = logging.getLogger(__name__)
 
 States = Enum((
-    InitialStateKey, "InitiatingDialog", "InDialog", "TerminatingDialog",
+    InitialStateKey, "SentInvite", "InDialog", "TerminatingDialog",
     "SuccessCompletion", "ErrorCompletion"))
 Inputs = Enum(("initiate", "receiveRequest", "terminate"))
 
@@ -49,30 +51,32 @@ AckTransforms = {
     200: {
         b"ACK": (
             (tfk.CopyFrom, "request", "FromHeader"),
+            (tfk.Copy, "ToHeader"),
+            (tfk.Copy, "CseqHeader"),
             (tfk.CopyFrom, "request", "Call_IDHeader"),
             (tfk.CopyFrom, "request", "startline.uri"),
             (tfk.CopyFrom, "request", "viaheader"),
             (tfk.CopyFrom, 'request', 'ContactHeader'),
             (tfk.Copy, "startline.protocol",),
-            (tfk.Copy, "ToHeader"),
         )
     }
 }
 
 
-class Dialog(
-        DeepClass("_dlg_", {
-            "from_uri": {dck.descriptor: ParsedPropertyOfClass(URI)},
-            "to_uri": {dck.descriptor: ParsedPropertyOfClass(URI)},
-            "contact_uri": {dck.descriptor: ParsedPropertyOfClass(URI)},
-            "remote_name": {},
-            "remote_port": {dck.check: IsValidPortNum},
-            "localTag": {},
-            "remoteTag": {},
-            "transport": {},
-            "localSession": {},
-            "remoteSession": {}}),
-        AsyncFSM, vb.ValueBinder):
+@classbuilder(bases=(
+    DeepClass("_dlg_", {
+        "from_uri": {dck.descriptor: ParsedPropertyOfClass(URI)},
+        "to_uri": {dck.descriptor: ParsedPropertyOfClass(URI)},
+        "contact_uri": {
+            dck.descriptor: ParsedPropertyOfClass(URI), dck.gen: URI},
+        "localTag": {dck.gen: TagParam},
+        "remoteTag": {},
+        "transport": {dck.descriptor: WeakProperty},
+        "localSession": {},
+        "remoteSession": {},
+        'callIDHeader': {}}),
+    TransactionUser, StandardTimers, AsyncFSM, vb.ValueBinder))
+class Dialog:
     """`Dialog` class has a slightly wider scope than a strict SIP dialog, to
     include one-off request response pairs (e.g. OPTIONS) as well as long-lived
     stateful relationships (Calls, Registrations etc.).
@@ -100,7 +104,7 @@ class Dialog(
     @property
     def provisionalDialogID(self):
         return prot.ProvisionalDialogID(
-            self._dlg_callIDHeader.value, self.localTag.value)
+            self.callIDHeader.value, self.localTag.value)
 
     @property
     def dialogID(self):
@@ -112,13 +116,12 @@ class Dialog(
         return prot.EstablishedDialogID(
             self._dlg_callIDHeader.value, self.localTag.value, rt.value)
 
-    def __init__(self, **kwargs):
+    def __init__(self, transport, **kwargs):
+        log.info('New %s instance', type(self).__name__)
+        kwargs['transport'] = transport
         super(Dialog, self).__init__(**kwargs)
-
-        self._dlg_callIDHeader = None
-        self._dlg_localTag = TagParam()
-        self._dlg_remoteTag = None
         self._dlg_requests = []
+        self.__last_response = None
 
     def initiate(self, *args, **kwargs):
         log.debug("Initiating dialog...")
@@ -127,62 +130,21 @@ class Dialog(
     def terminate(self, *args, **kwargs):
         self.hit(Inputs.terminate, *args, **kwargs)
 
-    def receiveMessage(self, msg):
+    def resend_response(self):
+        assert self.__last_response is not None
+        tp = self.transport
+        if tp is None:
+            log.warning(
+                'Failed to resend %s response as transport has been '
+                'released.' % (
+                    self.__last_response.type,))
+            return
 
-        log.debug("Dialog receiving message")
-        log.detail("%r", msg)
-        mtype = msg.type
+        tp.send_message_with_transaction(
+            self.__last_response, self, remote_name=self.remote_name,
+            remote_port=self.remote_port)
 
-        if mtype in (200,):
-            log.debug("ACKing %r message", mtype)
-            self.ackMessage(msg)
-
-        def RaiseBadInput(msg=b""):
-            raise(UnexpectedInput(
-                "%r instance fsm has no input for message type %r." % (
-                    self.__class__.__name__, mtype)))
-
-        if self._dlg_callIDHeader is None:
-            self._dlg_callIDHeader = msg.Call_IdHeader
-
-        if self.remoteTag is None:
-            if msg.isresponse():
-                log.debug("Message is a response")
-                rtag = msg.ToHeader.parameters.tag
-            else:
-                log.debug("Message is a request")
-                rtag = msg.FromHeader.parameters.tag
-            log.debug("Learning remote tag: %r", rtag)
-            self.remoteTag = rtag
-            tp = self.transport
-            if tp is not None:
-                tp.updateDialogGrouping(self)
-
-        if self.contact_uri is None:
-            cURI = msg.ContactHeader.uri
-            log.debug("Learning contact_uri: %r", cURI)
-            self.contact_uri = cURI
-
-        if mtype in Request.types:
-            input = "receiveRequest" + getattr(Request.types, mtype)
-            return self.hit(input, msg)
-
-        rcode = mtype
-        if not isinstance(rcode, numbers.Integral):
-            RaiseBadInput()
-
-        while mtype >= 1:
-            attr = "receiveResponse%d" % mtype
-            if attr in self.Inputs:
-                log.debug("Response input found: %d", mtype)
-                return self.hit(attr, msg)
-
-            mtype /= 10
-
-        RaiseBadInput()
-
-    def ackMessage(self, msg):
-
+    def send_ack(self, msg):
         ack = Message.ACK(autofillheaders=False)
         assert len(self._dlg_requests)
 
@@ -193,14 +155,16 @@ class Dialog(
             AckTransforms, msg, mtype, ack, abytes(ack.type),
             request=self._dlg_requests[-1])
 
-        self.transport.sendMessage(
-            ack, self.remote_name, self.remote_port)
+        tp = self.transport
+        if tp is None:
+            log.warning('Failed to send ACK as transport has been released.')
+            return
 
-    def sendRequest(self, req_type, remote_name=None, remote_port=None):
+        tp.send_message_with_transaction(
+            ack, self, remote_name=self.remote_name,
+            remote_port=self.remote_port)
 
-        if self._dlg_callIDHeader is None:
-            log.debug("First request, generate call ID header.")
-            self._dlg_callIDHeader = Call_IdHeader()
+    def send_request(self, req_type, remote_name=None, remote_port=None):
 
         if remote_name is not None:
             log.debug("Learning remote address: %r", remote_name)
@@ -216,9 +180,11 @@ class Dialog(
             attrVal = getattr(self, reqdAttr)
             if attrVal is None:
                 raise ValueError(
-                    "Attribute %r of %r instance required to send a request "
-                    "is None." % (
-                        reqdAttr, self.__class__.__name__))
+                    "Attribute %r of %r instance required to send %s request "
+                    "is None." % (req_type, reqdAttr, self.__class__.__name__))
+            if reqdAttr == 'transport':
+                # Transport is weak so ensure we retain it here.
+                tp = attrVal
 
         req = getattr(Message, req_type)()
         req.startline.uri = deepcopy(self.to_uri)
@@ -229,51 +195,42 @@ class Dialog(
 
         req.FromHeader.parameters.tag = deepcopy(self.localTag)
         req.ToHeader.parameters.tag = deepcopy(self.remoteTag)
-        req.Call_IdHeader = deepcopy(self._dlg_callIDHeader)
+
+        if self.callIDHeader is None:
+            self.callIDHeader = Call_IdHeader()
+        req.Call_IdHeader = deepcopy(self.callIDHeader)
 
         log.debug("send request of type %r", req.type)
 
         if req.type == req.types.invite:
             self.addLocalSessionSDP(req)
 
-        if hasattr(self, "delegate"):
-            dele = self.delegate
-            if hasattr(dele, "configureOutboundMessage"):
-                dele.configureOutboundMessage(req)
-
-        tp = self.transport
-        if tp is None:
-            raise AttributeError(
-                "%r instance has no transport attribute so cannot send a "
-                "request." % (self.__class__.__name__,))
-
-        try:
-            ad = tp.sendMessage(req, self.remote_name, self.remote_port)
-        except prot.Incomplete:
-            log.error("Incomplete message of type %s", req.type)
-            raise
-
-        log.debug('Resolved name %s:%d', ad.remote_name, ad.remote_port)
-        self.remote_name, self.remote_port = ad.remote_name, ad.remote_port
+        tp.send_message_with_transaction(
+            req, self, self.remote_name, self.remote_port)
         req.unbindAll()
         self._dlg_requests.append(req)
         tp.updateDialogGrouping(self)
 
-    def sendResponse(self, response, req):
+    def send_response(self, response, req):
         log.debug("Send response type %r.", response)
 
         resp = MessageResponse(response)
         self.configureResponse(resp, req)
         vh = req.viaheader
-        self.transport.sendMessage(resp, astr(vh.address), vh.port)
+        tp = self.transport
+        if tp is None:
+            log.warning(
+                'Unable to send %s response to %s request as transport has '
+                'been released' % (response.type, req.type))
+            return
+
+        self.transport.send_message_with_transaction(
+            resp, self, astr(vh.address), vh.port)
+        self.__last_response = resp
 
     def configureResponse(self, resp, req):
-        log.debug("Configure response starting with %r", resp)
-        log.debug('Request was: %r', req)
-
+        log.debug('Transform %s to %s', req.type, resp.type)
         Transform(self.Transforms, req, req.type, resp, resp.type)
-
-        log.debug('Transformed to %r', resp)
 
         if req.type == req.types.invite and resp.type == 200:
             self.addLocalSessionSDP(resp)
@@ -281,58 +238,68 @@ class Dialog(
         resp.FromHeader.parameters.tag = self.remoteTag
         resp.ToHeader.parameters.tag = self.localTag
 
-        if hasattr(self, "delegate"):
-            dele = self.delegate
-            if hasattr(dele, "configureOutboundMessage"):
-                dele.configureOutboundMessage(resp)
-
-        log.debug("Response now %r", resp)
-
-    def hasTerminated(self):
-        """Dialog is over. Remove it from the transport."""
-        tp = self.transport
-        if tp is not None:
-            tp.removeDialog(self)
-
     def session_listen(self, *args, **kwargs):
         if self.localSession is not None:
             self.localSession.listen()
 
     #
-    # =================== DELEGATE METHODS ====================================
+    # =================== TRANSACTION USER METHODS ============================
     #
+    def request(self, msg):
+        log.debug("Dialog receiving message")
+        log.detail("%r", msg)
+        mtype = msg.type
+
+        def RaiseBadInput(msg=b""):
+            raise(UnexpectedInput(
+                "%r instance fsm has no input for message type %r." % (
+                    self.__class__.__name__, mtype)))
+
+        if self.callIDHeader is None:
+            self.callIDHeader = msg.Call_IDHeader
+
+        if self.remoteTag is None:
+            rtag = msg.FromHeader.parameters.tag
+            log.debug("Learning remote tag: %s", rtag)
+            self.remoteTag = rtag
+            self.transport.updateDialogGrouping(self)
+
+        return self.hit(
+            'receiveRequest' + getattr(Request.types, mtype), msg)
+
+    def response(self, msg):
+
+        log.debug("Dialog receiving response")
+        log.detail("%r", msg)
+        mtype = msg.type
+
+        if self.remoteTag is None:
+            rtag = msg.ToHeader.parameters.tag
+            log.debug("Learning remote tag: %s", rtag.value)
+            self.remoteTag = rtag
+            self.transport.updateDialogGrouping(self)
+
+        if not isinstance(mtype, Integral):
+            self.raise_unexpected_input('response %r' % (mtype,))
+
+        rinp = self._fix_response_input(mtype)
+
+        self.hit(rinp, msg)
+
+    def timeout(self, error):
+        rinp = self._fix_response_input(408)
+        self.hit(rinp, error)
+
+    def transport_error(self, error):
+        rinp = self._fix_response_input(503)
+        self.hit(rinp, error)
 
     #
     # =================== MAGIC METHODS =======================================
     #
-    sendRequestRE = re.compile(
-        "^sendRequest(%s)$" % "|".join(Request.types),
-        re.IGNORECASE)
-    sendResponseRE = re.compile("^sendResponse([0-9]+)$", re.IGNORECASE)
-
-    def __getattr__(self, attr):
-
-        mo = Dialog.sendRequestRE.match(attr)
-        if mo:
-            method = getattr(Request.types, mo.group(1))
-            log.debug("Method is type %r", method)
-            return WeakMethod(self, "sendRequest", static_args=(method,))
-
-        mo = Dialog.sendResponseRE.match(attr)
-        if mo:
-            code = int(mo.group(1))
-            while code < 100:
-                code *= 100
-            return WeakMethod(self, "sendResponse", static_args=(code,))
-
-        try:
-            log.detail("Attr %r matches nothing so far.", attr)
-            return super(Dialog, self).__getattr__(attr)
-
-        except AttributeError:
-            raise AttributeError(
-                "%r instance has no attribute %r." % (
-                    self.__class__.__name__, attr))
+    def __del__(self):
+        log.info('DELETE %s instance', type(self).__name__)
+        getattr(super(Dialog, self), '__del__', lambda: None)()
 
     #
     # =================== INTERNAL METHODS ====================================
@@ -352,16 +319,17 @@ class Dialog(
         if sdpBody is not None:
             msg.addBody(Body(type=sdpsyntax.SIPBodyType, content=sdpBody))
 
-    def _dlg_resolveTarget(self, target):
-        if self.remote_name is None:
-            if target is None:
-                raise ValueError("No target set to send to.")
+    def _fix_response_input(self, mtype):
+        orig_mtype = mtype
+        while mtype >= 1:
+            attr = "response_%d" % mtype
+            if attr in self.Inputs:
+                log.debug("Response input found: %d", mtype)
+                return attr
 
-        if target is None:
-            target = self.remote_name
-            log.debug("Use cached address %r", target)
-            return target
+            mtype /= 10
 
-        log.debug("Use supplied target %r", target)
-        self.remote_name = target
-        return target
+        # Didn't find one, perhaps there is an xxx response.
+        if 'response_xxx' in self.Inputs:
+            return 'response_xxx'
+        self.raise_unexpected_input('response_%d' % (orig_mtype,))

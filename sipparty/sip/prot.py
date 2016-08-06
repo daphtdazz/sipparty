@@ -45,7 +45,7 @@ protocols = AsciiBytesEnum((b"SIP/2.0",), normalize=lambda p: p.upper())
 CRLF = b"\r\n"
 SP = b" "
 HTAB = b"\t"
-WS = b"[ \t]" % bglobals()
+WS = b"[ %(HTAB)s]" % bglobals()
 LWS = b"(?:%(WS)s*%(CRLF)s)?%(WS)s+" % bglobals()  # Linear whitespace.
 SWS = b"(?:%(LWS)s)?" % bglobals()  # Separator whitespace.
 HCOLON = b"%(WS)s*:%(SWS)s" % bglobals()
@@ -334,6 +334,15 @@ ResponseCodeMessages = {
     606: b"Not Acceptable",
 }
 
+# This is T1 from https://tools.ietf.org/html/rfc3261#section-17.1.1.1
+DefaultRetryTimeMS = 500
+
+# T2 from https://tools.ietf.org/html/rfc3261#section-17.1.2.2
+DefaultMaximumRetryTimeMS = 4000
+
+# T4 from https://tools.ietf.org/html/rfc3261#section-17.1.2.2
+DefaultGiveupTimeMS = 5000
+
 
 class ProtocolError(Exception):
     """Something didn't make sense in SIP."""
@@ -352,15 +361,19 @@ class Incomplete(ProtocolError):
     """
 
 
-def ProvisionalDialogID(CallIDText, localTagText):
-    return (CallIDText, localTagText)
+def ProvisionalDialogID(call_id_text, local_tag_text):
+    return (call_id_text, local_tag_text)
 
 
-def EstablishedDialogID(CallIDText, localTagText, remoteTagText):
-    return (CallIDText, localTagText, remoteTagText)
+def EstablishedDialogID(call_id_text, local_tag_text, remote_tag_text):
+    return (call_id_text, local_tag_text, remote_tag_text)
 
 
-def ProvisionalDialogIDFromEstablishedID(estDID):
-    return estDID[:2]
+def ProvisionalDialogIDFromEstablishedID(est_did):
+    return est_did[:2]
+
+
+def TransactionID(ttype, branch, cseq_method):
+    return (ttype, branch, cseq_method)
 
 bdict = bglobals()

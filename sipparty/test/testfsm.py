@@ -32,23 +32,30 @@ from .setup import (MagicMock, patch, SIPPartyTestCase)
 log = logging.getLogger(__name__)
 
 
-class TestFSM(SIPPartyTestCase):
-
+class TestFSMBase(SIPPartyTestCase):
     Clock = MagicMock()
 
     def setUp(self):
         self.retry = 0
         self.cleanup = 0
+        self.done = False
 
         self.Clock.return_value = 0
+
+    def do_and_mark_completion(self, func):
+        func()
+        self.done = True
+
+
+class TestFSM(TestFSMBase):
 
     def testSimple(self):
         nf = FSM(name="testfsm")
         self.assertEqual(
             str(nf),
             "'FSM' 'testfsm':\n"
-            "  (No states or transitions.)\n"
-            "Current state: None")
+            "  (No transitions.)\n"
+            "Current state: 'Initial'")
 
         nf.addTransition("initial", "start", "starting")
         nf.addTransition("starting", "start", "starting")
@@ -154,13 +161,13 @@ class TestFSM(SIPPartyTestCase):
 
         self.assertEqual(lfsm.state, 'end')
 
-    @patch.object(fsmtimer, 'Clock', new=Clock)
-    @patch.object(retrythread, 'Clock', new=Clock)
+    @patch.object(fsmtimer, 'Clock', new=TestFSMBase.Clock)
+    @patch.object(retrythread, 'Clock', new=TestFSMBase.Clock)
     def testTimer(self):
         nf = FSM(name="TestTimerFSM")
 
         self.assertRaises(
-            ValueError,
+            TypeError,
             lambda: Timer("retry", lambda: self, 1))
 
         def pop_func():
@@ -232,7 +239,7 @@ class TestFSM(SIPPartyTestCase):
             'bad_action': lambda self: self.hit('hit')})()
         fsm.addTransition('initial', 'hit', 'end', action='bad_action')
         fsm.state = 'initial'
-        self.assertRaises(RuntimeError, fsm.hit, 'hit')
+        self.assertRaises(UnexpectedInput, fsm.hit, 'hit')
 
     def testAsyncFSM(self):
         nf = AsyncFSM(name="TestAsyncFSM")
@@ -242,7 +249,7 @@ class TestFSM(SIPPartyTestCase):
         # Check trying to create a timer with a time that isn't iterable
         # ("1") fails.
         self.assertRaises(
-            ValueError,
+            TypeError,
             lambda: Timer("retry", lambda: self, 1))
 
         def pop_func():
@@ -295,16 +302,23 @@ class TestFSM(SIPPartyTestCase):
         nf.hit("stop", 1)
         WaitFor(lambda: actnext_hit[0] == 1)
 
-    @patch.object(fsmtimer, 'Clock', new=Clock)
-    @patch.object(retrythread, 'Clock', new=Clock)
     def testFSMClass(self):
+        self.subtest_FSM_class(async=False)
 
+    def testAsyncFSMClass(self):
+        self.subtest_FSM_class(async=True)
+
+    @patch.object(fsmtimer, 'Clock', new=TestFSMBase.Clock)
+    @patch.object(retrythread, 'Clock', new=TestFSMBase.Clock)
+    def subtest_FSM_class(self, async):
         actnow_hit = [0]
 
         def actnow(*args, **kwargs):
             actnow_hit[0] += 1
 
-        class FSMTestSubclass(AsyncFSM):
+        cls = AsyncFSM if async else FSM
+
+        class FSMTestSubclass(cls):
 
             @classmethod
             def AddClassTransitions(cls):
@@ -339,14 +353,23 @@ class TestFSM(SIPPartyTestCase):
         nf.hit("start")
         self.assertEqual(actnow_hit[0], 1)
 
+        def check_retries(val):
+            if async:
+                WaitFor(lambda: nf.retries == val, timeout_s=10)
+            else:
+                nf.checkTimers()
+                self.assertEqual(nf.retries, val)
+
         self.assertEqual(nf.retries, 0)
         self.Clock.return_value = 1
-        nf.checkTimers()
-        self.assertEqual(nf.retries, 1)
-        nf.hit("start_done")
+        check_retries(1)
         self.Clock.return_value = 2
-        nf.checkTimers()
-        self.assertEqual(nf.retries, 1)
+        check_retries(2)
+        self.Clock.return_value = 3
+        check_retries(3)
+        nf.hit("start_done")
+        self.Clock.return_value = 4
+        check_retries(3)
         nf.hit("stop")
         nf.hit("start")
 
@@ -354,7 +377,7 @@ class TestFSM(SIPPartyTestCase):
         # forward some number of seconds and check 3 times in a row, we
         # should pop on each one.
         self.Clock.return_value = 10
-        WaitFor(lambda: nf.checkTimers() is None and nf.retries == 4)
+        WaitFor(lambda: nf.checkTimers() is None and nf.retries == 6)
 
         # The Inputs should be instance specific.
         nf.addTransition("stopped", "error", "error")
@@ -436,7 +459,7 @@ class TestFSM(SIPPartyTestCase):
             ValueError,
             lambda: nf.addTransition(
                 "a", "b", "c", start_threads=[(
-                    "not", "all", "strings", ('this', 'is', 'a', 'tuple')
+                    "not", "all", "strings", {'this': 'is', 'a': 'map'}
                 )]
             )
         )
@@ -456,7 +479,10 @@ class TestFSM(SIPPartyTestCase):
         self.assertRaises(
             TypeError, fsm.waitForStateCondition, 'This is not a Callable')
 
+    def test_async_timers(self):
         self.subTestWaitFor(async_timers=True)
+
+    def test_sync_timers(self):
         self.subTestWaitFor(async_timers=False)
 
     def subTestWaitFor(self, async_timers):
@@ -498,12 +524,50 @@ class TestFSM(SIPPartyTestCase):
             FSMTimeout,
             lambda: fsm1.waitForStateCondition(
                 lambda state: state == "in progress", timeout=0.1))
-        log.info("EXPECT EXCEPTION IN ASYNC MODE")
+        self.expect_log("UnexpectedInput")
         fsm1.hit("cancel_to_null_state")
         if not async_timers:
             self.assertRaises(UnexpectedInput,
                               lambda: fsm1.hit("bad input"))
-        log.info("END EXPECT EXCEPTION IN ASYNC MODE")
+
+    def test_async_wait_for(self):
+        class TFSM(AsyncFSM):
+            FSMDefinitions = {
+                InitialStateKey: {
+                    "input": {
+                        TransitionKeys.NewState: "in progress"
+                    },
+                    "cancel": {
+                        TransitionKeys.NewState: "end"
+                    }
+                },
+                "in progress": {
+                    "input": {
+                        TransitionKeys.NewState: "end"
+                    }
+                },
+                "end": {
+                    "reset": {
+                        TransitionKeys.NewState:
+                        InitialStateKey
+                    },
+                    "cancel_to_null_state": {
+                        TransitionKeys.NewState: "null"
+                    }
+                },
+                "null": {}
+            }
+
+        log.info('Show that wait for works over more than one transition')
+        fsm2 = TFSM()
+        thr = threading.Thread(target=self.do_and_mark_completion, args=(
+            lambda: fsm2.waitForStateCondition(
+                lambda state: state == fsm2.States.end),))
+        thr.start()
+        fsm2.hit('input')
+        fsm2.hit('input')
+        WaitFor(lambda: self.done)
+        thr.join()
 
     def test_lifetimes(self):
 
@@ -561,8 +625,8 @@ class TestFSM(SIPPartyTestCase):
         tfsm.meth1.assert_called_once_with()
         tfsm.meth2.assert_called_once_with()
 
-    @patch.object(fsmtimer, 'Clock', new=Clock)
-    @patch.object(retrythread, 'Clock', new=Clock)
+    @patch.object(fsmtimer, 'Clock', new=TestFSMBase.Clock)
+    @patch.object(retrythread, 'Clock', new=TestFSMBase.Clock)
     def test_timer_definitions(self):
 
         class TimerFSM(FSM):
@@ -614,3 +678,122 @@ class TestFSM(SIPPartyTestCase):
         self.Clock.return_value = 6
         tfsm.checkTimers()
         self.assertEqual(tfsm.action_count, 2)
+
+    def test_partial_actions(self):
+
+        class TFSM(AsyncFSM):
+            FSMDefinitions = {
+                InitialStateKey: {
+                    "input": {
+                        TransitionKeys.NewState: "end",
+                        TransitionKeys.Action: [
+                            ('meth1', 'arg1'), 'meth2',
+                            ['meth3']]
+                    },
+                },
+                'end': {}
+            }
+
+            def __init__(self, *args, **kwargs):
+                super(TFSM, self).__init__(*args, **kwargs)
+                self.meth1 = MagicMock()
+                self.meth2 = MagicMock()
+                self.meth3 = MagicMock()
+
+        tfsm = TFSM()
+        tfsm.hit('input')
+        tfsm.meth1.assert_called_once_with('arg1')
+        tfsm.meth2.assert_called_once_with()
+        tfsm.meth3.assert_called_once_with()
+
+    @patch.object(fsmtimer, 'Clock', new=TestFSMBase.Clock)
+    @patch.object(retrythread, 'Clock', new=TestFSMBase.Clock)
+    def test_async_timer_lifetime(self):
+
+        class TimerFSM(AsyncFSM):
+            FSMDefinitions = {
+                InitialStateKey: {
+                    'input': {
+                        TransitionKeys.NewState: 'done',
+                        TransitionKeys.StartTimers: ['running_timer']
+                    }
+                },
+                'done': {}
+            }
+            FSMTimers = {
+                'running_timer': ('running_timer_action', 'running_timer_gen')
+            }
+
+            timer_duration_s = 2
+
+            def __init__(self, *args, **kwargs):
+                super(TimerFSM, self).__init__(*args, **kwargs)
+                self.action_count = 0
+
+            def running_timer_gen(self):
+                while True:
+                    yield self.timer_duration_s
+
+            def running_timer_action(self):
+                self.action_count += 1
+
+        tfsm = TimerFSM()
+        wtfsm = ref(tfsm)
+        del tfsm
+        self.assertIsNone(wtfsm())
+
+
+class TestFSMDelegate(TestFSMBase):
+
+    def setUp(self):
+        getattr(super(TestFSMDelegate, self), 'setUp', lambda: None)()
+        self.dele_action_called = 0
+
+    def fsm_dele_action(self, fsm):
+        self.assertTrue(isinstance(fsm, FSM))
+        self.dele_action_called += 1
+
+    def test_delegate(self):
+        tfsm = FSM()
+        tfsm.delegate = self
+        tfsm.addTransition(
+            tfsm.States.Initial, 'start', 'Running', action='action')
+        self.assertEqual(self.dele_action_called, 0)
+        tfsm.hit('start')
+        self.assertEqual(self.dele_action_called, 1)
+
+
+class TestFSMActionsOnEntryToState(TestFSMBase):
+
+    def test_preconfigured_action_on_entry_sync(self):
+        self.subtest_preconfigured_action_on_entry(async=False)
+
+    def test_preconfigured_action_on_entry_async(self):
+        self.subtest_preconfigured_action_on_entry(async=True)
+
+    def subtest_preconfigured_action_on_entry(self, async):
+
+        class TFSM(FSM if not async else AsyncFSM):
+            FSMDefinitions = {
+                InitialStateKey: {
+                    "input": {
+                        TransitionKeys.NewState: "end",
+                    },
+                },
+                'end': {}
+            }
+            FSMStateEntryActions = (
+                ('end', 'action_on_end'),
+            )
+
+            def __init__(self):
+                super(TFSM, self).__init__()
+                self.ended = False
+
+            def action_on_end(self):
+                self.ended = True
+
+        tf = TFSM()
+        self.assertFalse(tf.ended)
+        tf.hit('input')
+        self.assertTrue(tf.ended)

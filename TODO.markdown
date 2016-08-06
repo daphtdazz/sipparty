@@ -2,17 +2,22 @@
 
 ## List. ##
 
-1. UDP transport retrying. 
-2. REGISTER dialogues.
-3. TCP support. 
-4. Move "Programming guides" into a section of the documentation.
+3. REGISTER dialogues.
+4. TCP support.
+5. Move "Programming guides" into a section of the documentation.
 9. Smarter ACK than simply "ACK all 200s" in dialog.py
+10. expiry timer for invites
+11. The mechanism for determining the correct response type to input is not thread-safe.
 11. Refactor singleton out of util.
+12. message.isrequest replace with property is_request
+13. de-camel-cap methods etc that should be under_scores, e.g. addDialogHandlerForAOR
 13. Make util a package with sub-modules.
+14. packagify transport splitting out the different classes
 10. Get rid of "delegateattributes", use "vb_dependencies". -- ?? semi done?
 12. Move sipheader out of util and probably into prot.
 15. Document and fixing attribute naming convention in vb.py.
 16. deepclass representation is overly verbose / not detailed enough depending on whether we recurse to superclass's deepclasses.
+17. retrythread is heavyweight: should be able to share retrythreads amongst multiple async FSMs / users (e.g. Transactions!)
 18. Better handling of attempt to pass an unrecognised kwarg into DeepClass.__init__().
 19. Cumulative field_bindings for Message classes.
 20. Short form header names.
@@ -24,6 +29,7 @@
 27. Disable checking on deepclass attributes.
 28. Allow the DeepClass attribute dictionary to be a list / tuple of (key, value) tuples to enforce ordering.
 29. OnlyWhenLocked decorator should allow the lock attribute name to be specified in its constructor.
+30. Use bridge pattern to make FSM more lightweight and allow asynchronous flexibility
 
 ## Done list. ##
 
@@ -51,6 +57,12 @@
 13. Example scripts - done initial ipython demo 31/1/2016
 14. Cache Datagram sockets for faster allocation of a socket when sending data - sockets are reused by default 31/1/2016
 15. SIPTransport could allow force override to get a new listen socket - done 31/06/2016: can request not to reuse a socket in `Transport.listen_for_me`
+16. Don't use 0.0.0.0 DGRAM listen sockets for sending from - 5/8/2016
+17. the name for inputs into server dialogs to indicate "respond with XXX" is response_XXX when it should be "respond_XXX" which is more consistent with transaction. -- done ~30/7/2016
+17. UDP transport retrying.
+   a.  Should have a dialog manager. -- initial done 8/5/2016
+   b.  Party should have transaction manager, dialog manager, transport -- initial done 8/5/2016
+   c.  Need to check flows are now correct and transaction lifetimes work. In particular UTs for dialog + transaction interactions (check transaction retries for all types, + 1XX provisional responses) -- mostly done 5/8/2016
 
 ## Changelog ##
 
@@ -62,7 +74,7 @@
 
 ### What is the design for the media session?  ###
 
-1. Media session 
+1. Media session
 
 ### When a VB instance is set on an attribute on another VB instance due to a binding action, where is its parent? ###
 
@@ -98,7 +110,7 @@ Potential solutions:
     But now, when pushing values to a parent, how can we choose the right path, as we have no way to know what attribute of the parent we are, so the parent itself cannot determine uniquely its parent for the attribute.
 
 3. You can't add bindings between two direct attributes of the same object. So the following are illegal:
-    
+
         a.bind("a", "b")
         a.bind("a.a.a", "a.a.b")
 

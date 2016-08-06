@@ -46,6 +46,9 @@ class ParsedProperty(object):
         return getattr(obj, self._pp_attr)
 
     def __set__(self, obj, val):
+        log.debug(
+            'Set %s instance for attribute %s on %s instance',
+            type(val).__name__, self._pp_attr, type(obj).__name__)
         atr = self._pp_attr
         if val is None:
             log.debug(
@@ -69,10 +72,13 @@ class ParsedProperty(object):
 
 def ParsedPropertyOfClass(cls):
 
-    def ParsedPropertyOfClassGenerator(name):
-        return ParsedProperty(name, cls)
+    class _ParsedPropertyOfClass(ParsedProperty):
 
-    return ParsedPropertyOfClassGenerator
+        def __init__(self, name, *args, **kwargs):
+            super(_ParsedPropertyOfClass, self).__init__(
+                name, cls, *args, **kwargs)
+
+    return _ParsedPropertyOfClass
 
 
 class Parser(object):

@@ -22,7 +22,8 @@ from contextlib import contextmanager
 from copy import deepcopy
 import logging
 from six import (iteritems, iterkeys)
-from .util import (Enum, DerivedProperty)
+from .util import (
+    append_to_exception_message, CheckingProperty, Enum, DerivedProperty)
 from .vb import ValueBinder
 
 log = logging.getLogger(__name__)
@@ -40,8 +41,13 @@ def DCProperty(tlp, name, attrDesc):
             return None
 
         log.debug("%r uses descriptor %r", internalName, dc)
-        return dc(internalName)
 
+        return type(
+            '%sDescriptor' % (name,), (CheckingProperty, dc), {})(
+                name=internalName, check=attrDesc.get('check'))
+
+    # Remaining keys are for the derived property class, except 'gen' which is
+    # used only once at init time to populate the initial value.
     dpdict = dict(attrDesc)
     for badKey in (dck.gen,):
         if badKey in dpdict:
@@ -49,7 +55,7 @@ def DCProperty(tlp, name, attrDesc):
     log.detail(
         "New derived property for %r underlying %r: with config %r", name,
         internalName, dpdict)
-    return DerivedProperty(internalName, **dpdict)
+    return DerivedProperty(name=internalName, **dpdict)
 
 
 def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
@@ -236,9 +242,6 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
             return
 
         def _dck_genTopLevelValueFromTLDict(self, tlad, tlsvals):
-            """:param tlad: The Top-Level-Attribute Dictionary, which describes
-            the attribute.
-            """
             gen = tlad[dck.gen]
             if isinstance(gen, str):
                 genAttr = getattr(self.__class__, gen)
@@ -249,7 +252,12 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
 
                 return genAttr
 
-            return gen(**tlsvals)
+            try:
+                return gen(**tlsvals)
+            except Exception as exc:
+                append_to_exception_message(
+                    exc, ' - processing constructor %s' % gen)
+                raise
 
         @contextmanager
         def _dc_enter_repr(self):

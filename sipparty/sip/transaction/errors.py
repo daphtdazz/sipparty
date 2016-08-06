@@ -1,6 +1,6 @@
-"""__init__.py
+"""SIP transaction errors.
 
-Copyright 2015 David Park
+Copyright 2016 David Park
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,12 +14,15 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from six import itervalues
-from ..dialog import Dialog
-from .call import (SimpleClientDialog, SimpleServerDialog)
 
-AllDialogsTypes = [
-    dlg for dlg in itervalues(dict(locals()))
-    if isinstance(dlg, type) and issubclass(dlg, Dialog) and dlg is not Dialog]
-del Dialog
-del itervalues
+
+class TransactionError(Exception):
+    pass
+
+
+class TransactionTimeout(TransactionError):
+    pass
+
+
+class NoTransport(TransactionError):
+    pass

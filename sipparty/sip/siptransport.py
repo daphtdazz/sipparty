@@ -1,6 +1,4 @@
-"""siptransport.py
-
-Specializes the transport layer for SIP.
+"""Specializes the transport layer for SIP.
 
 Copyright 2015 David Park
 
@@ -16,26 +14,41 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+from abc import ABCMeta, abstractmethod
 import logging
-from six import (binary_type as bytes)
+from six import (add_metaclass, binary_type as bytes)
 from socket import SOCK_DGRAM
-from weakref import (WeakValueDictionary)
+from ..classmaker import classbuilder
 from ..parse import ParseError
 from ..transport import (
     IsValidTransportName, Transport, SockTypeFromName,
     UnregisteredPortGenerator)
 from ..util import (abytes, DerivedProperty, WeakMethod)
 from . import prot
-from .components import Host
+from .components import AOR, Host
 from .message import Message
+from .transaction import TransactionManager, TransactionTransport
 from . import Incomplete
 
 log = logging.getLogger(__name__)
-prot_log = logging.getLogger("messages")
-prot_log.setLevel(logging.INFO)
 
 
-class SIPTransport(Transport):
+@add_metaclass(ABCMeta)
+class AORHandler(object):
+
+    @abstractmethod
+    def new_dialog_from_request(self, req):
+        """Handle a dialog creating request.
+
+        :raises Exception:
+            Any exception raised is logged at error level and the
+        :returns: A Dialog instance.
+        """
+        raise NotImplemented
+
+
+@classbuilder(bases=(Transport, TransactionTransport))
+class SIPTransport:
     """SIPTransport."""
 
     #
@@ -64,14 +77,15 @@ class SIPTransport(Transport):
         super(SIPTransport, self).__init__()
         self._sptr_messageConsumer = None
         self._sptr_messages = []
-        self._sptr_provisionalDialogs = WeakValueDictionary()
-        self._sptr_establishedDialogs = WeakValueDictionary()
+        self._sptr_provisionalDialogs = {}
+        self._sptr_establishedDialogs = {}
 
         # Dialog handler is keyed by AOR. This can't be a WeakValueDictionary
         # because generally methods are transient objects which will get
         # released if we don't store strong references to them. Therefore if
         # you want a weak reference, use WeakMethod.
         self._sptr_dialogHandlers = {}
+        self.transaction_manager = TransactionManager(self)
 
     def listen_for_me(self, **kwargs):
 
@@ -84,32 +98,96 @@ class SIPTransport(Transport):
             SIPTransport, self).listen_for_me(
                 WeakMethod(self, 'sipByteConsumer'), **kwargs)
 
+    #
+    # =================== AOR MANAGER INTERFACE ===============================
+    #
     def addDialogHandlerForAOR(self, aor, handler):
-        """Register a handler to call """
+        """Register a handler to call."""
+        if not isinstance(handler, AORHandler):
+            raise TypeError('%s instance is not of type AORHandler' % (
+                type(handler).__name__,))
+
+        if not isinstance(aor, AOR):
+            raise TypeError('%s instance is not an AOR' % type(aor).__name__)
 
         hdlrs = self._sptr_dialogHandlers
-        if aor in hdlrs:
+        aor_bytes = bytes(aor)
+        if aor_bytes in hdlrs:
             raise KeyError(
-                "Handler already registered for AOR %r" % bytes(aor))
+                "Handler already registered for AOR %r" % aor_bytes)
 
-        log.debug("Adding handler %r for AOR %r", handler, aor)
-        hdlrs[aor] = handler
+        log.debug("Adding handler %r for AOR %r", handler, aor_bytes)
+        hdlrs[aor_bytes] = handler
 
         if log.getEffectiveLevel() <= logging.DETAIL:
             log.detail('All aors to handle now: %s', ', '.join(
-                [str(key) for key in self._sptr_dialogHandlers.keys()]))
+                [str(key) for key in hdlrs.keys()]))
 
     def removeDialogHandlerForAOR(self, aor):
-
         hdlrs = self._sptr_dialogHandlers
-        if aor not in hdlrs:
+        aor_bytes = bytes(aor)
+        if aor_bytes not in hdlrs:
             raise KeyError(
-                "AOR handler not registered for AOR %r" % bytes(aor))
+                "AOR handler not registered for AOR %r" % aor_bytes)
 
-        log.debug("Remove handler for AOR %r", aor)
-        del hdlrs[aor]
+        log.debug("Remove handler for AOR %r", aor_bytes)
+        del hdlrs[aor_bytes]
 
-    def sendMessage(self, msg, name, port):
+    def updateDialogGrouping(self, dlg):
+        log.detail("Update grouping for dlg %r", dlg)
+        pds = self.provisionalDialogs
+        eds = self.establishedDialogs
+        pdid = dlg.provisionalDialogID
+        if hasattr(dlg, "dialogID"):
+            log.debug("Dialog is established.")
+            did = dlg.dialogID
+            if pdid in pds:
+                log.debug("  Dialog was provisional.")
+                del pds[pdid]
+            if did not in eds:
+                log.debug("  Dialog was not yet established.")
+                eds[did] = dlg
+
+        else:
+            log.debug("Dialog is not established.")
+            if pdid not in pds:
+                log.debug("  Dialog is new.")
+                pds[pdid] = dlg
+
+    def removeDialog(self, dlg):
+        pdid = dlg.provisionalDialogID
+        pdids = self.provisionalDialogs
+        if pdid in pdids:
+            del pdids[pdid]
+
+        try:
+            did = dlg.dialogID
+            eds = self.establishedDialogs
+            if did in eds:
+                del eds[did]
+        except AttributeError:
+            pass
+
+    def send_message_with_transaction(
+            self, msg, transaction_user, remote_name=None, remote_port=None,
+            **kwargs):
+        """Send a message reliabily using an appropriate transaction."""
+        log.debug('Find the transaction')
+
+        kwargs.update({
+            k: v
+            for k, v in (
+                ('remote_name', remote_name), ('remote_port', remote_port)
+            ) if v is not None
+        })
+        trns = self.transaction_manager.transaction_for_outbound_message(
+            msg, transaction_user=transaction_user)
+        trns.handle_outbound_message(msg, **kwargs)
+
+    #
+    # =================== TRANSPORT SENDER INTERFACE ==========================
+    #
+    def send_message(self, msg, name, port):
         log.debug("Send message -> %r type %s", (name, port), msg.type)
 
         if not IsValidTransportName(name):
@@ -166,14 +244,14 @@ class SIPTransport(Transport):
         eoleol_index = data.find(eoleol)
         if eoleol_index == -1:
             # No possibility of a full message yet.
-            log.debug("Data not a full SIP message.")
+            log.warning("Data not a full SIP message.")
             return 0
 
         # We've probably got a full message, so parse it.
         log.debug("Full message")
         try:
             msg = Message.Parse(data)
-            log.info("Message parsed.")
+            log.debug("Message parsed.")
         except ParseError as pe:
             log.error("Parse errror %s parsing message.", pe)
             return 0
@@ -181,46 +259,66 @@ class SIPTransport(Transport):
             self.consumeMessage(msg)
         except Exception:
             log.exception(
-                "Consuming %r message raised exception.", msg)
+                "Consuming %s message raised exception.", msg.type)
 
         return msg.parsedBytes
 
     def consumeMessage(self, msg):
         self._sptr_messages.append(msg)
 
-        if msg.type == 'ACK':
-            return
-
         if not hasattr(msg.FromHeader.parameters, "tag"):
             log.debug("FromHeader: %r", msg.FromHeader)
-            log.info("Message with no from tag is discarded.")
+            log.warning("Message with no From: tag is discarded.")
             return
+
         if (not hasattr(msg, "Call_IDHeader") or
                 len(msg.Call_IdHeader.value) == 0):
             log.debug("Call-ID: %r", msg.Call_IDHeader)
-            log.info("Message with no Call-ID is discarded.")
+            log.warning("Message with no Call-ID is discarded.")
+            return
+
+        # See if we have a transaction
+        trns = self.transaction_manager.transaction_for_inbound_message(msg)
+        assert trns is not None
+
+        if trns.state != trns.States.Initial:
+            log.debug('Message for current transaction.')
+            trns.consume_message(msg)
             return
 
         if not hasattr(msg.ToHeader.parameters, "tag"):
             log.debug("Dialog creating message")
-            self.consumeDialogCreatingMessage(msg)
-        else:
-            log.debug("In dialog message")
-            self.consumeInDialogMessage(msg)
+            self.consumeDialogCreatingMessage(msg, trns)
+            return
 
-    def consumeDialogCreatingMessage(self, msg):
+        log.debug("In dialog message")
+        self.consumeInDialogMessage(msg, trns)
+
+    def consumeDialogCreatingMessage(self, msg, trns):
         toAOR = msg.ToHeader.field.value.uri.aor
         hdlrs = self._sptr_dialogHandlers
 
         log.debug("Find handler for %r", toAOR)
-        if toAOR not in hdlrs:
-            log.info("Message for unregistered AOR %r discarded.", toAOR)
+        to_aor_bytes = bytes(toAOR)
+        if to_aor_bytes not in hdlrs:
+            log.warning(
+                "Message for unregistered AOR %r discarded.", to_aor_bytes)
             return
 
-        hdlr = hdlrs[toAOR]
-        hdlr(msg)
+        hdlr = hdlrs[to_aor_bytes]
 
-    def consumeInDialogMessage(self, msg):
+        dlg = hdlr.new_dialog_from_request(msg)
+        if dlg is None:
+            log.warning(
+                'Dropped dialog creating %s message as not wanted by AOR '
+                'handler', msg.type)
+            return
+
+        trns.transaction_user = dlg
+        trns.consume_message(msg)
+        self.updateDialogGrouping(dlg)
+
+    def consumeInDialogMessage(self, msg, trns):
         estDs = self.establishedDialogs
 
         if msg.isresponse():
@@ -235,56 +333,26 @@ class SIPTransport(Transport):
                 msg.FromHeader.parameters.tag.value)
 
         log.detail("Is established dialog %r in %r?", did, estDs)
-        if did in estDs:
+        dlg = estDs.get(did)
+        if dlg is not None:
             log.debug("Found established dialog for %r", did)
-            return estDs[did].receiveMessage(msg)
+            trns.transaction_user = dlg
+            trns.consume_message(msg)
+            return
 
         # Couldn't find an established dialog, so perhaps this is the
         # establishing response for a provisional dialog we started before.
         pdid = prot.ProvisionalDialogIDFromEstablishedID(did)
         provDs = self.provisionalDialogs
         log.detail("Is provisional dialog %r in %r?", pdid, provDs)
-        if pdid in provDs:
+        dlg = provDs.get(pdid)
+        if dlg is not None:
             log.debug("Found provisional dialog for %r", pdid)
-            return provDs[pdid].receiveMessage(msg)
+            trns.transaction_user = dlg
+            trns.consume_message(msg)
+            return
 
-        log.warning(
-            "Unable to find a dialog for message with dialog ID %r", did)
-        log.detail("  Current provisional dialogs: %r", provDs)
-        log.detail("  Current establishedDialogs dialogs: %r", estDs)
-        return
-
-    def updateDialogGrouping(self, dlg):
-        log.detail("Update grouping for dlg %r", dlg)
-        pds = self.provisionalDialogs
-        eds = self.establishedDialogs
-        pdid = dlg.provisionalDialogID
-        if hasattr(dlg, "dialogID"):
-            log.debug("Dialog is established.")
-            did = dlg.dialogID
-            if pdid in pds:
-                log.debug("  Dialog was provisional.")
-                del pds[pdid]
-            if did not in eds:
-                log.debug("  Dialog was not yet established.")
-                eds[did] = dlg
-
-        else:
-            log.debug("Dialog is not established.")
-            if pdid not in pds:
-                log.debug("  Dialog is new.")
-                pds[pdid] = dlg
-
-    def removeDialog(self, dlg):
-        pdid = dlg.provisionalDialogID
-        pdids = self.provisionalDialogs
-        if pdid in pdids:
-            del pdids[pdid]
-
-        try:
-            did = dlg.dialogID
-            eds = self.establishedDialogs
-            if did in eds:
-                del eds[did]
-        except AttributeError:
-            pass
+        raise RuntimeError(
+            'Unable to find a dialog for message with dialog ID %r, '
+            'provisional dialogs: %r, established dialogs: %r' % (
+                did, provDs, estDs))

@@ -230,7 +230,7 @@ class URI(
         if not aorbytes:
             raise Incomplete("URI %r has an empty aor." % self)
         return b'%s:%s%s%s' % (
-            self.scheme, self.aor, self.parameters, self.headers)
+            self.scheme, aorbytes, self.parameters, self.headers)
 
     def __eq__(self, other):
 

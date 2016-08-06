@@ -42,6 +42,22 @@ then
     exit 0
 fi
 
+colorize () {
+    while IFS= read -r line
+    do
+        if [[ $line =~ ERROR ]]
+        then
+            echo -n $'\033[41m'
+        elif [[ $line =~ WARNING ]]
+        then
+            echo -n $'\033[43m'
+        fi
+        echo -n "$line"
+        echo -n $'\033[0m'
+        echo
+    done
+}
+
 killchildren () {
     local ppid=$1
     local signal=$2
@@ -51,11 +67,31 @@ killchildren () {
     then
         signal=KILL
     fi
-    for cpid in $(pgrep -P ${ppid})
+    local children=$(pgrep -P ${ppid})
+    echo "Children are $children"
+    for cpid in $children
     do
-        killchildren "${cpid}"
-        echo "killing $cpid" >&2
-        kill -${signal} ${cpid}
+        killchildren "${cpid}" "$signal"
+        echo "killing $cpid..." >&2
+        kill_attempts=0
+        while kill -${signal} ${cpid}
+        do
+            (( kill_attempts++ ))
+            sleep 0.1
+            if ! kill -0 ${cpid}
+            then
+                echo "dead" >&2
+                break
+            fi
+            sleep 1
+            if (( kill_attempts > 3 ))
+            then
+                echo "Tried 3 times, using KILL" >&2
+                signal=KILL
+            else
+                echo "Child not dead yet, try again..." >&2
+            fi
+        done
     done
 }
 
@@ -71,14 +107,14 @@ do
     trap \
 "echo \"Kill children $signal\";"\
 "killchildren $$ ${signal};"\
-"trap \"echo Kill children KILL; killchildren $$ KILL\" ${signal}" $signal
+ $signal
 done
 
 find . -name "*.pyc" -delete
 
 if (( ${#tests} > 0 ))
 then
-    python -m unittest unittest_logging "${tests[@]}" &
+    python -m unittest unittest_logging "${tests[@]}" 2>&1 | colorize >&2 &
     child_pid=$!
 else
     if (( pymajver > 2 ))
@@ -86,10 +122,13 @@ else
         python -m unittest &
         child_pid=$!
     else
-        python -m unittest discover &
+        python -m unittest discover 2>&1 | colorize >&2 &
         child_pid=$!
     fi
 fi
 
+echo "Waiting for child $child_pid"
 wait "${child_pid}"
-exit $?
+rc=$?
+echo "child exited with $rc"
+exit $rc

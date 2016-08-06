@@ -23,8 +23,9 @@ from ..parse import ParseError
 from ..sdp import sdpsyntax
 from ..sip import (prot, components, Message, Header)
 from ..sip.body import Body
-from ..sip.components import URI
+from ..sip.components import AOR, URI
 from ..sip.header import ContactHeader
+from ..sip.param import Parameters
 from ..sip.prot import (Incomplete)
 from ..sip.request import Request
 from ..util import (bglobals_g)
@@ -50,6 +51,14 @@ class TestProtocol(SIPPartyTestCase):
             stra, strb, "\n{0!r}\nvs\n{1!r}\n---OR---\n{0}\nvs\n{1}"
             "".format(stra, strb))
 
+    def test_aor(self):
+        a1 = AOR()
+        a1.username = b'alice'
+        self.assertRaises(Incomplete, bytes, a1)
+
+        u1 = URI(aor=a1)
+        self.assertRaises(Incomplete, bytes, u1)
+
     def testGeneral(self):
         aliceAOR = components.AOR(b"alice", b"atlanta.com")
         self.assertEqual(bytes(aliceAOR), b"alice@atlanta.com")
@@ -65,6 +74,11 @@ class TestProtocol(SIPPartyTestCase):
 
         invite = Message.invite()
         self.assertRaises(Incomplete, lambda: bytes(invite))
+
+        log.info('Incomplete branch as request line uri not yet set')
+        self.assertRaises(
+            Incomplete, bytes, invite.viaheader.parameters.branch)
+        invite.startline.uri = 'sip:charlie@charlesville.com'
         old_branch = bytes(invite.viaheader.parameters.branch)
         invite.startline.uri = components.URI(aor=bobAOR)
 
@@ -231,3 +245,22 @@ class TestProtocol(SIPPartyTestCase):
         inv.unbindAll()
         self.assertEqual(len(inv._vb_forwardbindings), 0)
         self.assertEqual(len(inv._vb_backwardbindings), 0)
+
+    def test_parameters(self):
+        pms = Parameters()
+        self.assertRaises(AttributeError, getattr, pms, 'tag')
+
+        log.info('Check setting None parameter works')
+        pms.tag = None
+        self.assertEqual(pms.tag, None)
+        self.assertEqual(bytes(pms), b'')
+
+        pms.tag = b'abcdefg'
+        self.assertEqual(bytes(pms.tag), b'abcdefg')
+        self.assertEqual(bytes(pms), b';tag=abcdefg')
+        pms.branch = b'somebranch'
+        self.assertEqual(bytes(pms.branch), b'somebranch')
+        self.assertEqual(bytes(pms), b';tag=abcdefg;branch=somebranch')
+
+        pms2 = Parameters.Parse(b';tag=abcdefg;branch=somebranch')
+        self.assertEqual(pms, pms2)

@@ -79,3 +79,12 @@ class TestHeaders(SIPPartyTestCase):
     def testNumHeader(self):
         cont_len_hdr = Header.content_length()
         self.assertEqual(bytes(cont_len_hdr), b"Content-Length: 0")
+
+    def test_types(self):
+        ci_hdr = Header.call_id()
+        self.assertRaises(ValueError, setattr, ci_hdr, 'key', u'a-unicode')
+
+        csq_hdr = Header.cseq()
+        for bad_val in (-1, 2**32, 0.25, 'a string'):
+            self.assertRaises(
+                ValueError, setattr, csq_hdr, 'number', bad_val)

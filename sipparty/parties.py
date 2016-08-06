@@ -17,21 +17,25 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 from six import itervalues
-from .sip.dialogs import SimpleCall
+from .sip.dialogs import SimpleClientDialog, SimpleServerDialog
 from .media.sessions import SingleRTPSession
 from .party import Party
 
 
 class NoMediaSimpleCallsParty(Party):
-    """This Party type has no media session, so is basically useless, except
-    for testing that the signaling works.
+    """A Party with no media session
+
+    Useful for testing that the signaling works.
     """
+
     MediaSession = None
-    InviteDialog = SimpleCall
+    ClientDialog = SimpleClientDialog
+    ServerDialog = SimpleServerDialog
 
 
 class SingleRTPSessionSimplenParty(Party):
-    InviteDialog = SimpleCall
+    ClientDialog = SimpleClientDialog
+    ServerDialog = SimpleServerDialog
     MediaSession = SingleRTPSession
 
 AllPartyTypes = [

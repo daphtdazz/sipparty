@@ -1,6 +1,4 @@
-"""party.py
-
-Implements the `Party` object.
+"""Implements the `Party` object.
 
 Copyright 2015 David Park
 
@@ -18,38 +16,35 @@ limitations under the License.
 """
 import logging
 from six import (binary_type as bytes, itervalues)
+from weakref import proxy
 from .deepclass import (DeepClass, dck)
 from .parse import (ParsedPropertyOfClass)
-from .sip import (
-    SIPTransport, DNameURI, URI, Host, Incomplete, Request, Message, defaults)
-from .transport import (IPaddress_re, IsSpecialName)
-from .util import (abytes, WeakMethod)
+from .sip import DNameURI, URI, Incomplete, Message
+from .sip.siptransport import AORHandler, SIPTransport
+from .transport import (
+    IPaddress_re, IPAddressFamilyFromName, is_null_address, IsSpecialName,
+    LoopbackAddressFromFamily,
+)
+from .util import abytes
 from .vb import ValueBinder
 
 log = logging.getLogger(__name__)
 
 
 class PartyException(Exception):
-    "Generic party exception."
+    """Generic party exception."""
 
 
 class NoConnection(PartyException):
-    """Exception raised when the connection cannot be created to a remote
-    contact, or it is lost."""
+    """The connection cannot be created to a remote contact or is lost."""
 
 
 class UnexpectedState(PartyException):
-    "The party entered an unexpected state."
+    """The party entered an unexpected state."""
 
 
 class Timeout(PartyException):
-    "Timeout waiting for something to happen."
-
-
-def NewAOR():
-    newaor = defaults.AORs.pop(0)
-    defaults.AORs.append(newaor)
-    return newaor
+    """Timeout waiting for something to happen."""
 
 
 class Party(
@@ -68,14 +63,14 @@ class Party(
             },
             "transport": {dck.gen: SIPTransport}
         }),
-        ValueBinder):
-    """A party in a sip call, aka an endpoint, caller or callee etc.
-    """
+        AORHandler, ValueBinder):
+    """A party in a sip call, aka an endpoint, caller or callee etc."""
 
     #
     # =================== CLASS INTERFACE ====================================
     #
-    InviteDialog = None
+    ClientDialog = None
+    ServerDialog = None
     MediaSession = None
     DefaultMediaAddress = None
 
@@ -86,18 +81,12 @@ class Party(
     # =================== INSTANCE INTERFACE =================================
     #
     @property
-    def listenAddress(self):
-        lAddr = self._pt_listenAddress
-        if lAddr is None:
-            raise AttributeError(
-                "%r no listen address." % (self.__class__.__name__,))
-        return lAddr
-
-    @property
     def inCallDialogs(self):
-        """Return a list dialogs that are currently in call. This is only a
-        snapshot, and nothing should be assumed about how long the dialogs will
-        stay in call for!"""
+        """Return a list of dialogs that are currently in call.
+
+        This is only a snapshot, and nothing should be assumed about how long
+        the dialogs will stay in call for!
+        """
         try:
             icds = [
                 invD
@@ -123,7 +112,6 @@ class Party(
 
         # Invite dialogs: lists of dialogs keyed by remote AOR.
         self._pt_inviteDialogs = {}
-        self._pt_listenAddress = None
 
         if self.mediaAddress is None:
             self.mediaAddress = self.DefaultMediaAddress
@@ -143,7 +131,7 @@ class Party(
 
         tp = self.transport
         tp.addDialogHandlerForAOR(
-            self.uri.aor, WeakMethod(self, 'newDialogHandler'))
+            self.uri.aor, proxy(self))
 
         cURI_host = self.contact_uri.host
         l_desc = tp.listen_for_me(**kwargs)
@@ -169,33 +157,10 @@ class Party(
         else:
             remote_name, remote_port = self._pt_resolveProxyAddress(target)
 
-        invD = self.newInviteDialog(to_uri)
+        invD = self.__new_dialog(self.ClientDialog, to_uri)
 
         log.debug("Initialize dialog to %r", ((remote_name, remote_port,)))
         invD.initiate(remote_name=remote_name, remote_port=remote_port)
-        return invD
-
-    def newInviteDialog(self, to_uri):
-        InviteDialog = self.InviteDialog
-        if InviteDialog is None:
-            raise AttributeError(
-                "Cannot build an INVITE dialog since we aren't configured "
-                "with a Dialog Type to use!")
-
-        invD = InviteDialog(
-            from_uri=self.uri, to_uri=to_uri,
-            contact_uri=self.contact_uri,
-            transport=self.transport)
-        invD.localSession = self.newSession()
-
-        ids = self._pt_inviteDialogs
-        if to_uri not in ids:
-            ids[to_uri] = [invD]
-        else:
-            ids[to_uri].append(invD)
-
-        invD.delegate = self
-
         return invD
 
     def newSession(self):
@@ -210,28 +175,46 @@ class Party(
         return ms
 
     #
-    # =================== DELEGATE IMPLEMENTATIONS ===========================
+    # =================== IAORHandler =========================================
     #
-    def newDialogHandler(self, message):
+    def new_dialog_from_request(self, message):
         if message.type == Message.types.invite:
-            invD = self.newInviteDialog(
-                message.FromHeader.uri)
-            invD.receiveMessage(message)
-            return
-        assert 0
+            log.debug('New INVITE dialog creating message being handled')
+            # Note that the tags and call IDs are learnt by the consume message
+            # method of the dialog, so we don't have to configure them here.
+            return self.__new_dialog(self.ServerDialog, message.FromHeader.uri)
 
-    def configureOutboundMessage(self, message):
-
-        if message.type == Request.types.invite:
-            self._pt_configureInvite(message)
+        assert 0, (
+            '%s instance only supports new invite dialogs' % (
+                type(self).__name__,))
 
     #
     # =================== MAGIC METHODS ======================================
     #
+    def __str__(self):
+        return '%s %s' % (type(self).__name__, self.display_name_uri)
 
     #
     # =================== INTERNAL METHODS ===================================
     #
+    def __new_dialog(self, dlg_type, to_uri):
+        if dlg_type is None:
+            raise TypeError(
+                "No dialog type specified to create for %s.", self)
+
+        invD = dlg_type(
+            from_uri=self.uri, to_uri=to_uri, contact_uri=self.contact_uri,
+            transport=self.transport, localSession=self.newSession())
+        ids = self._pt_inviteDialogs
+        if to_uri not in ids:
+            ids[to_uri] = [invD]
+        else:
+            ids[to_uri].append(invD)
+
+        invD.delegate = self
+
+        return invD
+
     def _pt_resolveTargetURI(self, target):
         if hasattr(target, "uri"):
             log.debug("Target has a URI to use.")
@@ -252,10 +235,23 @@ class Party(
         return not any(val is None for val in _tuple)
 
     def _pt_resolveProxyAddress(self, target):
+        name, port = self._pt_naive_resolveProxyAddress(target)
+        if is_null_address(name):
+            name = LoopbackAddressFromFamily(IPAddressFamilyFromName(name))
+
+        return name, port
+
+    def _pt_naive_resolveProxyAddress(self, target):
+
         if hasattr(target, "listenAddress"):
             pAddr = target.listenAddress
             if pAddr is not None:
                 log.debug("Target has listen address %r", pAddr)
+                if is_null_address(pAddr[0]):
+                    pAddr = (
+                        LoopbackAddressFromFamily(
+                            IPAddressFamilyFromName(pAddr[0])),
+                        pAddr[1])
                 return pAddr
 
         if hasattr(target, "contact_uri"):
@@ -278,23 +274,3 @@ class Party(
             raise ValueError("Target URI is not complete: %r" % (turi,))
 
         return rtup
-
-    def _pt_resolveProxyHostFromTarget(self, target):
-        try:
-            if hasattr(target, "attributeAtPath"):
-                for apath in ("contact_uri.address", ""):
-                    try:
-                        tcURI = target.attributeAtPath(apath)
-                        return tcURI
-                    except AttributeError:
-                        pass
-
-            assert 0
-        except TypeError:
-            raise TypeError(
-                "%r instance cannot be derived from %r instance." % (
-                    Host.__class__.__name__,
-                    target.__class__.__name__))
-
-    def _pt_configureInvite(self, inv):
-        pass

@@ -23,24 +23,18 @@ from weakref import ref
 from ..media.sessions import SingleRTPSession
 from ..party import (Party)
 from ..parties import (NoMediaSimpleCallsParty)
-from ..sip.dialogs import SimpleCall
+from ..sip.dialogs import SimpleClientDialog, SimpleServerDialog
 from ..sip.prot import Incomplete
 from ..sip.siptransport import SIPTransport
 from ..transport import (IsValidPortNum, NameLoopbackAddress)
 from ..util import (abytes, WaitFor)
 from .setup import SIPPartyTestCase
 
-log = logging.getLogger()
+log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
 
 
 class TestParty(SIPPartyTestCase):
-
-    def assertIsNotNone(self, exp, *args, **kwargs):
-        if hasattr(super(TestParty, self), 'assertIsNotNone'):
-            return super(TestParty, self).assertIsNotNone(exp, *args, **kwargs)
-
-        return self.assertTrue(exp is not None)
 
     def assertIsNone(self, exp, *args, **kwargs):
         if hasattr(super(TestParty, self), 'assertIsNone'):
@@ -48,35 +42,41 @@ class TestParty(SIPPartyTestCase):
 
         return self.assertTrue(exp is None)
 
-    def setUp(self):
-        self.tp = SIPTransport()
-        self.wtp = ref(self.tp)
-
-    def tearDown(self):
-        log.info('Delete transport')
-        del self.tp
-        WaitFor(lambda: gc.collect() == 0 and self.wtp() is None, 2)
-        log.info('Transport deleted')
-
     def testBasicPartyTCP(self):
         self.skipTest('TCP not yet implemented')
         self.subTestBasicParty(SOCK_STREAM, )
 
-    def testBasicPartyUDPIPv4(self):
+    def test_basic_party_udpipv4(self):
         self.subTestBasicParty(SOCK_DGRAM, '127.0.0.1')
 
     def testBasicPartyUDPIPv6(self):
         self.subTestBasicParty(SOCK_DGRAM, '::1')
 
-    def subTestBasicParty(self, sock_type, contact_name):
+    def test_basic_party_udpipv4_stop_after_creation(self):
+        self.subTestBasicParty(
+            SOCK_DGRAM, '127.0.0.1', stop_point='after creation')
+
+    def test_basic_party_udpipv4_stop_after_invite(self):
+        self.subTestBasicParty(
+            SOCK_DGRAM, '127.0.0.1', stop_point='after first invite')
+
+    def test_basic_party_udpipv4_stop_after_listen(self):
+        self.subTestBasicParty(
+            SOCK_DGRAM, '127.0.0.1', stop_point='after first listen')
+
+    def test_basic_party_udpipv4_stop_after_call(self):
+        self.subTestBasicParty(
+            SOCK_DGRAM, '127.0.0.1', stop_point='after first call')
+
+    def subTestBasicParty(self, sock_type, contact_name, stop_point=None):
 
         assert sock_type == SOCK_DGRAM
-
         log.info('Listen with type %r', sock_type)
 
         BasicParty = type(
             'BasicParty', (Party,), {
-                'InviteDialog': SimpleCall,
+                'ClientDialog': SimpleClientDialog,
+                'ServerDialog': SimpleServerDialog,
                 'MediaSession': type(
                     'LoopbackSingleRTPSession', (SingleRTPSession,), {
                         'DefaultName': NameLoopbackAddress
@@ -87,24 +87,61 @@ class TestParty(SIPPartyTestCase):
 
         log.info('Start p1')
         p1 = BasicParty(aor=b'alice@atlanta.com')
+        wtp = ref(p1.transport)
+        wp1 = ref(p1)
         log.info('..and p2')
         p2 = BasicParty(aor=b'bob@biloxi.com')
+        wp2 = ref(p2)
 
         self.assertIs(p1.transport, p2.transport)
 
+        if stop_point == 'after creation':
+            del p1, p2
+            for wrf in (wp1, wp2, wtp):
+                self.assertIsNone(wrf())
+            return
+
         log.info('p1 listens')
-        p1.listen(name=contact_name, sock_type=sock_type)
+        p1.listen(name=contact_name, sock_type=sock_type, port=0)
         log.info('p2 invites p1')
+
+        if stop_point == 'after first listen':
+            del p1, p2
+            for wrf in (wp1, wp2, wtp):
+                self.assertIsNone(wrf())
+            return
+
         invD = p2.invite(p1)
+        winvD = ref(invD)
+        WaitFor(lambda: winvD().state == winvD().States.InDialog, 1)
+        WaitFor(lambda: len(wp1().inCallDialogs) > 0)
+        WaitFor(
+            lambda:
+            wp1().inCallDialogs[0].state ==
+            wp1().inCallDialogs[0].States.InDialog)
 
-        WaitFor(lambda: invD.state == invD.States.InDialog, 1)
+        if stop_point == 'after first invite':
+            del p1, p2, invD
+            for wrf in (wp1, wp2, winvD, wtp):
+                log.info('check wrf %s is free', wrf)
+                WaitFor(lambda: wrf() is None)
+                self.assertIsNone(wrf())
+            return
 
-        self.assertEqual(len(p1.inCallDialogs), 1)
+        WaitFor(lambda: len(wp1().inCallDialogs) == 1)
         self.assertEqual(len(p2.inCallDialogs), 1)
 
         log.info('p1 terminates')
         invD.terminate()
-        WaitFor(lambda: invD.state == invD.States.Terminated, 1)
+        WaitFor(lambda: winvD().state == winvD().States.Terminated, 1)
+
+        if stop_point == 'after first call':
+            del p1, p2, invD
+            for wrf in (wp1, wp2, winvD, wtp):
+                log.info('check wrf %s is free', wrf)
+                WaitFor(lambda: wrf() is None)
+                self.assertIsNone(wrf())
+            return
 
         # Try another call.
         p3 = BasicParty(
@@ -117,7 +154,7 @@ class TestParty(SIPPartyTestCase):
 
         WaitFor(lambda: invD3to2.state == invD3to2.States.InDialog, 1)
 
-        self.assertEqual(len(p3.inCallDialogs), 1)
+        WaitFor(lambda: len(p3.inCallDialogs) == 1)
         self.assertEqual(len(p2.inCallDialogs), 1)
         self.assertEqual(len(p1.inCallDialogs), 0)
 
@@ -160,24 +197,24 @@ class TestParty(SIPPartyTestCase):
         self.assertRaises(ValueError, p1.invite, p2)
 
         p1.listen()
-        self.assertEqual(self.tp.listen_socket_count, 1)
-        self.assertEqual(self.tp.connected_socket_count, 0)
+        self.assertEqual(p2.transport.listen_socket_count, 1)
+        self.assertEqual(p2.transport.connected_socket_count, 0)
 
         log.info('Incomplete raised, because we don\'t have an AOR yet.')
 
         self.assertRaises(Incomplete, p2.invite, p1)
-        self.assertEqual(self.tp.connected_socket_count, 0)
+        self.assertEqual(p2.transport.connected_socket_count, 0)
 
         log.info('Set an AOR on p2')
         p2.aor = 'p2@test.com'
         inv1 = p2.invite(p1)
 
         WaitFor(lambda: inv1.state == inv1.States.InDialog)
-        self.assertEqual(self.tp.connected_socket_count, 2)
+        self.assertEqual(p3.transport.connected_socket_count, 2)
 
         inv2 = p2.invite(p1)
         WaitFor(lambda: inv2.state == inv2.States.InDialog)
-        self.assertEqual(self.tp.connected_socket_count, 4)
+        self.assertEqual(p3.transport.connected_socket_count, 2)
 
         log.info(
             "Check that we get a good exception when attempting to invite "
@@ -189,10 +226,10 @@ class TestParty(SIPPartyTestCase):
         WaitFor(lambda: inv3.state == inv2.States.InDialog)
 
         log.info("Check we've actually only opened one listen socket")
-        self.assertEqual(self.tp.listen_socket_count, 1)
+        self.assertEqual(p3.transport.listen_socket_count, 1)
 
-        log.info("But we have 6 connected sockets (two for each dialog).")
-        self.assertEqual(self.tp.connected_socket_count, 6)
+        log.info("And still only two connected sockets due to reuse.")
+        self.assertEqual(p3.transport.connected_socket_count, 2)
 
 
 class TestPartyWeakReferences(SIPPartyTestCase):
@@ -204,8 +241,6 @@ class TestPartyWeakReferences(SIPPartyTestCase):
             tp.close_all()
 
     def sub_test_weak_reference(self):
-        owllog = logging.getLogger('OnlyWhenLocked')
-        owllog.setLevel(logging.DEBUG)
 
         log.info('Check SIPTransport deletes cleanly')
         tp = SIPTransport()
