@@ -1,4 +1,4 @@
-# sipparty <a href="http://travis-ci.org/daphtdazz/sipparty">![Travis status](https://img.shields.io/travis/daphtdazz/sipparty.svg?branch=master)</a> #
+# sipparty <a href="http://travis-ci.org/daphtdazz/sipparty">[![Build Status](https://travis-ci.org/daphtdazz/sipparty.svg?branch=master)](https://travis-ci.org/daphtdazz/sipparty)</a> #
 
 ## Overview ##
 
