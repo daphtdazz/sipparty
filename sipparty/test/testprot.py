@@ -53,7 +53,7 @@ class TestProtocol(SIPPartyTestCase):
 
     def test_aor(self):
         a1 = AOR()
-        a1.username = 'alice'
+        a1.username = b'alice'
         self.assertRaises(Incomplete, bytes, a1)
 
         u1 = URI(aor=a1)
@@ -74,6 +74,11 @@ class TestProtocol(SIPPartyTestCase):
 
         invite = Message.invite()
         self.assertRaises(Incomplete, lambda: bytes(invite))
+
+        log.info('Incomplete branch as request line uri not yet set')
+        self.assertRaises(
+            Incomplete, bytes, invite.viaheader.parameters.branch)
+        invite.startline.uri = 'sip:charlie@charlesville.com'
         old_branch = bytes(invite.viaheader.parameters.branch)
         invite.startline.uri = components.URI(aor=bobAOR)
 

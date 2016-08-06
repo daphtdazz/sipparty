@@ -18,7 +18,7 @@ limitations under the License.
 """
 import logging
 import random
-from six import binary_type as bytes, add_metaclass
+from six import add_metaclass, binary_type as bytes
 from ..parse import (Parser)
 from ..util import (
     abytes, astr, Enum, attributesubclassgen, BytesGenner, ClassType,
@@ -40,6 +40,30 @@ class Parameters(Parser, BytesGenner, ValueBinder):
         super(Parameters, self).__init__()
         self._parm_list = []
 
+    def __eq__(self, other):
+        if type(self) != type(other):
+            return False
+
+        if len(self) != len(other):
+            return False
+
+        return all(
+            getattr(self, attr) == getattr(other, attr)
+            for attr in self._parm_list
+        )
+
+    def __len__(self):
+        return len(self._parm_list)
+
+    def __repr__(self):
+        return '%s(parameters=[%s])' % (
+            type(self).__name__,
+            ', '.join(
+                repr(pp)
+                for pp in self._parm_list
+            )
+        )
+
     def __setattr__(self, attr, val):
         if attr.startswith('_') or attr.startswith('vb'):
             return super(Parameters, self).__setattr__(attr, val)
@@ -58,21 +82,6 @@ class Parameters(Parser, BytesGenner, ValueBinder):
             self._parm_list.append(attr)
 
         super(Parameters, self).__setattr__(attr, val)
-
-    def __len__(self):
-        return len(self._parm_list)
-
-    def __eq__(self, other):
-        if type(self) != type(other):
-            return False
-
-        if len(self) != len(other):
-            return False
-
-        return all(
-            getattr(self, attr) == getattr(other, attr)
-            for attr in self._parm_list
-        )
 
     def parsecust(self, string, mo):
         parms = string.lstrip(b';').split(b';')
@@ -129,7 +138,11 @@ class Param(Parser, BytesGenner, ValueBinder):
 
     def bytesGen(self):
         log.debug("%r bytesGen", self.__class__.__name__)
-        yield bytes(self.value)
+        vv = self.value
+        if vv is None:
+            raise Incomplete('%s has no value so is incomplete' % (
+                type(self).__name__,))
+        yield bytes(vv)
 
     def __eq__(self, other):
         log.debug("Param %r ?= %r", self, other)
@@ -179,13 +192,16 @@ class BranchParam(Param):
         if underlying_value is not None:
             return underlying_value
 
-        if not hasattr(self, "startline") or not hasattr(self, "branch_num"):
+        sl, bn = (getattr(self, attr, None) for attr in (
+            "startline", "branch_num"))
+        if any(_ is None for _ in (sl, bn)):
             return None
 
         try:
-            str_to_hash = "%s-%d" % (self.startline, self.branch_num)
+            str_to_hash = b"%s-%d" % (bytes(self.startline), self.branch_num)
         except Incomplete:
             # So part of us is not complete. Return None.
+            log.debug('Incomplete Branch Parameter')
             return None
 
         the_hash = hash(str_to_hash)

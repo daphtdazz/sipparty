@@ -45,6 +45,7 @@ class TransactionManager(object):
         """
         assert ttype in Transaction.types
         bval = msg.ViaHeader.parameters.branch.value
+        log.debug('bval is %s', bval)
         if not bval:
             raise ValueError(
                 'Cannot create a transaction key from a message with no '
@@ -122,6 +123,7 @@ class TransactionManager(object):
         """
         assert default is self.lookup_sentinel
         tk = self.transaction_key_for_message(ttype, message)
+        log.debug('lookup transaction for key %s', tk)
         trans = self.transactions.get(tk)
         if trans is None and raise_on_missing:
             raise KeyError(
