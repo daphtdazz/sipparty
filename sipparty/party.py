@@ -157,7 +157,7 @@ class Party(
         else:
             remote_name, remote_port = self._pt_resolveProxyAddress(target)
 
-        invD = self.__new_dialog(self.ClientDialog, to_uri)
+        invD = self.__make_new_dialog(self.ClientDialog, to_uri)
 
         log.debug("Initialize dialog to %r", ((remote_name, remote_port,)))
         invD.initiate(remote_name=remote_name, remote_port=remote_port)
@@ -182,7 +182,8 @@ class Party(
             log.debug('New INVITE dialog creating message being handled')
             # Note that the tags and call IDs are learnt by the consume message
             # method of the dialog, so we don't have to configure them here.
-            return self.__new_dialog(self.ServerDialog, message.FromHeader.uri)
+            return self.__make_new_dialog(
+                self.ServerDialog, message.FromHeader.uri)
 
         assert 0, (
             '%s instance only supports new invite dialogs' % (
@@ -197,7 +198,7 @@ class Party(
     #
     # =================== INTERNAL METHODS ===================================
     #
-    def __new_dialog(self, dlg_type, to_uri):
+    def __make_new_dialog(self, dlg_type, to_uri):
         if dlg_type is None:
             raise TypeError(
                 "No dialog type specified to create for %s.", self)

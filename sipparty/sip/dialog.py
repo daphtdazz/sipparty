@@ -121,6 +121,7 @@ class Dialog:
         kwargs['transport'] = transport
         super(Dialog, self).__init__(**kwargs)
         self._dlg_requests = []
+        self.__request = None
         self.__last_response = None
 
     def initiate(self, *args, **kwargs):
@@ -211,17 +212,21 @@ class Dialog:
         self._dlg_requests.append(req)
         tp.updateDialogGrouping(self)
 
-    def send_response(self, response, req):
-        log.debug("Send response type %r.", response)
+    def send_response(self, response_code, req=None):
+        log.debug("Send response type %r.", response_code)
 
-        resp = MessageResponse(response)
+        if req is None:
+            req = self.__request
+        assert req is not None
+
+        resp = MessageResponse(response_code)
         self.configureResponse(resp, req)
         vh = req.viaheader
         tp = self.transport
         if tp is None:
             log.warning(
                 'Unable to send %s response to %s request as transport has '
-                'been released' % (response.type, req.type))
+                'been released' % (response_code, req.type))
             return
 
         self.transport.send_message_with_transaction(
