@@ -2,7 +2,8 @@
 
 ## List. ##
 
-3. REGISTER dialogues.
+1. Must be able to unlisten a party.
+2. REGISTER dialogues.
 4. TCP support.
 5. Move "Programming guides" into a section of the documentation.
 9. Smarter ACK than simply "ACK all 200s" in dialog.py
