@@ -187,4 +187,3 @@ class TestServerTransaction(TransactionTest):
         log.info('Check we pick up the general input for XXX')
         tr.hit('respond_400', inv)
         self.assertEqual(tr.state, 'completed')
-

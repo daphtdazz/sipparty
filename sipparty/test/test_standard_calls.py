@@ -16,13 +16,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-# from gc import collect as gc_collect
 import logging
-# from weakref import ref
 from .setup import SIPPartyTestCase
-# from ..fsm import UnexpectedInput
-# from ..sip.components import (AOR, Host, URI)
-from ..sip.dialogs import SimpleServerDialog
 from ..parties import NoMediaSimpleCallsParty
 
 from ..util import WaitFor
