@@ -123,9 +123,7 @@ class Transaction(
             if message.type == 'ACK':
                 return self.hit('ack', message)
             return self.hit(self.Inputs.request, message)
-
-        inp = self.__most_specific_input_for_inbound_response(message.type)
-        return self.hit(inp, message)
+        return self.hit('response_' + str(message.type), message)
 
     #
     # ---------------------------- TU INTERFACE -------------------------------
@@ -134,8 +132,7 @@ class Transaction(
         return self.hit(self.Inputs.request, message, **kwargs)
 
     def respond(self, message, **kwargs):
-        inp = self.__most_specific_input_for_outbound_response(message.type)
-        return self.hit(inp, message, **kwargs)
+        return self.hit('respond_' + str(message.type), message, **kwargs)
 
     def handle_outbound_message(self, message, **kwargs):
         if message.isrequest():
@@ -182,21 +179,26 @@ class Transaction(
             message, self.remote_name, self.remote_port)
 
     #
-    # ---------------------------- MAGIC METHODS ------------------------------
+    # ---------------------------- OVERRIDES ---------------------------------
+    #
+    def _fsm_hit(self, input, *args, **kwargs):
+        inp_type, _, code = input.partition('_')
+        if _ and inp_type in ('response', 'respond'):
+            input = self.__most_specific_input_for_response(
+                inp_type + '_', code)
+
+        super(Transaction, self)._fsm_hit(input, *args, **kwargs)
+
+    #
+    # ---------------------------- MAGIC METHODS -----------------------------
     #
     def __del__(self):
         log.debug('__del__ %s', type(self).__name__)
         getattr(super(Transaction, self), '__del__', lambda: None)()
 
     #
-    # ---------------------------- INTERNAL METHODS ---------------------------
+    # ---------------------------- INTERNAL METHODS --------------------------
     #
-    def __most_specific_input_for_inbound_response(self, rtype):
-        return self.__most_specific_input_for_response('response_', rtype)
-
-    def __most_specific_input_for_outbound_response(self, rtype):
-        return self.__most_specific_input_for_response('respond_', rtype)
-
     def __most_specific_input_for_response(self, prepend, rtype):
         """Work out what input to use for the response type.
 
@@ -219,7 +221,7 @@ class Transaction(
 
         # Try catch all.
         inp = prepend + 'xxx'
-        if inp in self.Inputs:
+        if inp in self._fsm_transitions[self._fsm_state]:
             return inp
 
         # Couldn't find one. Raise.

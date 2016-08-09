@@ -24,6 +24,7 @@ from ..sip.message import Message, MessageResponse
 from ..sip.transaction import (
     Transaction, TransactionManager, TransactionTransport, TransactionUser)
 from ..sip.transaction.client import NonInviteClientTransaction
+from ..sip.transaction.server import InviteServerTransaction
 from ..util import WaitFor
 from .setup import (MagicMock, patch, SIPPartyTestCase)
 
@@ -106,10 +107,6 @@ class TestNonInviteTransaction(TransactionTest):
 
 class TestTransactionManager(TransactionTest):
 
-    def tearDown(self):
-        log.debug('tearing down tm test')
-        super(TestTransactionManager, self).tearDown()
-
     def test_client_transaction(self):
 
         tm = TransactionManager(self)
@@ -151,3 +148,43 @@ class TestTransactionManager(TransactionTest):
             'same response')
         server_trns2 = tm.transaction_for_outbound_message(resp)
         self.assertIs(server_trns, server_trns2)
+
+
+class TestServerTransaction(TransactionTest):
+
+    def test_response_deduction(self):
+
+        class ServerDelegate:
+
+            def __init__(self):
+                self.request_count = 0
+                self.response_type = ''
+
+            def fsm_dele_inform_tu(self, trans, action, obj):
+                if action == 'request':
+                    self.request_count += 1
+                    trans.hit('respond_' + self.response_type)
+
+        # This is cheating, but saves implementing all the methods.
+        # TransactionUser.register(ServerDelegate)
+
+        sd = ServerDelegate()
+        tp = MagicMock()
+        TransactionTransport.register(MagicMock)
+        tr = InviteServerTransaction(delegate=sd, transport=tp)
+
+        inv = Message.invite()
+        inv.ViaHeader.parameters.branch = b'branch'
+        sd.response_type = 'notaresponse'
+        self.assertRaises(ValueError, tr.hit, 'request', inv)
+        self.assertEqual(sd.request_count, 1)
+        self.assertEqual(tr.state, 'proceeding')
+
+        log.info('Check we pick up the explicit input for 100')
+        tr.hit('respond_100', inv)
+        self.assertEqual(tr.state, 'proceeding')
+
+        log.info('Check we pick up the general input for XXX')
+        tr.hit('respond_400', inv)
+        self.assertEqual(tr.state, 'completed')
+

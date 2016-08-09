@@ -27,7 +27,6 @@ from ..util import WaitFor
 from .setup import (SIPPartyTestCase)
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.INFO)
 
 
 class TestTransport(SIPPartyTestCase):

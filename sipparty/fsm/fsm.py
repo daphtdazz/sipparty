@@ -445,7 +445,7 @@ class FSM:
         Subclassing: subclasses may override this to implement background timer
         popping, which is what AsyncFSM does.
         """
-        log.debug("Start timer %r", timer.name)
+        log.info("Start timer %r", timer.name)
         timer.start()
 
     def stop_timer(self, timer):
@@ -455,7 +455,7 @@ class FSM:
         Subclassing: subclasses may override this to implement background timer
         popping tidy-up, which is what AsyncFSM does.
         """
-        log.debug("Stop timer %r", timer.name)
+        log.info("Stop timer %r", timer.name)
         timer.stop()
 
     #

@@ -742,6 +742,51 @@ class TestFSM(TestFSMBase):
         del tfsm
         self.assertIsNone(wtfsm())
 
+    @patch.object(fsmtimer, 'Clock', new=TestFSMBase.Clock)
+    @patch.object(retrythread, 'Clock', new=TestFSMBase.Clock)
+    def test_timer_cancel(self):
+
+        class TimerCancelTestFSM(FSM):
+            FSMTimers = {
+                'running_timer': ('running_timer_action', 'running_timer_gen')
+            }
+            FSMDefinitions = {
+                InitialStateKey: {
+                    'start': {
+                        TransitionKeys.NewState: 'Running',
+                        TransitionKeys.StartTimers: ['running_timer']
+                    }
+                },
+                'Running': {
+                    'stop': {
+                        TransitionKeys.NewState: 'Done',
+                        TransitionKeys.StopTimers: ['running_timer']
+                    }
+                },
+                'Done': {}
+            }
+
+            def __init__(self):
+                super(TimerCancelTestFSM, self).__init__()
+                self.timer_action_count = 0
+
+            def running_timer_gen(self):
+                yield 1
+                yield 1
+
+            def running_timer_action(self):
+                self.timer_action_count += 1
+
+        fsm = TimerCancelTestFSM()
+        fsm.hit('start')
+        TestFSMBase.Clock.return_value = 1
+        fsm.checkTimers()
+        self.assertEqual(fsm.timer_action_count, 1)
+        fsm.hit('stop')
+        TestFSMBase.Clock.return_value = 2
+        fsm.checkTimers()
+        self.assertEqual(fsm.timer_action_count, 1)
+
 
 class TestFSMDelegate(TestFSMBase):
 
