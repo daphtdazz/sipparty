@@ -49,6 +49,7 @@ class Timeout(PartyException):
 
 class Party(
         DeepClass("_pt_", {
+            'dialog_delegate': {},
             "display_name_uri": {
                 dck.descriptor: ParsedPropertyOfClass(DNameURI),
                 dck.gen: DNameURI},
@@ -212,7 +213,7 @@ class Party(
         else:
             ids[to_uri].append(invD)
 
-        invD.delegate = self
+        invD.delegate = self.dialog_delegate
 
         return invD
 

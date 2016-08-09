@@ -217,7 +217,7 @@ class Transaction(
             inp = prepend + str(next_rtype)
             if inp in self._fsm_transitions[self._fsm_state]:
                 return inp
-            next_rtype /= 10
+            next_rtype = int(next_rtype / 10)
 
         # Try catch all.
         inp = prepend + 'xxx'
