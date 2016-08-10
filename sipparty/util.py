@@ -923,7 +923,10 @@ class Singleton(object):
     @classmethod
     def wait_for_no_instances(cls, **kwargs):
         assert not cls.UseStrongReferences
-        si = cls._St_SharedInstances
+
+        # We only want any instances for this particular class, not
+        # superclasses.
+        si = cls.__dict__.get('_St_SharedInstances')
         if si is None:
             return
         WaitFor(lambda: all(wr is None for wr in si.values()), **kwargs)

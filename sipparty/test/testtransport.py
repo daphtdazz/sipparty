@@ -133,20 +133,27 @@ class TestTransport(SIPPartyTestCase):
             'Release address three times and get an exception as it has now '
             'been freed.')
 
-        self.skipTest("Can't do the remaining until fix the reuse bug.")
-
-        log.info("Listen a third time but use a different socket")
-        laddr3 = tp.listen_for_me(
-            self.data_callback, sock_family=sock_family, sock_type=sock_type,
-            reuse_socket=False)
-
-        log.info('Listening on ports %d', laddr.port)
-
         self.assertRaises(KeyError, tp.release_listen_address, laddr)
 
-        log.info('Release third listen address')
-        tp.release_listen_address(laddr3)
-        self.assertRaises(KeyError, tp.release_listen_address, laddr3)
+    def test_no_socket_reuse(self):
+        self.skipTest('Not reusing sockets not properly supported yet.')
+        sock_family = AF_INET
+        sock_type = SOCK_STREAM
+        tp = Transport()
+
+        log.info("Listen twice but don't reuse socket")
+        laddr = tp.listen_for_me(
+            self.data_callback, sock_family=sock_family, sock_type=sock_type)
+        laddr2 = tp.listen_for_me(
+            self.data_callback, sock_family=sock_family, sock_type=sock_type,
+            reuse_socket=False)
+        self.assertEqual(tp.listen_socket_count, 2)
+
+        tp.release_listen_address(laddr2)
+        self.assertRaises(KeyError, tp.release_listen_address, laddr2)
+        self.assertEqual(tp.listen_socket_count, 1)
+        tp.release_listen_address(laddr)
+        self.assertRaises(KeyError, tp.release_listen_address, laddr)
 
     def test_listen_address_receive_data(self):
         sock_family = AF_INET
