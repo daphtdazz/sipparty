@@ -167,17 +167,26 @@ class TestParty(SIPPartyTestCase):
         return
 
     def test_double_listen(self):
+        tp = SIPTransport()
         p1 = NoMediaSimpleCallsParty()
         self.assertRaises(Incomplete, p1.listen)
 
+        log.info('test listening twice uses a single socket')
         p1.uri = 'sip:p1@test.com'
-        p1.listen()
-        self.assertEqual(p1.contact_uri.port, 5060)
+        p1.listen(port=0)
+        port = p1.contact_uri.port
 
         p2 = NoMediaSimpleCallsParty()
         p2.uri = 'sip:p2@test.com'
-        p2.listen()
-        self.assertEqual(p1.contact_uri.port, 5060)
+        p2.listen(port=0)
+        self.assertEqual(p2.contact_uri.port, port)
+        self.assertEqual(tp.listen_socket_count, 1)
+
+        log.info('Now unlisten from both')
+        p2.unlisten()
+        self.assertEqual(tp.listen_socket_count, 1)
+        p1.unlisten()
+        self.assertEqual(tp.listen_socket_count, 0)
 
     def test_no_media_party(self):
 

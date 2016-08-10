@@ -941,12 +941,19 @@ class Transport(Singleton):
 
         return path, None
 
-    def release_listen_address(self, description):
+    def release_listen_address(self, description=None, **kwargs):
         log.debug('Release %r', description)
-        if not isinstance(description, ListenDescription):
+        if (description is not None and not isinstance(
+                description, ListenDescription)) or (
+                description is None and not kwargs):
+
             raise TypeError(
                 'Cannot release something which is not a ListenDescription: '
                 '%r' % (description,))
+
+        if description is None:
+            description = ListenDescription(**kwargs)
+            description.deduce_missing_values()
 
         if isinstance(description, ConnectedAddressDescription):
             log.debug('Release connected address')

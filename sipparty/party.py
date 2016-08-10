@@ -25,7 +25,7 @@ from .transport import (
     IPaddress_re, IPAddressFamilyFromName, is_null_address, IsSpecialName,
     LoopbackAddressFromFamily,
 )
-from .util import abytes
+from .util import abytes, astr
 from .vb import ValueBinder
 
 log = logging.getLogger(__name__)
@@ -174,6 +174,11 @@ class Party(
 
         ms = self.__class__.MediaSession(username=b'-')
         return ms
+
+    def unlisten(self):
+        self.transport.release_listen_address(
+            port=self.contact_uri.host.port,
+            name=astr(self.contact_uri.host.address))
 
     #
     # =================== IAORHandler =========================================
