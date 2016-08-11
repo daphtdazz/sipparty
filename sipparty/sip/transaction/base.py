@@ -34,7 +34,7 @@ class TransactionUser(object):
     """This is what Transaction Users must look like."""
 
     @abstractmethod
-    def request(self, msg, transaction):
+    def consume_request(self, msg, transaction):
         """Consume a request passed up from the transaction.
 
         :param msg: The request to consume.
@@ -45,7 +45,7 @@ class TransactionUser(object):
         raise NotImplemented
 
     @abstractmethod
-    def response(self, msg):
+    def consume_response(self, msg):
         """Consume a response passed up from the transaction.
 
         :param msg: The response to consume.
@@ -114,6 +114,7 @@ class Transaction(
 
         self.last_message = None
         self.last_socket = None
+        self.retransmit_count = 0
 
     #
     # ---------------------------- TRANSPORT INTERFACE ------------------------
@@ -158,6 +159,7 @@ class Transaction(
     def retransmit(self):
         log.debug('resend message')
         self.transmit(self.last_message)
+        self.retransmit_count += 1
 
     def transmit(self, message, remote_name=None, remote_port=None):
         log.debug('send %s message', message.type)

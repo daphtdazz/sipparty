@@ -85,7 +85,7 @@ class TestDialog(AORHandler, SIPPartyTestCase):
         wrfs = self.wtp, ref(dl)
 
         def inner(tp, dl):
-            ld = tp.listen_for_me()
+            ld = tp.listen_for_me(port=0)
             if depth == 0:
                 return
 

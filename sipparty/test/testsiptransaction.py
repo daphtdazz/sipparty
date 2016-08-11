@@ -54,8 +54,8 @@ class TransactionTest(SIPPartyTestCase):
         self.addCleanup(select_patch.stop)
 
         # TU interface
-        self.request = MagicMock()
-        self.response = MagicMock()
+        self.consume_request = MagicMock()
+        self.consume_response = MagicMock()
         self.transport_error = MagicMock()
         self.timeout = MagicMock()
         self.transaction_terminated = MagicMock()
@@ -161,7 +161,7 @@ class TestServerTransaction(TransactionTest):
                 self.response_type = ''
 
             def fsm_dele_inform_tu(self, trans, action, obj):
-                if action == 'request':
+                if action == 'consume_request':
                     self.request_count += 1
                     trans.hit('respond_' + self.response_type)
 

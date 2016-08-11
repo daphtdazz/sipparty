@@ -116,12 +116,14 @@ class TestTransport(SIPPartyTestCase):
             sock_type='not-sock-type')
 
         laddr = tp.listen_for_me(
-            self.data_callback, sock_family=sock_family, sock_type=sock_type)
+            self.data_callback, sock_family=sock_family, sock_type=sock_type,
+            port=0)
         self.assertTrue(isinstance(laddr, ListenDescription), laddr)
 
         log.info('Listen a second time and reuse existing')
         laddr2 = tp.listen_for_me(
-            self.data_callback, sock_family=sock_family, sock_type=sock_type)
+            self.data_callback, sock_family=sock_family, sock_type=sock_type,
+            port=0)
         self.assertEqual(laddr2.sockname_tuple, laddr.sockname_tuple)
 
         log.info('Release address once')
@@ -143,7 +145,8 @@ class TestTransport(SIPPartyTestCase):
 
         log.info("Listen twice but don't reuse socket")
         laddr = tp.listen_for_me(
-            self.data_callback, sock_family=sock_family, sock_type=sock_type)
+            self.data_callback, sock_family=sock_family, sock_type=sock_type,
+            port=0)
         laddr2 = tp.listen_for_me(
             self.data_callback, sock_family=sock_family, sock_type=sock_type,
             reuse_socket=False)

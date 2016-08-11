@@ -27,7 +27,7 @@ from .setup import (MagicMock, patch, SIPPartyTestCase)
 log = logging.getLogger(__name__)
 
 
-class TestSIPTransport(TransactionUser, AORHandler, SIPPartyTestCase):
+class TestSIPTransport(AORHandler, SIPPartyTestCase):
 
     def setUp(self):
         self.def_hname_mock = MagicMock()
@@ -35,6 +35,10 @@ class TestSIPTransport(TransactionUser, AORHandler, SIPPartyTestCase):
         self.hostname_patch = patch.object(
             transport, 'default_hostname', new=self.def_hname_mock)
         self.hostname_patch.start()
+        self.consume_request = MagicMock()
+        self.consume_response = MagicMock()
+        self.transport_error = MagicMock()
+        self.timeout = MagicMock()
 
     def tearDown(self):
 
@@ -44,18 +48,6 @@ class TestSIPTransport(TransactionUser, AORHandler, SIPPartyTestCase):
     def new_dialog_from_request(self, message):
         self.rcvd_messages.append(message)
         log.debug("NewDialogHandler consumed the message.")
-
-    def request(self, req):
-        assert 0
-
-    def response(self, resp):
-        assert 0
-
-    def timeout(self, err):
-        assert 0
-
-    def transport_error(self, err):
-        assert 0
 
     def test_general(self):
 
@@ -69,7 +61,8 @@ class TestSIPTransport(TransactionUser, AORHandler, SIPPartyTestCase):
         tp1 = SIPTransport()
         self.assertIs(tp, tp1)
 
-        l_desc = tp.listen_for_me(sock_type=sock_type, sock_family=sock_family)
+        l_desc = tp.listen_for_me(
+            sock_type=sock_type, sock_family=sock_family, port=0)
 
         log.info('Make INVITE message')
         msg = sip.Message.invite()
@@ -92,3 +85,5 @@ class TestSIPTransport(TransactionUser, AORHandler, SIPPartyTestCase):
         WaitFor(lambda: len(self.rcvd_messages) > 0, 1)
         rmsg = self.rcvd_messages.pop()
         self.assertEqual(msg.type, rmsg.type, rmsg)
+
+TransactionUser.register(TestSIPTransport)

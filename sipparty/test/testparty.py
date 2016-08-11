@@ -146,7 +146,7 @@ class TestParty(SIPPartyTestCase):
         p3 = BasicParty(
             aor=b'charlie@charlesville.com',
             contact_uri__address=abytes(contact_name))
-        p3.listen(sock_type=sock_type, name=contact_name, port=5061)
+        p3.listen(sock_type=sock_type, name=contact_name, port=0)
         self.assertTrue(p3.transport is p1.transport)
         self.assertTrue(p3.transport is p2.transport)
         invD3to2 = p2.invite(p3)
@@ -192,7 +192,7 @@ class TestParty(SIPPartyTestCase):
 
         log.info('Create two new no-media parties.')
         p1 = NoMediaSimpleCallsParty(uri='sip:p1@test.com')
-        p1.listen()
+        p1.listen(port=0)
         self.assertTrue(IsValidPortNum(p1.contact_uri.port))
 
     def test_aor_bindings(self):
@@ -204,7 +204,7 @@ class TestParty(SIPPartyTestCase):
         self.assertRaises(ValueError, p1.invite, p2)
         self.assertRaises(ValueError, p1.invite, p2)
 
-        p1.listen()
+        p1.listen(port=0)
         self.assertEqual(p2.transport.listen_socket_count, 1)
         self.assertEqual(p2.transport.connected_socket_count, 0)
 
@@ -229,7 +229,7 @@ class TestParty(SIPPartyTestCase):
             "someone who isn't listening")
         self.assertRaises(ValueError, p3.invite, p2)
         self.assertRaises(ValueError, p3.invite, p2)
-        p2.listen()
+        p2.listen(port=0)
         inv3 = p3.invite(p2)
         WaitFor(lambda: inv3.state == inv2.States.InDialog)
 
@@ -278,7 +278,7 @@ class TestPartyWeakReferences(SIPPartyTestCase):
 
         log.info('Check listening party deletes cleanly')
         p1 = NoMediaSimpleCallsParty(aor='p1@test.com')
-        p1.listen()
+        p1.listen(port=0)
         w_p1 = ref(p1)
         w_tp = ref(p1.transport)
         self.assertIs(w_p1(), p1)
@@ -290,7 +290,7 @@ class TestPartyWeakReferences(SIPPartyTestCase):
         log.info('Check connected party deletes cleanly.')
         p1 = NoMediaSimpleCallsParty(aor=b'alice@atlanta.com')
         wp1 = ref(p1)
-        p1.listen()
+        p1.listen(port=0)
         self.wtp = ref(p1.transport)
         p2 = NoMediaSimpleCallsParty(aor=b'bob@biloxi.com')
         wtp2 = ref(p2.transport)

@@ -121,7 +121,7 @@ class Dialog:
         kwargs['transport'] = transport
         super(Dialog, self).__init__(**kwargs)
         self._dlg_requests = []
-        self.__request = None
+        self.request = None
         self.__last_response = None
 
     def initiate(self, *args, **kwargs):
@@ -216,7 +216,7 @@ class Dialog:
         log.debug("Send response type %r.", response_code)
 
         if req is None:
-            req = self.__request
+            req = self.request
         assert req is not None
 
         resp = MessageResponse(response_code)
@@ -250,7 +250,7 @@ class Dialog:
     #
     # =================== TRANSACTION USER METHODS ============================
     #
-    def request(self, msg):
+    def consume_request(self, msg):
         log.debug("Dialog receiving message")
         log.detail("%r", msg)
         mtype = msg.type
@@ -269,10 +269,11 @@ class Dialog:
             self.remoteTag = rtag
             self.transport.updateDialogGrouping(self)
 
+        self.request = msg
         return self.hit(
             'receiveRequest' + getattr(Request.types, mtype), msg)
 
-    def response(self, msg):
+    def consume_response(self, msg):
 
         log.debug("Dialog receiving response")
         log.detail("%r", msg)
