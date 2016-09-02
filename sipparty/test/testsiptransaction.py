@@ -20,11 +20,13 @@ import logging
 
 from ..fsm import fsmtimer
 from ..fsm import retrythread
+from ..sip.header import CseqHeader, ViaHeader
 from ..sip.message import Message, MessageResponse
 from ..sip.transaction import (
     Transaction, TransactionManager, TransactionTransport, TransactionUser)
 from ..sip.transaction.client import NonInviteClientTransaction
-from ..sip.transaction.server import InviteServerTransaction
+from ..sip.transaction.server import (
+    InviteServerTransaction, OneShotServerTransaction)
 from ..util import WaitFor
 from .setup import (MagicMock, patch, SIPPartyTestCase)
 
@@ -148,6 +150,19 @@ class TestTransactionManager(TransactionTest):
             'same response')
         server_trns2 = tm.transaction_for_outbound_message(resp)
         self.assertIs(server_trns, server_trns2)
+
+    def test_server_transaction(self):
+        # Test that when we ask for a transaction for a 200 response retransmit
+        # where the original transaction has been destroyed it works.
+        tm = TransactionManager(self)
+        resp = MessageResponse(200)
+        resp.addHeader(CseqHeader(reqtype='INVITE'))
+        resp.addHeader(ViaHeader())
+        resp.ViaHeader.parameters.branch = b'branch1'
+
+        trans = tm.transaction_for_outbound_message(resp)
+        self.assertTrue(
+            isinstance(trans, OneShotServerTransaction), type(trans).__name__)
 
 
 class TestServerTransaction(TransactionTest):

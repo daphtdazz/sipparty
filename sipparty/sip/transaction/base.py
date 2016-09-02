@@ -228,4 +228,5 @@ class Transaction(
 
         # Couldn't find one. Raise.
         raise UnexpectedInput(
-            'No response input for prepend %s code %s' % (prepend, rtype,))
+            'No response input to %s fsm for prepend %s code %s' % (
+                type(self).__name__, prepend, rtype,))
