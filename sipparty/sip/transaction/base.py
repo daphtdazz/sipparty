@@ -156,7 +156,13 @@ class Transaction(
 
         getattr(tu, method_name)(*args, **kwargs)
 
-    def retransmit(self):
+    def retransmit(self, msg=None):
+        """Retransmit the last response.
+
+        :param req:
+            a message may be passed in if we're handling this as a result of
+            receiving a retransmission, but we ignore it.
+        """
         log.debug('resend message')
         self.transmit(self.last_message)
         self.retransmit_count += 1

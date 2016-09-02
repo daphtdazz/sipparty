@@ -182,7 +182,7 @@ class Dialog:
             if attrVal is None:
                 raise ValueError(
                     "Attribute %r of %r instance required to send %s request "
-                    "is None." % (req_type, reqdAttr, self.__class__.__name__))
+                    "is None." % (reqdAttr, self.__class__.__name__, req_type))
             if reqdAttr == 'transport':
                 # Transport is weak so ensure we retain it here.
                 tp = attrVal

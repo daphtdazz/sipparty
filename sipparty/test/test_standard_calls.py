@@ -66,13 +66,49 @@ class TestStandardDialog(SIPPartyTestCase):
 
         log.info('Get the client transaction')
         self.assertIsNotNone(dd.dialog)
-        self.assertIsNotNone(dd.dialog.request)
+        rq = dd.dialog.request
+        self.assertIsNotNone(rq)
         tm = tp.transaction_manager
-        trns = tm.transaction_for_outbound_message(dd.dialog.request)
-        self.assertEqual(trns.state, trns.States.calling)
-        self.assertEqual(trns.retransmit_count, 0)
+        ctrns = tm.transaction_for_outbound_message(dd.dialog.request)
+        strns = tm.transaction_for_inbound_message(dd.dialog.request)
+        self.assertEqual(ctrns.state, ctrns.States.calling)
+        self.assertEqual(ctrns.retransmit_count, 0)
 
         log.info('Trigger a retransmit')
         self.Clock.return_value = StandardTimers.T1
-        trns.checkTimers()
-        self.assertEqual(trns.retransmit_count, 1)
+        ctrns.checkTimers()
+        self.assertEqual(ctrns.retransmit_count, 1)
+
+    def test_multiple_calls(self):
+
+        log.info('Create parties which will listen')
+        parties = [
+            NoMediaSimpleCallsParty(aor='callee-%d@listen.com' % (test + 1,))
+            for test in range(3)]
+
+        log.info('Listen parties')
+        list(map(lambda x: x.listen(port=0), parties))
+
+        # The transport is implemented using sipparty.util.Singleton which
+        # provides a powerful and simple Singleton design pattern
+        # implementation.
+        log.info('Check listen socket count')
+        tp = SIPTransport()
+        self.assertEqual(tp.listen_socket_count, 1)
+
+        log.info('Create send parties')
+        send_parties = [
+            NoMediaSimpleCallsParty(aor='caller-%d@send.com' % (test + 1,))
+            for test in range(3)
+        ]
+
+        log.info('Start dialogs')
+        dlgs = list(
+            cl.invite(cle) for cl, cle in zip(send_parties[:3], parties))
+        for dlg in dlgs:
+            dlg.waitForStateCondition(lambda st: st == dlg.States.InDialog)
+
+        log.info('Terminate dialogs')
+        for dlg in dlgs:
+            dlg.terminate()
+        WaitFor(lambda: all(dlg.state == 'Terminated' for dlg in dlgs))

@@ -176,6 +176,7 @@ class Party(
         return ms
 
     def unlisten(self):
+        self.transport.removeDialogHandlerForAOR(self.uri.aor)
         self.transport.release_listen_address(
             port=self.contact_uri.host.port,
             name=astr(self.contact_uri.host.address))

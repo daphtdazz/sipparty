@@ -157,6 +157,7 @@ class TestParty(SIPPartyTestCase):
         self.assertEqual(len(p2.inCallDialogs), 1)
         self.assertEqual(len(p1.inCallDialogs), 0)
 
+        log.info('Terminate invD3to2')
         invD3to2.terminate()
         WaitFor(lambda: invD3to2.state == invD3to2.States.Terminated, 1)
 
