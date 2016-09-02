@@ -269,6 +269,9 @@ class Dialog:
             self.remoteTag = rtag
             self.transport.updateDialogGrouping(self)
 
+        self.remote_name = astr(msg.ContactHeader.address)
+        self.remote_port = msg.ContactHeader.port
+
         self.request = msg
         return self.hit(
             'receiveRequest' + getattr(Request.types, mtype), msg)

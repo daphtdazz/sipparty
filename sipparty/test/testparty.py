@@ -239,6 +239,32 @@ class TestParty(SIPPartyTestCase):
         log.info("And still only two connected sockets due to reuse.")
         self.assertEqual(p3.transport.connected_socket_count, 2)
 
+    def test_server_terminates(self):
+
+        class DialogDelegate:
+            def fsm_dele_handle_invite(self, dialog, invite):
+                self.dialog = dialog
+                self.invite = invite
+
+        server_dialog_delegate = DialogDelegate()
+
+        party = NoMediaSimpleCallsParty(
+            display_name_uri='sip:alice@atlanta.com',
+            dialog_delegate=server_dialog_delegate)
+        party.listen(port=0)
+
+        party2 = NoMediaSimpleCallsParty('sip:bob@biloxi.com')
+
+        party2.invite(party)
+        WaitFor(lambda: hasattr(server_dialog_delegate, 'invite'))
+
+        server_dialog_delegate.dialog.hit('accept')
+        server_dialog_delegate.dialog.waitForStateCondition(
+            lambda st: st == server_dialog_delegate.dialog.States.InDialog)
+        server_dialog_delegate.dialog.terminate()
+        server_dialog_delegate.dialog.waitForStateCondition(
+            lambda st: st == server_dialog_delegate.dialog.States.Terminated)
+
 
 class TestPartyWeakReferences(SIPPartyTestCase):
     def test_weak_references(self):
