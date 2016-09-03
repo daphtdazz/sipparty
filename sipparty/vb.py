@@ -371,7 +371,6 @@ class ValueBinder(object):
 
         return gt(attr)
 
-    @profile
     def __setattr__(self, attr, val):
         """Very perf sensitive `__setattr__` function.
         """
