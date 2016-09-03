@@ -22,6 +22,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 import logging
 from six import (iteritems, iterkeys)
+from six.moves import intern
 from .util import (
     append_to_exception_message, CheckingProperty, Enum, DerivedProperty)
 from .vb import ValueBinder
@@ -62,8 +63,7 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
     """Creates a deep class type which
     """
 
-    def _in_repr_attr_name():
-        return '_'.join(('', topLevelPrepend, 'in_repr'))
+    _in_repr_attr_name = intern('_'.join(('', topLevelPrepend, 'in_repr')))
 
     class DeepClass(object):
 
@@ -90,7 +90,7 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
             # dictionary.
             topLevelAttrArgs = {}
             sd = self.__dict__
-            sd[_in_repr_attr_name()] = False
+            sd[_in_repr_attr_name] = False
             for tlName in iterkeys(topLevelAttributeDescs):
                 sd[topLevelPrepend + tlName] = None
                 topLevelAttrArgs[tlName] = [None, {}]
@@ -261,15 +261,14 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
 
         @contextmanager
         def _dc_enter_repr(self):
-            irat = _in_repr_attr_name()
-            setattr(self, irat, True)
+            setattr(self, _in_repr_attr_name, True)
             try:
                 yield
             finally:
-                setattr(self, irat, False)
+                setattr(self, _in_repr_attr_name, False)
 
         def __repr__(self):
-            if getattr(self, _in_repr_attr_name()):
+            if getattr(self, _in_repr_attr_name):
                 return '<DC %x>' % id(self)
 
             with self._dc_enter_repr():
