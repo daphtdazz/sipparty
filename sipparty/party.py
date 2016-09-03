@@ -82,22 +82,19 @@ class Party(
     # =================== INSTANCE INTERFACE =================================
     #
     @property
+    def dialogs(self):
+        return list(self.__iter_dialogs())
+
+    @property
     def inCallDialogs(self):
         """Return a list of dialogs that are currently in call.
 
         This is only a snapshot, and nothing should be assumed about how long
         the dialogs will stay in call for!
         """
-        try:
-            icds = [
-                invD
-                for invDs in itervalues(self._pt_inviteDialogs)
-                for invD in invDs
-                if invD.state == invD.States.InDialog]
-        except AttributeError as exc:
-            log.debug(exc, exc_info=True)
-            raise
-        return icds
+        return [
+            invD for invD in self.__iter_dialogs()
+            if invD.state == invD.States.InDialog]
 
     def __init__(self, display_name_uri=None, **kwargs):
         """Create the party.
@@ -205,6 +202,12 @@ class Party(
     #
     # =================== INTERNAL METHODS ===================================
     #
+    def __iter_dialogs(self):
+        return (
+            invD
+            for invDs in itervalues(self._pt_inviteDialogs)
+            for invD in invDs)
+
     def __make_new_dialog(self, dlg_type, to_uri):
         if dlg_type is None:
             raise TypeError(

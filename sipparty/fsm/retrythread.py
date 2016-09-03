@@ -37,7 +37,7 @@ from six import PY2
 from socket import (error as socket_error, socketpair)
 import sys
 import threading
-from ..util import (Clock, OnlyWhenLocked)
+from ..util import (Clock, OnlyWhenLocked, Singleton)
 
 log = logging.getLogger(__name__)
 
@@ -85,9 +85,10 @@ class _FDSource(object):
                 self._fds_int)
 
 
-class RetryThread(threading.Thread):
+class RetryThread(Singleton, threading.Thread):
 
-    def __init__(self, action=None, master_thread=None, **kwargs):
+    def __init__(self, action=None, master_thread=None, auto_start=True,
+                 **kwargs):
         """Callers must be careful that they do not hold references to the
         thread and pass in actions that hold references to themselves, which
         leads to a retain deadlock (each hold the other so neither are ever
@@ -127,6 +128,12 @@ class RetryThread(threading.Thread):
         # Initialize support for util.OnlyWhenLocked
         self._lock = threading.RLock()
         self._lock_holdingThread = None
+
+        # Because this is a singleton clients that don't care whether they get
+        # a fresh version shouldn't need to worry about starting the thread,
+        # so start by default.
+        if auto_start:
+            self.start()
 
     def run(self):
         """Runs until cancelled.
@@ -242,6 +249,7 @@ class RetryThread(threading.Thread):
         """Add file descriptor `fd` as a source to wait for data from, with
         `action` to be called when there is data available from `fd`.
         """
+        log.debug('Add FD %s', fd)
         newinput = _FDSource(fd, action)
         newinputint = int(newinput)
         if newinputint in self._rthr_fdSources:
@@ -253,11 +261,11 @@ class RetryThread(threading.Thread):
 
     @OnlyWhenLocked
     def rmInputFD(self, fd):
+        log.debug('Remove FD %s', fd)
         fd = int(_FDSource(fd, None))
         if fd not in self._rthr_fdSources:
             raise ValueError(
                 "FD %r cannot be removed as it is not on the thread." % fd)
-        log.debug("RM FD %r", fd)
         del self._rthr_fdSources[fd]
         self._rthr_triggerSpin()
 

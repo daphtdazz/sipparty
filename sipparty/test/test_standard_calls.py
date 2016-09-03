@@ -17,6 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
+import threading
 
 from ..fsm import fsmtimer
 from ..parties import NoMediaSimpleCallsParty
@@ -79,12 +80,48 @@ class TestStandardDialog(SIPPartyTestCase):
         ctrns.checkTimers()
         self.assertEqual(ctrns.retransmit_count, 1)
 
+    def test_synchronous_multiple_calls(self):
+        nn = 100
+        log.info('Create parties which will listen')
+        recv_parties = [
+            NoMediaSimpleCallsParty(aor='callee-%d@listen.com' % (test + 1,))
+            for test in range(nn)]
+
+        log.info('Listen parties')
+        list(map(lambda x: x.listen(port=0), recv_parties))
+
+        # The transport is implemented using sipparty.util.Singleton which
+        # provides a powerful and simple Singleton design pattern
+        # implementation.
+        log.info('Check listen socket count')
+        tp = SIPTransport()
+        self.assertEqual(tp.listen_socket_count, 1)
+
+        log.info('Create send parties')
+        send_parties = [
+            NoMediaSimpleCallsParty(aor='caller-%d@send.com' % (test + 1,))
+            for test in range(nn)
+        ]
+
+        log.info('Start and terminate dialogs')
+        for send, recv in zip(send_parties, recv_parties):
+            dlg = send.invite(recv)
+            dlg.waitForStateCondition(lambda st: st == dlg.States.InDialog)
+            rd = recv.dialogs[0]
+            rd.waitForStateCondition(lambda st: st == rd.States.InDialog)
+            dlg.terminate()
+            dlg.waitForStateCondition(lambda st: st == dlg.States.Terminated)
+            rd.waitForStateCondition(lambda st: st == rd.States.Terminated)
+
+        list(map(lambda x: x.unlisten(), recv_parties))
+
     def test_multiple_calls(self):
 
+        nn = 100
         log.info('Create parties which will listen')
         parties = [
             NoMediaSimpleCallsParty(aor='callee-%d@listen.com' % (test + 1,))
-            for test in range(3)]
+            for test in range(nn)]
 
         log.info('Listen parties')
         list(map(lambda x: x.listen(port=0), parties))
@@ -99,16 +136,19 @@ class TestStandardDialog(SIPPartyTestCase):
         log.info('Create send parties')
         send_parties = [
             NoMediaSimpleCallsParty(aor='caller-%d@send.com' % (test + 1,))
-            for test in range(3)
+            for test in range(nn)
         ]
 
         log.info('Start dialogs')
         dlgs = list(
-            cl.invite(cle) for cl, cle in zip(send_parties[:3], parties))
+            cl.invite(cle) for cl, cle in zip(send_parties, parties))
         for dlg in dlgs:
             dlg.waitForStateCondition(lambda st: st == dlg.States.InDialog)
+
+        log.info('There are %d threads active' % (threading.active_count(),))
 
         log.info('Terminate dialogs')
         for dlg in dlgs:
             dlg.terminate()
-        WaitFor(lambda: all(dlg.state == 'Terminated' for dlg in dlgs))
+        for dlg in dlgs:
+            dlg.waitForStateCondition(lambda st: st == dlg.States.Terminated)

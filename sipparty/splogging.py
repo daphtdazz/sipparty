@@ -26,7 +26,18 @@ logging.addLevelName(logging.DETAIL, "DETAIL")
 
 
 class SPLogger(logging.getLoggerClass()):
+
+    global_debug_logs_enabled = True 
+    global_detail_logs_enabled = False
+
+    def debug(self, msg, *args, **kwargs):
+        if not self.global_debug_logs_enabled:
+            return
+        return super(SPLogger, self).debug(msg, *args, **kwargs)
+
     def detail(self, msg, *args, **kwargs):
+        if not self.global_detail_logs_enabled:
+            return
         self.log(logging.DETAIL, msg, *args, **kwargs)
 
 logging.setLoggerClass(SPLogger)

@@ -789,11 +789,10 @@ class Transport(Singleton):
         return count
 
     def __init__(self):
+        log.info('%s.__init__()', type(self).__name__)
         super(Transport, self).__init__()
         self._tp_byteConsumer = None
-        self._tp_retryThread = RetryThread(
-            name=self.singleton_name + '.retryThread')
-        self._tp_retryThread.start()
+        self._tp_retryThread = RetryThread()
 
         # Series of dictionaries keyed by (in order):
         # - socket family (AF_INET etc.)

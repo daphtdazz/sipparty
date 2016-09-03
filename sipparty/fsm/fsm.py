@@ -818,9 +818,7 @@ class AsyncFSM(LockedFSM):
             self.__backgroundTimerPop()
 
         self._fsm_thread = retrythread.RetryThread(
-            action=check_weak_self_timers,
-            name=self._fsm_name + '.retry_thread')
-        self._fsm_thread.start()
+            action=check_weak_self_timers)
 
     def start_timer(self, timer):
         """Override of the superclass to implement background timer scheduling.
@@ -867,11 +865,7 @@ class AsyncFSM(LockedFSM):
 
     def __del__(self):
         log.info("DELETE FSM %s", self.name)
-        self._fsm_thread.cancel()
-        if self._fsm_thread is not threading.currentThread():
-            log.debug('Join retrythread...')
-            self._fsm_thread.join()
-            log.debug('Joined.')
+        getattr(super(AsyncFSM, self), '__del__', lambda: None)()
 
     @class_or_instance_method
     def _fsm_setState(self, new_state):
