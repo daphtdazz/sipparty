@@ -1191,3 +1191,9 @@ class FallbackProperty(object):
 
             raise TypeError(
                 'Bad object %r used for fallback attribute' % fallback)
+
+try:
+    profile = profile
+except NameError:
+    def profile(func):
+        return func

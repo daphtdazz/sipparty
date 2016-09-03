@@ -26,7 +26,7 @@ from ..fsm import (AsyncFSM, InitialStateKey, UnexpectedInput)
 from ..deepclass import DeepClass, dck
 from ..parse import ParsedPropertyOfClass
 from ..sdp import (sdpsyntax, SDPIncomplete)
-from ..util import (abytes, astr, Enum, WeakProperty)
+from ..util import (abytes, astr, Enum, profile, WeakProperty)
 from . import prot
 from .body import Body
 from .components import URI

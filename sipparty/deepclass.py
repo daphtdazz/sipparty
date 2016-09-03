@@ -24,7 +24,8 @@ import logging
 from six import (iteritems, iterkeys)
 from six.moves import intern
 from .util import (
-    append_to_exception_message, CheckingProperty, Enum, DerivedProperty)
+    append_to_exception_message, CheckingProperty, Enum, DerivedProperty,
+    profile)
 from .vb import ValueBinder
 
 log = logging.getLogger(__name__)
@@ -80,6 +81,7 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
         del __dc_attr_desc
         del __dc_attr_name
 
+        @profile
         def __init__(self, **kwargs):
             """Initialize a deepclass instance.
 

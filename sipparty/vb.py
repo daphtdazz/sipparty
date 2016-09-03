@@ -19,6 +19,7 @@ from six import iteritems
 from weakref import (ref as wref)
 
 from .classmaker import classbuilder
+from .util import profile
 
 log = logging.getLogger(__name__)
 
@@ -388,6 +389,7 @@ class ValueBinder:
     #
     # =================== MAGIC METHODS ======================================
     #
+    @profile
     def __setattr__(self, attr, val):
         """Very perf sensitive `__setattr__` function."""
         if attr.startswith('_'):
