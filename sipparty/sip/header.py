@@ -22,6 +22,7 @@ import logging
 from numbers import Integral
 from random import randint
 from six import (add_metaclass, binary_type as bytes, PY2)
+from ..classmaker import classbuilder
 from ..deepclass import (DeepClass, dck)
 from ..parse import (Parser,)
 from ..util import (
@@ -37,13 +38,17 @@ from .request import Request
 log = logging.getLogger(__name__)
 
 
-@add_metaclass(attributesubclassgen)
 @TwoCompatibleThree
-class Header(
+@classbuilder(
+    bases=(
         DeepClass("_hdr_", {
             "header_value": {dck.gen: lambda: None}
         }),
-        Parser, BytesGenner, ValueBinder):
+        Parser, BytesGenner, ValueBinder
+    ),
+    mc=attributesubclassgen
+)
+class Header:
     """A SIP header.
 
     Each type of SIP header has its own subclass, and so generally the Header

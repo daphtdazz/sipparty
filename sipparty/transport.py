@@ -27,6 +27,7 @@ from socket import (
     AF_INET, AF_INET6, error as socket_error, getaddrinfo, gethostname,
     SHUT_RDWR, socket as socket_class, SOCK_STREAM, SOCK_DGRAM)
 from weakref import WeakValueDictionary
+from .classmaker import classbuilder
 from .deepclass import (dck, DeepClass)
 from .fsm import (RetryThread)
 from .vb import ValueBinder
@@ -447,7 +448,8 @@ def GetBoundSocket(family, socktype, address, port_filter=None):
     return ssocket
 
 
-class ListenDescription(
+@classbuilder(
+    bases=(
         DeepClass('_laddr_', {
             'port': {dck.check: lambda x: x == 0 or IsValidPortNum(x)},
             'sock_family': {dck.check: lambda x: x in SOCK_FAMILIES},
@@ -458,7 +460,9 @@ class ListenDescription(
             'scopeid': {dck.check: lambda x: isinstance(x, Integral)},
             'port_filter': {dck.check: lambda x: isinstance(x, Callable)}}),
         ValueBinder,
-        TupleRepresentable):
+        TupleRepresentable
+))
+class ListenDescription:
 
     @classmethod
     def description_from_socket(cls, sck):

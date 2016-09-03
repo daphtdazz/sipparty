@@ -17,6 +17,7 @@ limitations under the License.
 import logging
 from six import (binary_type as bytes, itervalues)
 from weakref import proxy
+from .classmaker import classbuilder
 from .deepclass import (DeepClass, dck)
 from .parse import (ParsedPropertyOfClass)
 from .sip import DNameURI, URI, Incomplete, Message
@@ -47,7 +48,8 @@ class Timeout(PartyException):
     """Timeout waiting for something to happen."""
 
 
-class Party(
+@classbuilder(
+    bases=(
         DeepClass("_pt_", {
             'dialog_delegate': {},
             "display_name_uri": {
@@ -64,7 +66,10 @@ class Party(
             },
             "transport": {dck.gen: SIPTransport}
         }),
-        AORHandler, ValueBinder):
+        AORHandler, ValueBinder
+    )
+)
+class Party:
     """A party in a sip call, aka an endpoint, caller or callee etc."""
 
     #

@@ -17,7 +17,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-from six import (binary_type as bytes, add_metaclass)
+from six import (binary_type as bytes)
+from ..classmaker import classbuilder
 from ..deepclass import (DeepClass, dck)
 from ..parse import (Parser, ParsedPropertyOfClass)
 from ..util import (BytesGenner, CCPropsFor, TwoCompatibleThree)
@@ -33,9 +34,9 @@ log = logging.getLogger(__name__)
 sentinel = type('FieldNoAttributeSentinel', (), {})()
 
 
-@add_metaclass(CCPropsFor(("delegateattributes", "parseinfo")))
 @TwoCompatibleThree
-class Field(
+@classbuilder(
+    bases=(
         DeepClass("_fld_", {
             "value": {},
             "parameters": {
@@ -44,7 +45,11 @@ class Field(
         }),
         Parser,
         BytesGenner,
-        ValueBinder):
+        ValueBinder
+    ),
+    mc=CCPropsFor(("delegateattributes", "parseinfo"))
+)
+class Field:
 
     # For headers that delegate properties, these are the properties to
     # delegate. Note that these are cumulative, so subclasses declaring their

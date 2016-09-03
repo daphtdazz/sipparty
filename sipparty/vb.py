@@ -18,6 +18,8 @@ import logging
 from six import iteritems
 from weakref import (ref as wref)
 
+from .classmaker import classbuilder
+
 log = logging.getLogger(__name__)
 log.setLevel(logging.WARNING)  # vb is verbose at lower levels.
 
@@ -80,6 +82,12 @@ class _VBSubClassMonitor(object):
             '\'_VBSubClassMonitor\' is not a writable property.')
 
 
+class ValueBinderType(type):
+
+    pass
+
+
+@classbuilder(mc=ValueBinderType)
 class ValueBinder(object):
     """This mixin class provides a way to bind values to one another."""
 

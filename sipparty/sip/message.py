@@ -22,6 +22,7 @@ import re
 import logging
 from numbers import (Integral)
 from .. import (util,)
+from ..classmaker import classbuilder
 from ..deepclass import (DeepClass, dck)
 from ..parse import (ParseError,)
 from ..sdp import sdpsyntax
@@ -59,16 +60,9 @@ ContentTypeBinding = (
 )
 
 
-@add_metaclass(
-    # The FSM type needs both the attributesubclassgen and the cumulative
-    # properties metaclasses.
-    type('Message', (
-        util.CCPropsFor((
-            "mandatoryheaders", "mandatoryparameters", "field_bindings")),
-        util.attributesubclassgen,),
-        dict()))
 @util.TwoCompatibleThree
-class Message(
+@classbuilder(
+    bases=(
         DeepClass("_msg_", {
             "startline": {dck.gen: "MakeStartline"},
             "headers": {dck.gen: lambda: []},
@@ -76,7 +70,14 @@ class Message(
                 dck.gen: lambda: [], dck.set: "setBodies"},
             "parsedBytes": {dck.check: lambda x: isinstance(x, Integral)}
         }),
-        BytesGenner, ValueBinder):
+        BytesGenner, ValueBinder
+    ),
+    mc=(
+        util.CCPropsFor((
+            "mandatoryheaders", "mandatoryparameters", "field_bindings")),
+        util.attributesubclassgen)
+)
+class Message:
     """Generic message class. Use `Request` or `Response` rather than using
     this directly.
     """

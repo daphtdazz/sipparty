@@ -19,6 +19,7 @@ limitations under the License.
 import logging
 import random
 from six import add_metaclass, binary_type as bytes
+from ..classmaker import classbuilder
 from ..parse import (Parser)
 from ..util import (
     abytes, astr, Enum, attributesubclassgen, BytesGenner, ClassType,
@@ -29,7 +30,12 @@ from .prot import (bdict, BranchMagicCookie, Incomplete)
 log = logging.getLogger(__name__)
 
 
-class Parameters(Parser, BytesGenner, ValueBinder):
+@classbuilder(
+    bases=(
+        Parser, BytesGenner, ValueBinder
+    )
+)
+class Parameters:
     """Class representing a list of parameters on a header or other object.
     """
     parseinfo = {
@@ -107,9 +113,14 @@ class Parameters(Parser, BytesGenner, ValueBinder):
                     yield by
 
 
-@add_metaclass(attributesubclassgen)
 @TwoCompatibleThree
-class Param(Parser, BytesGenner, ValueBinder):
+@classbuilder(
+    bases=(
+        Parser, BytesGenner, ValueBinder
+    ),
+    mc=attributesubclassgen
+)
+class Param:
 
     types = Enum(("branch", "tag",), normalize=lambda x: x.lower())
 
