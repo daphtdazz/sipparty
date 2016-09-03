@@ -69,9 +69,9 @@ class attributesubclassgen(type):  # noqa
         """__init__ for classes is called after the bases and dict have been
         set up, so no need to re-set up here."""
         log.debug("Init %r, %r, %r, %r", self.__name__, name, bases, dict)
-        super(attributesubclassgen, self).__init__(name, bases, dict)
         self._supername = name
         self._ascg_subClasses = {}
+        super(attributesubclassgen, self).__init__(name, bases, dict)
 
     def addSubclassesFromDict(self, subclass_dict):
         superName = self._supername
