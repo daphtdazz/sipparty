@@ -350,15 +350,18 @@ class ValueBinder(object):
                         self.__class__.__name__, attr))
             return (attr, gattr(attr))
 
-        log.debug("Get %r (from %r instance)", attr, self.__class__.__name__)
+        enable_debug_logs = False
+        enable_debug_logs and log.debug(
+            "Get %r (from %r instance)", attr, self.__class__.__name__)
         sd = self.__dict__
 
         # Check for delegate attributes.
         if '_vb_delegate_attributes' in sd:
-            log.detail('Looking for a delegate attribute')
+            enable_debug_logs and log.detail(
+                'Looking for a delegate attribute')
             das = sd["_vb_delegate_attributes"]
             if attr in das:
-                log.detail("Delegate attribute %r", attr)
+                enable_debug_logs and log.detail("Delegate attribute %r", attr)
                 return getattr(getattr(self, das[attr]), attr)
 
         gt = getattr(super(ValueBinder, self), '__getattr__', None)
@@ -368,8 +371,9 @@ class ValueBinder(object):
 
         return gt(attr)
 
+    @profile
     def __setattr__(self, attr, val):
-        """
+        """Very perf sensitive `__setattr__` function.
         """
         if attr.startswith('_'):
             # For perf reasons assume anything starting with '_' is not bound.
@@ -380,7 +384,8 @@ class ValueBinder(object):
         if PROFILE:
             self.hit_set_attr(attr)
 
-        log.debug("Set %r (on %r instance).", attr, cn)
+        enable_debug_logs = False
+        enable_debug_logs and log.debug("Set %r (on %r instance).", attr, cn)
         sd = self.__dict__
 
         # Avoid recursion if a subclass has not called init (perhaps failed
@@ -397,7 +402,8 @@ class ValueBinder(object):
                     "delegated to attribute %r which is None." % (
                         attr, cn, deleattr))
 
-            log.debug('Set on delegate attribute %r', deleattr)
+            enable_debug_logs and log.debug(
+                'Set on delegate attribute %r', deleattr)
             return setattr(dele, attr, val)
 
         existing_val = getattr(self, attr, None)
@@ -420,7 +426,7 @@ class ValueBinder(object):
                 initialval = val
                 val = getattr(self, attr)
                 if val is not initialval:
-                    log.debug(
+                    enable_debug_logs and log.debug(
                         "%r instance %r attribute val changed after set.",
                         cn, attr)
             finally:
@@ -439,7 +445,8 @@ class ValueBinder(object):
         if existing_val is not val:
             self.vb_updateAttributeBindings(attr, existing_val, val)
         else:
-            log.debug("New val is old val so don't update bindings.")
+            enable_debug_logs and log.debug(
+                "New val is old val so don't update bindings.")
 
     def __delattr__(self, attr):
         log.detail("Del %r.", attr)
