@@ -189,7 +189,6 @@ class Enum(set):
         nn = self._en_fixAttr(name)
         return super(Enum, self).__contains__(nn)
 
-    @profile
     def __getattr__(self, attr):
         """Do a lookup of the value in the Enum using attribute access.
 
@@ -304,18 +303,17 @@ class ClassType(object):
         self.class_append = class_append
         self.__doc__ = self.__doc__.format(**locals())
 
-    @profile
     def __get__(self, instance, owner):
-
-        class_name = owner.__name__
-        capp = self.class_append
-        log.detail("Class is %r, append is %r", class_name, capp)
-        class_short_name = class_name.replace(capp, "")
+        """This is optimized for performance as it is hit frequently."""
         try:
-            return getattr(owner.types, class_short_name)
+            return getattr(
+                owner.types,
+                owner.__name__.replace(self.class_append, '')
+            )
         except AttributeError:
             raise AttributeError(
-                "No such known header class type %r" % (class_short_name,))
+                "No such known header class type %r" % (
+                    owner.__name__.replace(self.class_append, ''),))
 
 
 class FirstListItemProxy(object):
