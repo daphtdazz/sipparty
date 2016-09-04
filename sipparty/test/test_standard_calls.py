@@ -51,8 +51,10 @@ class TestStandardDialog(SIPPartyTestCase):
         self.addCleanup(pp.stop)
 
     def test_retransmit(self):
-
+        log.info('test_retransmit')
         tp = SIPTransport()
+        assert tp.connected_socket_count == 0
+        assert tp.listen_socket_count == 0
         dd = TestDialogDelegate()
 
         p1, p2 = [
@@ -88,7 +90,10 @@ class TestStandardDialog(SIPPartyTestCase):
         self.subtest_multiple_calls(auto_start=False)
 
     def subtest_multiple_calls(self, auto_start):
+        orig_auto_start = RetryThread.auto_start
         RetryThread.auto_start = auto_start
+        self.addCleanup(
+            lambda: setattr(RetryThread, 'auto_start', orig_auto_start))
         rt_thr = RetryThread()
 
         nn = 10

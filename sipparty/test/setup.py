@@ -98,16 +98,12 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
         if hasattr(super(SIPPartyTestCase, self), "tearDown"):
             super(SIPPartyTestCase, self).tearDown()
 
-        wrtt = ref(RetryThread())
-        rtt = wrtt()
-        if rtt is not None:
-            rtt.cancel()
-        del rtt
+        RetryThread().cancel()
 
         # Speed things up a bit by doing a gc collect.
         gc.collect()
         SIPTransport.wait_for_no_instances(timeout_s=2)
-        WaitFor(lambda: wrtt() is None, timeout_s=2)
+        RetryThread.wait_for_no_instances(timeout_s=2)
 
     def pushLogLevelToSubMod(self, module, sub_module_name, level):
 
