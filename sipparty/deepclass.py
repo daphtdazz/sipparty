@@ -178,7 +178,7 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
                             "Generating attribute %r of %r instance", tlattr,
                             clname)
                         tlval = self._dck_genTopLevelValueFromTLDict(
-                            tlad, tlsvals)
+                            genner, tlad, tlsvals)
 
                     enable_debug_logs and log.detail(
                         "Set %r attribute %r to %r", clname,
@@ -199,8 +199,7 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
                 yield "%s=%r" % (attr, getattr(self, attr))
             return
 
-        def _dck_genTopLevelValueFromTLDict(self, tlad, tlsvals):
-            gen = tlad[dck.gen]
+        def _dck_genTopLevelValueFromTLDict(self, gen, tlad, tlsvals):
             if isinstance(gen, str):
                 genAttr = getattr(self.__class__, gen)
                 if isinstance(genAttr, Callable):
