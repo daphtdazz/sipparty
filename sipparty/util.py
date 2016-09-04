@@ -698,15 +698,15 @@ class _DerivedProperty(object):
         self._rp_set = set
         log.detail("%r", self)
 
-    @profile
     def __get__(self, obj, cls):
-        # log.debug("Get derived prop for obj %r class %r.", obj, cls)
+        enable_debug_logs and log.debug(
+            "Get derived prop for obj %r class %r.", obj, cls)
         target = obj if obj is not None else cls
 
-        log.detail("Get the underlying value (if any).")
+        enable_debug_logs and log.detail("Get the underlying value (if any).")
         pname = self._rp_propName
         val = getattr(target, pname)
-        log.detail("Underlying value %r.", val)
+        enable_debug_logs and log.detail("Underlying value %r.", val)
 
         gt = self._rp_get
         if gt is None:
