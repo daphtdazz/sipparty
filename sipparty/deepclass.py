@@ -98,6 +98,10 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
 
             # Preload the top level attributes dictionary and our instance
             # dictionary.
+            #
+            # 20160904 DMP: tried optimizing by pre-generating these and using
+            # deepcopy and also using two dictionary comprehensions, but no
+            # perf improvement.
             topLevelAttrArgs = {}
             sd = self.__dict__
             sd[_in_repr_attr_name] = False
@@ -107,22 +111,12 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
 
             enable_debug_logs and log.detail("Start dict: %r", sd)
 
-            # Initial pass to end with a dictionary like:
-            # kwargs = {"topLevelAttribute__tlaSubAttribute1": subValue,
-            #           "topLevelAttribute": value}
-            # topLevelAttrArgs = {
-            #     "topLevelAttribute": [
-            #         value,  # May be None.
-            #         {
-            #            "tlaSubAttribute1": subValue,
-            #         }
-            #     ]
-            # }
-            # And with superKwargs just the unrecognised args to pass on to
-            # super.
-
-            superKwargs = self._dck_filter_super_kwargs(
-                kwargs, topLevelAttrArgs, topLevelAttributeDescs)
+            if kwargs:
+                # As a very small optimization only do this if we have kwargs.
+                superKwargs = self._dck_filter_super_kwargs(
+                    kwargs, topLevelAttrArgs, topLevelAttributeDescs)
+            else:
+                superKwargs = {}
 
             # See if we have any delegates to pass to.
             def _dck_filter_vb_dependencies():
@@ -260,6 +254,29 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
         @profile
         def _dck_filter_super_kwargs(self, kwargs, topLevelAttrArgs,
                                      topLevelAttributeDescs):
+            """Separate out kwargs for children.
+
+            Starting with::
+
+                kwargs = {"topLevelAttribute__tlaSubAttribute1": subValue,
+                          "topLevelAttribute": value}
+
+            End with::
+
+                topLevelAttrArgs = {
+                    "topLevelAttribute": [
+                        value,  # May be None.
+                        {
+                           "tlaSubAttribute1": subValue,
+                        }
+                    ]
+                }
+
+            and return::
+
+                {"topLevelAttribute": value}
+
+            """
             superKwargs = {}
 
             for kwName, kwVal in iteritems(kwargs):
