@@ -81,43 +81,14 @@ class TestStandardDialog(SIPPartyTestCase):
         ctrns.checkTimers()
         self.assertEqual(ctrns.retransmit_count, 1)
 
-    def test_synchronous_multiple_calls(self):
-        nn = 10
-        log.info('Create parties which will listen')
-        recv_parties = [
-            NoMediaSimpleCallsParty(aor='callee-%d@listen.com' % (test + 1,))
-            for test in range(nn)]
-
-        log.info('Listen parties')
-        list(map(lambda x: x.listen(port=0), recv_parties))
-
-        # The transport is implemented using sipparty.util.Singleton which
-        # provides a powerful and simple Singleton design pattern
-        # implementation.
-        log.info('Check listen socket count')
-        tp = SIPTransport()
-        self.assertEqual(tp.listen_socket_count, 1)
-
-        log.info('Create send parties')
-        send_parties = [
-            NoMediaSimpleCallsParty(aor='caller-%d@send.com' % (test + 1,))
-            for test in range(nn)
-        ]
-
-        log.info('Start and terminate dialogs')
-        for send, recv in zip(send_parties, recv_parties):
-            dlg = send.invite(recv)
-            dlg.waitForStateCondition(lambda st: st == dlg.States.InDialog)
-            rd = recv.dialogs[0]
-            rd.waitForStateCondition(lambda st: st == rd.States.InDialog)
-            dlg.terminate()
-            dlg.waitForStateCondition(lambda st: st == dlg.States.Terminated)
-            rd.waitForStateCondition(lambda st: st == rd.States.Terminated)
-
-        list(map(lambda x: x.unlisten(), recv_parties))
-
     def test_multiple_calls(self):
-        RetryThread.auto_start = False
+        self.subtest_multiple_calls(auto_start=True)
+
+    def test_multiple_calls_single_thread(self):
+        self.subtest_multiple_calls(auto_start=False)
+
+    def subtest_multiple_calls(self, auto_start):
+        RetryThread.auto_start = auto_start
         rt_thr = RetryThread()
 
         nn = 10
@@ -145,8 +116,9 @@ class TestStandardDialog(SIPPartyTestCase):
         dlgs = list(
             cl.invite(cle) for cl, cle in zip(send_parties, parties))
 
-        for ii in range(200):
-            rt_thr.single_pass(wait=0)
+        if not auto_start:
+            for ii in range(200):
+                rt_thr.single_pass(wait=0)
 
         for dlg in dlgs:
             dlg.waitForStateCondition(lambda st: st == dlg.States.InDialog)
@@ -157,8 +129,9 @@ class TestStandardDialog(SIPPartyTestCase):
         for dlg in dlgs:
             dlg.terminate()
 
-        for ii in range(200):
-            rt_thr.single_pass(wait=0)
+        if not auto_start:
+            for ii in range(200):
+                rt_thr.single_pass(wait=0)
 
         for dlg in dlgs:
             dlg.waitForStateCondition(lambda st: st == dlg.States.Terminated)

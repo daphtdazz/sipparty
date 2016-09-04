@@ -194,8 +194,9 @@ class Dialog:
         req.FromHeader.field.value.uri = deepcopy(self.from_uri)
         req.ContactHeader.uri = deepcopy(self.contact_uri)
 
-        req.FromHeader.parameters.tag = deepcopy(self.localTag)
-        req.ToHeader.parameters.tag = deepcopy(self.remoteTag)
+        req.FromHeader.parameters.tag.value = self.localTag.value
+        if self.remoteTag is not None:
+            req.ToHeader.parameters.tag = deepcopy(self.remoteTag)
 
         if self.callIDHeader is None:
             self.callIDHeader = Call_IdHeader()

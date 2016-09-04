@@ -706,8 +706,7 @@ class _DerivedProperty(object):
                 raise ValueError(
                     "Getter attribute %r of %r object is not callable." % (
                         gt, target.__class__.__name__))
-            val = meth(val)
-            return val
+            return meth(val)
 
         # Else getter should be a callable.
         if not isinstance(gt, Callable):

@@ -19,7 +19,7 @@ from six import iteritems
 from weakref import (ref as wref)
 
 from .classmaker import classbuilder
-from .util import profile
+from .util import append_to_exception_message, profile
 
 log = logging.getLogger(__name__)
 
@@ -399,6 +399,9 @@ class ValueBinder:
         if PROFILE:
             self.hit_set_attr(attr)
 
+        if attr not in self._vb_forwardbindings and attr not in self._vb_backwardbindings:
+            return super(ValueBinder, self).__setattr__(attr, val)
+
         enable_debug_logs = False
         enable_debug_logs and log.debug(
             "Set %r (on %r instance).", attr, self.__class__.__name__)
@@ -427,6 +430,11 @@ class ValueBinder:
                     enable_debug_logs and log.debug(
                         "%r instance %r attribute val changed after set.",
                         self.__class__.__name__, attr)
+            except Exception as exc:
+                append_to_exception_message(
+                    exc, '; setting attribute %s of %s instance' % (
+                        attr, type(self).__name__))
+                raise
             finally:
                 settingAttributes.remove(attr)
         except AttributeError as exc:
