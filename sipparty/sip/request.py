@@ -68,6 +68,7 @@ class Request:
             [None,  # First group is for the constructor.
              ("uri", URI),
              ("protocol",)],
+        Parser.PassMappingsToInit: True,
     }
 
     type = ClassType("Request")

@@ -58,6 +58,7 @@ class Host:
              ("address",),
              ("address",),
              ("port", int)],
+        Parser.PassMappingsToInit: True,
     }
 
     def addrTuple(self):
@@ -120,6 +121,7 @@ class AOR:
         Parser.Mappings:
             [("username",),
              ("host", Host)],
+        Parser.PassMappingsToInit: True,
     }
 
     vb_dependencies = [
@@ -212,6 +214,7 @@ class URI:
              ("headers",),
              ("scheme",),
              ("absoluteURIPart",)],
+        Parser.PassMappingsToInit: True,
     }
 
     vb_dependencies = [
@@ -300,7 +303,8 @@ class DNameURI:
             [uri_mapping,
              uri_mapping,
              display_name_mapping,
-             uri_mapping]
+             uri_mapping],
+        Parser.PassMappingsToInit: True,
     }
 
     def __bytes__(self):

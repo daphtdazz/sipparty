@@ -68,7 +68,8 @@ class Field:
             b"",
         Parser.Mappings:
             [("value",),
-             ("parameters", Parameters)]
+             ("parameters", Parameters)],
+        Parser.PassMappingsToInit: True,
     }
 
     def bytesGen(self):
@@ -113,7 +114,8 @@ class DNameURIField(
         Parser.Mappings:
             [("value", DNameURI),
              ("parameters", Parameters)],
-        Parser.Repeats: True
+        Parser.Repeats: True,
+        Parser.PassMappingsToInit: True,
     }
 
 
@@ -161,7 +163,8 @@ class ViaField(
              ("transport",),
              ("host", Host),
              ("parameters", Parameters)],
-        Parser.Repeats: True
+        Parser.Repeats: True,
+        Parser.PassMappingsToInit: True,
     }
 
     def bytesGen(self):

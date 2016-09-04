@@ -172,6 +172,22 @@ class Parser(object):
     In this case after the first match, the input text is cut down by the
     matched text is parsed again, until there is no input text remaining.
 
+    ## Performance tweaks
+
+    ### `PassMappingsToInit`
+
+    By default, `Parser` finds the mappings from the string to parse, creates
+    an instance using the generator, then sets the mappings one by one on the
+    instance. A performance gain may be obtained however if the mappings may
+    be passed into the `__init__` method of the class, which may avoid
+    temporary objects being created and set before the mappings overwrite them,
+    and thus make a performance gain.
+
+    Set the `PassMappingsToInit` flag to `True` in the `parseinfo` dictionary
+    of your class to gain this performance benefit if it is useful.
+
+    E.g. `DeepClass` instances can have this flag set.
+
     """
     # These are keys that can be used in the parseinfo
     Pattern = "pattern"
@@ -181,6 +197,7 @@ class Parser(object):
     # Data = "data"
     Constructor = "constructor"
     Repeats = "repeat"
+    PassMappingsToInit = "pass mappings to init"
 
     @classmethod
     def ParseFail(cls, string, *args, **kwargs):
@@ -273,11 +290,15 @@ class Parser(object):
                     cls.ParseFail(
                         string,
                         "Could not construct the object from the data.")
-            else:
+                obj.parse(string, mo)
+            elif pi.get(Parser.PassMappingsToInit, False):
                 log.debug("  initialize class.")
+                attrs = cls.parsemappings(mo, pi[Parser.Mappings])
+                obj = cls(**attrs)
+                getattr(obj, 'parsecust', lambda str_, mo_: None)(string, mo)
+            else:
                 obj = cls()
-
-            obj.parse(string, mo)
+                obj.parse(string, mo)
 
             if not repeats:
                 log.debug("  finished.")
@@ -303,7 +324,9 @@ class Parser(object):
 
         if Parser.Mappings in self.parseinfo:
             mappings = self.parseinfo[Parser.Mappings]
-            self.parsemappings(mo, mappings)
+            avs = self.parsemappings(mo, mappings)
+            for attr, val in iteritems(avs):
+                setattr(self, attr, val)
 
         # Finally do parsecust, if specified.
         if hasattr(self, "parsecust"):
@@ -311,7 +334,10 @@ class Parser(object):
                 "Parse to parsecust of %r instance", self.__class__.__name__)
             self.parsecust(string=string, mo=mo)
 
-    def parsemappings(self, mo, mappings):
+    @classmethod
+    def parsemappings(cls, mo, mappings):
+        """Return dictionary of mappings of attribute to value to set."""
+        attr_vals = {}
         for mapping, gpnum in zip(mappings, range(1, len(mappings) + 1)):
             if mapping is None:
                 continue
@@ -349,4 +375,6 @@ class Parser(object):
             log.debug("  raw text %r", data)
             tdata = gen(data)
             log.debug("  generated data %r", tdata)
-            setattr(self, attr, tdata)
+            attr_vals[attr] = tdata
+
+        return attr_vals
