@@ -32,8 +32,17 @@ from .classmaker import classmaker
 
 log = logging.getLogger(__name__)
 
+try:
+    profile = profile
+except NameError:
+    def profile(func):
+        return func
+
 # The clock. Defined here so that it can be overridden in the testbed.
 Clock = timeit.default_timer
+
+# Global debug logging switch, for perf-sensitive functions.
+enable_debug_logs = False
 
 
 def append_to_exception_message(exc, message):
@@ -174,9 +183,10 @@ class Enum(set):
         return super(Enum, self).__contains__(nn)
 
     def __getattr__(self, attr):
-        log.detail('%s instance getattr %r', self.__class__.__name__, attr)
-        assert not attr.startswith('_en'), attr
-        assert hasattr(self, '_en_aliases'), attr
+        if enable_debug_logs:
+            log.detail('%s instance getattr %r', self.__class__.__name__, attr)
+            assert not attr.startswith('_en'), attr
+            assert hasattr(self, '_en_aliases'), attr
         nn = self._en_fixAttr(attr)
         if super(Enum, self).__contains__(nn):
             return nn
@@ -210,10 +220,11 @@ class Enum(set):
 
     def _en_fixAttr(self, name):
         if self._en_aliases:
-            log.detail('Is %r is an alias', name)
+            enable_debug_logs and log.detail('Is %r is an alias', name)
             if name in self._en_aliases:
                 val = self._en_aliases[name]
-                log.debug('%r is an alias to %r', name, val)
+                enable_debug_logs and log.debug(
+                    '%r is an alias to %r', name, val)
                 return val
 
         if self._en_normalize:
@@ -1191,9 +1202,3 @@ class FallbackProperty(object):
 
             raise TypeError(
                 'Bad object %r used for fallback attribute' % fallback)
-
-try:
-    profile = profile
-except NameError:
-    def profile(func):
-        return func
