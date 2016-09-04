@@ -20,6 +20,7 @@ import logging
 import threading
 
 from ..fsm import fsmtimer
+from ..fsm.retrythread import RetryThread
 from ..parties import NoMediaSimpleCallsParty
 from ..sip.siptransport import SIPTransport
 from ..sip.standardtimers import StandardTimers
@@ -116,6 +117,8 @@ class TestStandardDialog(SIPPartyTestCase):
         list(map(lambda x: x.unlisten(), recv_parties))
 
     def test_multiple_calls(self):
+        RetryThread.auto_start = False
+        rt_thr = RetryThread()
 
         nn = 100
         log.info('Create parties which will listen')
@@ -138,10 +141,13 @@ class TestStandardDialog(SIPPartyTestCase):
             NoMediaSimpleCallsParty(aor='caller-%d@send.com' % (test + 1,))
             for test in range(nn)
         ]
-
         log.info('Start dialogs')
         dlgs = list(
             cl.invite(cle) for cl, cle in zip(send_parties, parties))
+
+        for ii in range(200):
+            rt_thr.single_pass(wait=0)
+
         for dlg in dlgs:
             dlg.waitForStateCondition(lambda st: st == dlg.States.InDialog)
 
@@ -150,5 +156,9 @@ class TestStandardDialog(SIPPartyTestCase):
         log.info('Terminate dialogs')
         for dlg in dlgs:
             dlg.terminate()
+
+        for ii in range(200):
+            rt_thr.single_pass(wait=0)
+
         for dlg in dlgs:
             dlg.waitForStateCondition(lambda st: st == dlg.States.Terminated)
