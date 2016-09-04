@@ -21,8 +21,10 @@ import logging
 from six import (iteritems, PY2)
 import sys
 import unittest
+from ..fsm.retrythread import RetryThread
 from ..sip.siptransport import SIPTransport
-from ..util import TestCaseREMixin
+from ..util import TestCaseREMixin, WaitFor
+from weakref import ref
 if PY2:
     from mock import (MagicMock, patch)  # noqa
 else:
@@ -96,9 +98,16 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
         if hasattr(super(SIPPartyTestCase, self), "tearDown"):
             super(SIPPartyTestCase, self).tearDown()
 
+        wrtt = ref(RetryThread())
+        rtt = wrtt()
+        if rtt is not None:
+            rtt.cancel()
+        del rtt
+
         # Speed things up a bit by doing a gc collect.
         gc.collect()
         SIPTransport.wait_for_no_instances(timeout_s=2)
+        WaitFor(lambda: wrtt() is None, timeout_s=2)
 
     def pushLogLevelToSubMod(self, module, sub_module_name, level):
 

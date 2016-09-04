@@ -82,7 +82,7 @@ class TestStandardDialog(SIPPartyTestCase):
         self.assertEqual(ctrns.retransmit_count, 1)
 
     def test_synchronous_multiple_calls(self):
-        nn = 100
+        nn = 10
         log.info('Create parties which will listen')
         recv_parties = [
             NoMediaSimpleCallsParty(aor='callee-%d@listen.com' % (test + 1,))
@@ -120,7 +120,7 @@ class TestStandardDialog(SIPPartyTestCase):
         RetryThread.auto_start = False
         rt_thr = RetryThread()
 
-        nn = 100
+        nn = 10
         log.info('Create parties which will listen')
         parties = [
             NoMediaSimpleCallsParty(aor='callee-%d@listen.com' % (test + 1,))

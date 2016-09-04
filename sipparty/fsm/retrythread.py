@@ -163,8 +163,6 @@ class RetryThread(Singleton, threading.Thread):
             self.single_pass()
 
         log.debug("%s thread exiting.", self)
-        for sock in (self._rthr_trigger_run_read_fd, self._rthr_triggerRunFD):
-            sock.close()
 
     def single_pass(self, wait=None):
         rsrcs = dict(self._rthr_fdSources)
@@ -307,6 +305,8 @@ class RetryThread(Singleton, threading.Thread):
     #
     def __del__(self):
         log.info('DELETE %s instance: %s', type(self).__name__, self.name)
+        self._rthr_trigger_run_read_fd.close()
+        self._rthr_triggerRunFD.close()
         getattr(super(RetryThread, self), '__del__', lambda: None)()
 
     #
