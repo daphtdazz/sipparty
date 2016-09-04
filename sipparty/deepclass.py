@@ -17,7 +17,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from collections import Callable
+from collections import Callable, OrderedDict
 from contextlib import contextmanager
 from copy import deepcopy
 import logging
@@ -113,36 +113,10 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
 
             if kwargs:
                 # As a very small optimization only do this if we have kwargs.
-                superKwargs = self._dck_filter_super_kwargs(
+                superKwargs, dele_attrs = self._dck_filter_super_kwargs(
                     kwargs, topLevelAttrArgs, topLevelAttributeDescs)
             else:
-                superKwargs = {}
-
-            # See if we have any delegates to pass to.
-            def _dck_filter_vb_dependencies():
-                enable_debug_logs and log.debug('Check VB dependencies')
-                dele_attrs = {}
-                vbds = getattr(self, 'vb_dependencies', None)
-                if vbds is None:
-                    return dele_attrs
-
-                if not isinstance(self, ValueBinder):
-                    raise TypeError(
-                        "%r instance has 'vb_dependencies' set but is not a "
-                        "subclass of 'ValueBinder'" % (
-                            self.__class__.__name__,))
-                allDeleAttrs = set([
-                    attr for _attrs in vbds for attr in _attrs[1]])
-                for kwName, kwVal in iteritems(dict(superKwargs)):
-                    if kwName not in allDeleAttrs:
-                        continue
-                    enable_debug_logs and log.debug(
-                        "Delegate attribute saved: %r", kwName)
-                    dele_attrs[kwName] = kwVal
-                    del superKwargs[kwName]
-                return dele_attrs
-
-            dele_attrs = _dck_filter_vb_dependencies()
+                dele_attrs = superKwargs = {}
 
             # Call super init.
             enable_debug_logs and log.detail(
@@ -188,7 +162,7 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
                                 tlattr, clname, tlattr_val)
                             continue
 
-                        genner = tlad.get(dck.gen, None)
+                        genner = tlad.get(dck.gen)
                         if genner is None:
                             enable_debug_logs and log.debug(
                                 "%r attribute not set and doesn't have "
@@ -254,12 +228,14 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
         @profile
         def _dck_filter_super_kwargs(self, kwargs, topLevelAttrArgs,
                                      topLevelAttributeDescs):
-            """Separate out kwargs for children.
+            """Deduce kwargs that need to be passed to super.
 
             Starting with::
 
                 kwargs = {"topLevelAttribute__tlaSubAttribute1": subValue,
-                          "topLevelAttribute": value}
+                          "topLevelAttribute": value,
+                          "super_attribute": super_value,
+                          "vb_delegated_attribute": del_value}
 
             End with::
 
@@ -274,17 +250,26 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
 
             and return::
 
-                {"topLevelAttribute": value}
+                {"super_attribute": super_value},
+                {"vb_delegated_attribute": del_value}
 
             """
             superKwargs = {}
+            dele_attrs = {}
+            vbds = getattr(self, '_vb_delegate_attributes', {})
 
             for kwName, kwVal in iteritems(kwargs):
                 topLevelAttrName, _, subAttr = kwName.partition("__")
-                if topLevelAttrName not in topLevelAttributeDescs:
-                    enable_debug_logs and log.detail(
-                        "Super kwarg %r", kwName)
-                    superKwargs[kwName] = kwVal
+                desc = topLevelAttributeDescs.get(topLevelAttrName)
+                if desc is None:
+                    if topLevelAttrName not in vbds:
+                        enable_debug_logs and log.detail(
+                            "Super kwarg %r", kwName)
+                        superKwargs[kwName] = kwVal
+                        continue
+
+                    # Got a delegate attribute
+                    dele_attrs[kwName] = kwVal
                     continue
 
                 enable_debug_logs and log.detail(
@@ -301,7 +286,7 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
                     tlaa[1][subAttr] = kwVal
                 else:
                     tlaa[0] = kwVal
-            return superKwargs
+            return superKwargs, dele_attrs
 
         def __repr__(self):
             if getattr(self, _in_repr_attr_name):
