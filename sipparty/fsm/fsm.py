@@ -818,8 +818,8 @@ class AsyncFSM(LockedFSM):
 
             self.__backgroundTimerPop()
 
-        self._fsm_thread = retrythread.RetryThread(
-            action=check_weak_self_timers)
+        self._fsm_thread = retrythread.RetryThread()
+        self._fsm_thread.add_action(check_weak_self_timers)
 
     def start_timer(self, timer):
         """Override of the superclass to implement background timer scheduling.

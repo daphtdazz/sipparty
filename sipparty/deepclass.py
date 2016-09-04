@@ -145,10 +145,10 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
                 super(DeepClass, self).__init__(**superKwargs)
             except TypeError as terr:
                 if 'takes no parameters' in str(terr):
-                    raise TypeError(
-                        'Unrecognised key-word arguments passed to %r '
-                        'constructor: %r' % (
-                            type(self).__name__, list(superKwargs.keys())))
+                    append_to_exception_message(
+                        terr,
+                        ' - kwargs remaining were %s' % (superKwargs,))
+                    raise
                 raise
 
             # Initialize the attributes, but notice that topLevelAttrArgs has

@@ -89,7 +89,7 @@ class RetryThread(Singleton, threading.Thread):
 
     auto_start = True
 
-    def __init__(self, action=None, master_thread=None, auto_start=None,
+    def __init__(self, master_thread=None, auto_start=None,
                  **kwargs):
         """Callers must be careful that they do not hold references to the
         thread and pass in actions that hold references to themselves, which
@@ -108,8 +108,7 @@ class RetryThread(Singleton, threading.Thread):
         weak reference in Action.
         """
         super(RetryThread, self).__init__(**kwargs)
-        log.debug("%s.__init__ %s", self.__class__.__name__, self.name)
-        self._rthr_action = action
+        log.debug("%s.__init__ %s", type(self).__name__, self.name)
         self._rthr_cancelled = False
         self._rthr_retryTimes = []
         self._rthr_nextTimesLock = threading.Lock()
@@ -117,6 +116,7 @@ class RetryThread(Singleton, threading.Thread):
         self._rthr_noWorkSequence = 0
         self.__select_bad_fd_count = 0
         self.__next_wait = self._rthr_noWorkWait
+        self.__actions = []
 
         self._rthr_fdSources = {}
 
@@ -222,8 +222,7 @@ class RetryThread(Singleton, threading.Thread):
 
         # We have some work to do.
         log.debug("%s retrying as next %r <= now %r", self, next, now)
-        action = self._rthr_action
-        if action is not None:
+        for action in self.__actions:
             try:
                 action()
             except Exception:
@@ -269,6 +268,9 @@ class RetryThread(Singleton, threading.Thread):
                 "FD %r cannot be removed as it is not on the thread." % fd)
         del self._rthr_fdSources[fd]
         self._rthr_triggerSpin()
+
+    def add_action(self, action):
+        self.__actions.append(action)
 
     def addRetryTime(self, ctime):
         """Add a time when we should retry the action. If the time is already
