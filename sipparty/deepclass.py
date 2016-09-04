@@ -29,6 +29,8 @@ from .util import (
 from .vb import ValueBinder
 
 log = logging.getLogger(__name__)
+enable_debug_logs = False
+
 DeepClassKeys = Enum(("check", "get", "set", "gen", "descriptor",))
 dck = DeepClassKeys
 
@@ -90,8 +92,6 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
             global splogging disable switch. Various other parts are optimized
             too so modify at your peril.
             """
-            enable_debug_logs = False
-
             clname = self.__class__.__name__
             enable_debug_logs and log.detail(
                 "DeepClass %r init with kwargs: %r", clname, kwargs)
@@ -108,7 +108,7 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
             enable_debug_logs and log.detail("Start dict: %r", sd)
 
             # Initial pass to end with a dictionary like:
-            # kwargs = {"topLevelAttribute_tlaSubAttribute1": subValue,
+            # kwargs = {"topLevelAttribute__tlaSubAttribute1": subValue,
             #           "topLevelAttribute": value}
             # topLevelAttrArgs = {
             #     "topLevelAttribute": [
@@ -120,35 +120,9 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
             # }
             # And with superKwargs just the unrecognised args to pass on to
             # super.
-            def _dck_filter_super_kwargs(kwargs, topLevelAttrArgs):
-                superKwargs = dict(kwargs)
 
-                for kwName, kwVal in iteritems(kwargs):
-                    topLevelAttrName, _, subAttr = kwName.partition("__")
-                    if topLevelAttrName not in topLevelAttributeDescs:
-                        enable_debug_logs and log.detail(
-                            "Super kwarg %r", kwName)
-                        continue
-
-                    enable_debug_logs and log.detail(
-                        "Deep class kwarg %r %r", kwName, kwVal)
-                    del superKwargs[kwName]
-
-                    tlaa = topLevelAttrArgs[topLevelAttrName]
-
-                    if len(_) != 0:
-                        if len(subAttr) == 0:
-                            raise KeyError(
-                                "Attribute %r of %r instance not a valid "
-                                "subattribute of attribute %r." % (
-                                    kwName, clname,
-                                    topLevelAttrName))
-                        tlaa[1][subAttr] = kwVal
-                    else:
-                        tlaa[0] = kwVal
-                return superKwargs
-
-            superKwargs = _dck_filter_super_kwargs(kwargs, topLevelAttrArgs)
+            superKwargs = self._dck_filter_super_kwargs(
+                kwargs, topLevelAttrArgs, topLevelAttributeDescs)
 
             # See if we have any delegates to pass to.
             def _dck_filter_vb_dependencies():
@@ -282,6 +256,35 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
                 yield
             finally:
                 setattr(self, _in_repr_attr_name, False)
+
+        @profile
+        def _dck_filter_super_kwargs(self, kwargs, topLevelAttrArgs,
+                                     topLevelAttributeDescs):
+            superKwargs = dict(kwargs)
+
+            for kwName, kwVal in iteritems(kwargs):
+                topLevelAttrName, _, subAttr = kwName.partition("__")
+                if topLevelAttrName not in topLevelAttributeDescs:
+                    enable_debug_logs and log.detail(
+                        "Super kwarg %r", kwName)
+                    continue
+
+                enable_debug_logs and log.detail(
+                    "Deep class kwarg %r %r", kwName, kwVal)
+                del superKwargs[kwName]
+                tlaa = topLevelAttrArgs[topLevelAttrName]
+
+                if len(_) != 0:
+                    if len(subAttr) == 0:
+                        raise KeyError(
+                            "Attribute %r of %r instance not a valid "
+                            "subattribute of attribute %r." % (
+                                kwName, type(self).__name__,
+                                topLevelAttrName))
+                    tlaa[1][subAttr] = kwVal
+                else:
+                    tlaa[0] = kwVal
+            return superKwargs
 
         def __repr__(self):
             if getattr(self, _in_repr_attr_name):
