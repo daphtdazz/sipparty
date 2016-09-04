@@ -179,15 +179,28 @@ class Enum(set):
         return Enum(set(self) | set(other))
 
     def __contains__(self, name):
+        """Look up an Enum value using subscript access.
+
+        See perf comments for `__getattr__`.
+        """
+        if super(Enum, self).__contains__(name):
+            return True
+
         nn = self._en_fixAttr(name)
         return super(Enum, self).__contains__(nn)
 
     @profile
     def __getattr__(self, attr):
-        if enable_debug_logs:
-            log.detail('%s instance getattr %r', self.__class__.__name__, attr)
-            assert not attr.startswith('_en'), attr
-            assert hasattr(self, '_en_aliases'), attr
+        """Do a lookup of the value in the Enum using attribute access.
+
+        This is highly perf sensitive, and in particular is optimized for
+        the default case where there is no need to fix up the attribute (where
+        the programmer has hard-coded the value).
+        """
+        if super(Enum, self).__contains__(attr):
+            return attr
+
+        # The raw value was not a member of the enum, so try fixing up.
         nn = self._en_fixAttr(attr)
         if super(Enum, self).__contains__(nn):
             return nn
