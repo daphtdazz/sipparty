@@ -28,7 +28,7 @@ import threading
 from weakref import ref
 from ..classmaker import classbuilder
 from ..util import (
-    CCPropsFor, class_or_instance_method, Enum, OnlyWhenLocked, profile)
+    CCPropsFor, class_or_instance_method, Enum, OnlyWhenLocked)
 from . import (fsmtimer, retrythread)
 
 log = logging.getLogger(__name__)

@@ -20,7 +20,7 @@ limitations under the License.
 import re
 import logging
 from six import (binary_type as bytes, iteritems, PY2)
-from .util import abytes
+from .util import abytes, profile
 
 log = logging.getLogger(__name__)
 
@@ -250,6 +250,7 @@ class Parser(object):
         return mo
 
     @classmethod
+    @profile
     def Parse(cls, string):
         """The aim of this class method is to produce a fully initialized
         instance or list of instances of a subclass of Parser from some text.

@@ -182,6 +182,7 @@ class Enum(set):
         nn = self._en_fixAttr(name)
         return super(Enum, self).__contains__(nn)
 
+    @profile
     def __getattr__(self, attr):
         if enable_debug_logs:
             log.detail('%s instance getattr %r', self.__class__.__name__, attr)
@@ -290,6 +291,7 @@ class ClassType(object):
         self.class_append = class_append
         self.__doc__ = self.__doc__.format(**locals())
 
+    @profile
     def __get__(self, instance, owner):
 
         class_name = owner.__name__
@@ -685,6 +687,7 @@ class _DerivedProperty(object):
         self._rp_set = set
         log.detail("%r", self)
 
+    @profile
     def __get__(self, obj, cls):
         # log.debug("Get derived prop for obj %r class %r.", obj, cls)
         target = obj if obj is not None else cls

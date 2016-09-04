@@ -16,7 +16,7 @@ limitations under the License.
 """
 import logging
 
-from ...util import profile, WeakMethod, WeakProperty
+from ...util import WeakMethod, WeakProperty
 from ..prot import TransactionID
 from .base import Transaction
 from .client import (
@@ -81,7 +81,6 @@ class TransactionManager(object):
         log.debug('Get inbound client trans for response %d', msg.type)
         return self.lookup_transaction('client', msg)
 
-    @profile
     def transaction_for_outbound_message(self, msg, **kwargs):
         if msg.isrequest():
             log.debug('Get outbound client trans for request %s', msg.type)

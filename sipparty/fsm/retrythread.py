@@ -37,7 +37,7 @@ from six import PY2
 from socket import (error as socket_error, socketpair)
 import sys
 import threading
-from ..util import (Clock, OnlyWhenLocked, profile, Singleton)
+from ..util import (Clock, OnlyWhenLocked, Singleton)
 
 log = logging.getLogger(__name__)
 

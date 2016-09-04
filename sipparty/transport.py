@@ -33,7 +33,7 @@ from .fsm import (RetryThread)
 from .vb import ValueBinder
 from .util import (
     abytes, AsciiBytesEnum, astr, bglobals_g,
-    DerivedProperty, Enum, profile, Singleton, Retainable,
+    DerivedProperty, Enum, Singleton, Retainable,
     TupleRepresentable, TwoCompatibleThree, WeakMethod, WeakProperty)
 
 

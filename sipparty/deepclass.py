@@ -224,7 +224,6 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
             finally:
                 setattr(self, _in_repr_attr_name, False)
 
-        @profile
         def _dck_filter_super_kwargs(self, kwargs, topLevelAttrArgs,
                                      topLevelAttributeDescs):
             """Deduce kwargs that need to be passed to super.

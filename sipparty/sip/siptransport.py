@@ -23,7 +23,7 @@ from ..parse import ParseError
 from ..transport import (
     IsValidTransportName, Transport, SockTypeFromName,
     UnregisteredPortGenerator)
-from ..util import (abytes, DerivedProperty, profile, WeakMethod)
+from ..util import (abytes, DerivedProperty, WeakMethod)
 from . import prot
 from .components import AOR, Host
 from .message import Message
@@ -168,7 +168,6 @@ class SIPTransport:
         except AttributeError:
             pass
 
-    @profile
     def send_message_with_transaction(
             self, msg, transaction_user, remote_name=None, remote_port=None,
             **kwargs):
