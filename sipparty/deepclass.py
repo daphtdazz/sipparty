@@ -260,18 +260,18 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
         @profile
         def _dck_filter_super_kwargs(self, kwargs, topLevelAttrArgs,
                                      topLevelAttributeDescs):
-            superKwargs = dict(kwargs)
+            superKwargs = {}
 
             for kwName, kwVal in iteritems(kwargs):
                 topLevelAttrName, _, subAttr = kwName.partition("__")
                 if topLevelAttrName not in topLevelAttributeDescs:
                     enable_debug_logs and log.detail(
                         "Super kwarg %r", kwName)
+                    superKwargs[kwName] = kwVal
                     continue
 
                 enable_debug_logs and log.detail(
                     "Deep class kwarg %r %r", kwName, kwVal)
-                del superKwargs[kwName]
                 tlaa = topLevelAttrArgs[topLevelAttrName]
 
                 if len(_) != 0:
