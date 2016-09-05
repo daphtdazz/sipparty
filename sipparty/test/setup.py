@@ -23,8 +23,7 @@ import sys
 import unittest
 from ..fsm.retrythread import RetryThread
 from ..sip.siptransport import SIPTransport
-from ..util import TestCaseREMixin, WaitFor
-from weakref import ref
+from ..util import TestCaseREMixin
 if PY2:
     from mock import (MagicMock, patch)  # noqa
 else:

@@ -26,7 +26,6 @@ from six.moves import intern
 from .util import (
     append_to_exception_message, CheckingProperty, Enum, DerivedProperty,
     profile)
-from .vb import ValueBinder
 
 log = logging.getLogger(__name__)
 enable_debug_logs = False
@@ -37,6 +36,7 @@ dck = DeepClassKeys
 # Since we're going to be using these a lot it's actually a lot more efficient
 # to cache them here...
 gen_key = dck.gen
+
 
 def DCProperty(tlp, name, attrDesc):
     internalName = tlp + name

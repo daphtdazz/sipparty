@@ -74,7 +74,7 @@ class TestStandardDialog(SIPPartyTestCase):
         self.assertIsNotNone(rq)
         tm = tp.transaction_manager
         ctrns = tm.transaction_for_outbound_message(dd.dialog.request)
-        strns = tm.transaction_for_inbound_message(dd.dialog.request)
+        tm.transaction_for_inbound_message(dd.dialog.request)
         self.assertEqual(ctrns.state, ctrns.States.calling)
         self.assertEqual(ctrns.retransmit_count, 0)
 

@@ -460,8 +460,7 @@ def GetBoundSocket(family, socktype, address, port_filter=None):
             'scopeid': {dck.check: lambda x: isinstance(x, Integral)},
             'port_filter': {dck.check: lambda x: isinstance(x, Callable)}}),
         ValueBinder,
-        TupleRepresentable
-))
+        TupleRepresentable))
 class ListenDescription:
 
     @classmethod

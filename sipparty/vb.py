@@ -399,7 +399,8 @@ class ValueBinder:
         if PROFILE:
             self.hit_set_attr(attr)
 
-        if attr not in self._vb_forwardbindings and attr not in self._vb_backwardbindings:
+        if (attr not in self._vb_forwardbindings and
+                attr not in self._vb_backwardbindings):
             return super(ValueBinder, self).__setattr__(attr, val)
 
         enable_debug_logs = False

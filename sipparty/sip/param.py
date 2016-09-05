@@ -18,7 +18,7 @@ limitations under the License.
 """
 import logging
 import random
-from six import add_metaclass, binary_type as bytes
+from six import binary_type as bytes
 from ..classmaker import classbuilder
 from ..parse import (Parser)
 from ..util import (
