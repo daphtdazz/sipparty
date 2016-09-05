@@ -279,6 +279,7 @@ class TestPartyWeakReferences(SIPPartyTestCase):
 
         log.info('Check SIPTransport deletes cleanly')
         tp = SIPTransport()
+        self.wtp = ref(tp)
         tp2 = SIPTransport('other_transport')
         self.assertIsNot(tp, tp2)
         w_tp2 = ref(tp2)
@@ -313,6 +314,8 @@ class TestPartyWeakReferences(SIPPartyTestCase):
         del p1
         self.assertIsNone(w_p1())
         self.assertIsNone(w_tp())
+
+    def test_tidy_ups_after_invite(self):
 
         log.info('Check connected party deletes cleanly.')
         p1 = NoMediaSimpleCallsParty(aor=b'alice@atlanta.com')
