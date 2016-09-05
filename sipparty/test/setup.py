@@ -21,6 +21,7 @@ import logging
 from six import (iteritems, PY2)
 import sys
 import unittest
+from ..fsm.retrythread import RetryThread
 from ..sip.siptransport import SIPTransport
 from ..util import TestCaseREMixin
 if PY2:
@@ -68,6 +69,8 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
         }
     }
 
+    Clock = MagicMock()
+
     def __init__(self, *args, **kwargs):
         super(SIPPartyTestCase, self).__init__(*args, **kwargs)
         self._sptc_logLevels = {}
@@ -84,15 +87,22 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
     def expect_log(self, log_info):
         log.warning('EXPECT LOG %s', log_info)
 
+    def setUp(self):
+        super(SIPPartyTestCase, self).setUp()
+        self.Clock.return_value = 0
+
     def tearDown(self):
         self.popAllLogLevels()
 
         if hasattr(super(SIPPartyTestCase, self), "tearDown"):
             super(SIPPartyTestCase, self).tearDown()
 
+        RetryThread().cancel()
+
         # Speed things up a bit by doing a gc collect.
         gc.collect()
-        SIPTransport.wait_for_no_instances(timeout_s=5)
+        SIPTransport.wait_for_no_instances(timeout_s=2)
+        RetryThread.wait_for_no_instances(timeout_s=2)
 
     def pushLogLevelToSubMod(self, module, sub_module_name, level):
 

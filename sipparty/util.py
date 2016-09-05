@@ -32,8 +32,17 @@ from .classmaker import classmaker
 
 log = logging.getLogger(__name__)
 
+try:
+    profile = profile
+except NameError:
+    def profile(func):
+        return func
+
 # The clock. Defined here so that it can be overridden in the testbed.
 Clock = timeit.default_timer
+
+# Global debug logging switch, for perf-sensitive functions.
+enable_debug_logs = False
 
 
 def append_to_exception_message(exc, message):
@@ -69,9 +78,9 @@ class attributesubclassgen(type):  # noqa
         """__init__ for classes is called after the bases and dict have been
         set up, so no need to re-set up here."""
         log.debug("Init %r, %r, %r, %r", self.__name__, name, bases, dict)
-        super(attributesubclassgen, self).__init__(name, bases, dict)
         self._supername = name
         self._ascg_subClasses = {}
+        super(attributesubclassgen, self).__init__(name, bases, dict)
 
     def addSubclassesFromDict(self, subclass_dict):
         superName = self._supername
@@ -170,13 +179,27 @@ class Enum(set):
         return Enum(set(self) | set(other))
 
     def __contains__(self, name):
+        """Look up an Enum value using subscript access.
+
+        See perf comments for `__getattr__`.
+        """
+        if super(Enum, self).__contains__(name):
+            return True
+
         nn = self._en_fixAttr(name)
         return super(Enum, self).__contains__(nn)
 
     def __getattr__(self, attr):
-        log.detail('%s instance getattr %r', self.__class__.__name__, attr)
-        assert not attr.startswith('_en'), attr
-        assert hasattr(self, '_en_aliases'), attr
+        """Do a lookup of the value in the Enum using attribute access.
+
+        This is highly perf sensitive, and in particular is optimized for
+        the default case where there is no need to fix up the attribute (where
+        the programmer has hard-coded the value).
+        """
+        if super(Enum, self).__contains__(attr):
+            return attr
+
+        # The raw value was not a member of the enum, so try fixing up.
         nn = self._en_fixAttr(attr)
         if super(Enum, self).__contains__(nn):
             return nn
@@ -210,10 +233,11 @@ class Enum(set):
 
     def _en_fixAttr(self, name):
         if self._en_aliases:
-            log.detail('Is %r is an alias', name)
+            enable_debug_logs and log.detail('Is %r is an alias', name)
             if name in self._en_aliases:
                 val = self._en_aliases[name]
-                log.debug('%r is an alias to %r', name, val)
+                enable_debug_logs and log.debug(
+                    '%r is an alias to %r', name, val)
                 return val
 
         if self._en_normalize:
@@ -280,16 +304,16 @@ class ClassType(object):
         self.__doc__ = self.__doc__.format(**locals())
 
     def __get__(self, instance, owner):
-
-        class_name = owner.__name__
-        capp = self.class_append
-        log.detail("Class is %r, append is %r", class_name, capp)
-        class_short_name = class_name.replace(capp, "")
+        """This is optimized for performance as it is hit frequently."""
         try:
-            return getattr(owner.types, class_short_name)
+            return getattr(
+                owner.types,
+                owner.__name__.replace(self.class_append, '')
+            )
         except AttributeError:
             raise AttributeError(
-                "No such known header class type %r" % (class_short_name,))
+                "No such known header class type %r" % (
+                    owner.__name__.replace(self.class_append, ''),))
 
 
 class FirstListItemProxy(object):
@@ -675,13 +699,14 @@ class _DerivedProperty(object):
         log.detail("%r", self)
 
     def __get__(self, obj, cls):
-        # log.debug("Get derived prop for obj %r class %r.", obj, cls)
+        enable_debug_logs and log.debug(
+            "Get derived prop for obj %r class %r.", obj, cls)
         target = obj if obj is not None else cls
 
-        log.detail("Get the underlying value (if any).")
+        enable_debug_logs and log.detail("Get the underlying value (if any).")
         pname = self._rp_propName
         val = getattr(target, pname)
-        log.detail("Underlying value %r.", val)
+        enable_debug_logs and log.detail("Underlying value %r.", val)
 
         gt = self._rp_get
         if gt is None:
@@ -695,8 +720,7 @@ class _DerivedProperty(object):
                 raise ValueError(
                     "Getter attribute %r of %r object is not callable." % (
                         gt, target.__class__.__name__))
-            val = meth(val)
-            return val
+            return meth(val)
 
         # Else getter should be a callable.
         if not isinstance(gt, Callable):
@@ -923,7 +947,10 @@ class Singleton(object):
     @classmethod
     def wait_for_no_instances(cls, **kwargs):
         assert not cls.UseStrongReferences
-        si = cls._St_SharedInstances
+
+        # We only want any instances for this particular class, not
+        # superclasses.
+        si = cls.__dict__.get('_St_SharedInstances')
         if si is None:
             return
         WaitFor(lambda: all(wr is None for wr in si.values()), **kwargs)

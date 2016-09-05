@@ -18,8 +18,10 @@ import logging
 from six import iteritems
 from weakref import (ref as wref)
 
+from .classmaker import classbuilder
+from .util import append_to_exception_message, profile
+
 log = logging.getLogger(__name__)
-log.setLevel(logging.WARNING)  # vb is verbose at lower levels.
 
 KeyTransformer = "transformer"
 KeyIgnoredExceptions = "ignore_exceptions"
@@ -80,7 +82,60 @@ class _VBSubClassMonitor(object):
             '\'_VBSubClassMonitor\' is not a writable property.')
 
 
-class ValueBinder(object):
+class ValueBinderDelegateProperty(object):
+
+    def __init__(self, delegate_attr, delegated_attr):
+        """Initialize the delegate property descriptor.
+
+        :param str delegate_attr:
+            The attribute name where the delegate for the delegated attribute
+            is.
+        :param str delegated_attr:
+            The attribute being delegated. When this descriptor is requested,
+            the delegated attribute is returned from the delegate attribute on
+            the instance.
+        """
+        self.delegate_attr = delegate_attr
+        self.delegated_attr = delegated_attr
+
+    def __get__(self, instance, owner):
+        if instance is None:
+            return self
+
+        return getattr(
+            getattr(instance, self.delegate_attr), self.delegated_attr)
+
+    def __set__(self, instance, value):
+        setattr(
+            getattr(instance, self.delegate_attr), self.delegated_attr, value)
+
+    def __delete__(self, instance):
+        delattr(getattr(instance, self.delegate_attr), self.delegated_attr)
+
+
+class ValueBinderType(type):
+
+    def __new__(cls, name, bases, dict_):
+
+        delegates = dict_.get('vb_dependencies')
+        if delegates is not None:
+
+            for delegate_attr, delegated_attrs in delegates:
+                for delegated_attr in delegated_attrs:
+                    assert delegated_attr not in dict_
+                    dict_[delegated_attr] = ValueBinderDelegateProperty(
+                        delegate_attr, delegated_attr)
+
+        return super(ValueBinderType, cls).__new__(cls, name, bases, dict_)
+
+    def __init__(self, name, bases, dict_):
+        self._vb_delegate_attributes = {}
+        self._vb_initDependencies()
+        super(ValueBinderType, self).__init__(name, bases, dict_)
+
+
+@classbuilder(mc=ValueBinderType)
+class ValueBinder:
     """This mixin class provides a way to bind values to one another."""
 
     #
@@ -129,14 +184,12 @@ class ValueBinder(object):
                 ("_vb_weakBindingParent", None),
                 ("_vb_leader_res", None),
                 ("_vb_followers", None),
-                ("_vb_settingAttributes", set()),
-                ("_vb_delegate_attributes", {})):
+                ("_vb_settingAttributes", set())):
             # Have to set this on dict to avoid recursing, as __setattr__
             # requires these to have already been set.  Also means we need to
             # do this before calling super, in case super sets any attrs.
             self.__dict__[reqdattr[0]] = reqdattr[1]
 
-        self._vb_initDependencies()
         self._vb_initBindings()
         super(ValueBinder, self).__init__(**kwargs)
         if PROFILE:
@@ -336,69 +389,24 @@ class ValueBinder(object):
     #
     # =================== MAGIC METHODS ======================================
     #
-    def __getattr__(self, attr):
-        """If the attribute is a delegated attribute, gets the attribute from
-        the delegate, else calls super."""
-
-        if attr.startswith('_'):
-            # For perf reasons assume anything starting with '_' is not bound.
-            gattr = getattr(super(ValueBinder, self), '__getattr__', None)
-            if gattr is None:
-                raise AttributeError(
-                    "ValueBinder subclass %r has no attribute %r: perhaps it "
-                    "didn't call super().__init__()?" % (
-                        self.__class__.__name__, attr))
-            return (attr, gattr(attr))
-
-        log.debug("Get %r (from %r instance)", attr, self.__class__.__name__)
-        sd = self.__dict__
-
-        # Check for delegate attributes.
-        if '_vb_delegate_attributes' in sd:
-            log.detail('Looking for a delegate attribute')
-            das = sd["_vb_delegate_attributes"]
-            if attr in das:
-                log.detail("Delegate attribute %r", attr)
-                return getattr(getattr(self, das[attr]), attr)
-
-        gt = getattr(super(ValueBinder, self), '__getattr__', None)
-        if gt is None:
-            raise AttributeError("%r instance has no attribute %r" % (
-                self.__class__.__name__, attr))
-
-        return gt(attr)
-
+    @profile
     def __setattr__(self, attr, val):
-        """
-        """
+        """Very perf sensitive `__setattr__` function."""
         if attr.startswith('_'):
             # For perf reasons assume anything starting with '_' is not bound.
             return super(ValueBinder, self).__setattr__(attr, val)
 
-        cn = self.__class__.__name__
-
         if PROFILE:
             self.hit_set_attr(attr)
 
-        log.debug("Set %r (on %r instance).", attr, cn)
+        if (attr not in self._vb_forwardbindings and
+                attr not in self._vb_backwardbindings):
+            return super(ValueBinder, self).__setattr__(attr, val)
+
+        enable_debug_logs = False
+        enable_debug_logs and log.debug(
+            "Set %r (on %r instance).", attr, self.__class__.__name__)
         sd = self.__dict__
-
-        # Avoid recursion if a subclass has not called init (perhaps failed
-        # a part of its own initialization.
-        assert "_vb_delegate_attributes" in sd, (
-            "ValueBinder subclass %r has not called super.__init__()" % cn)
-
-        # If this is a delegated attribute, pass through.
-        (deleattr, dele) = self._vb_delegateForAttribute(attr)
-        if deleattr is not None:
-            if dele is None:
-                raise AttributeError(
-                    "Cannot set attribute %r on %r instance as it is "
-                    "delegated to attribute %r which is None." % (
-                        attr, cn, deleattr))
-
-            log.debug('Set on delegate attribute %r', deleattr)
-            return setattr(dele, attr, val)
 
         existing_val = getattr(self, attr, None)
 
@@ -407,7 +415,7 @@ class ValueBinder(object):
             if attr in settingAttributes:
                 raise RuntimeError(
                     "Recursion attempting to set attribute %r on %r "
-                    "instance." % (attr, cn))
+                    "instance." % (attr, self.__class__.__name__))
             settingAttributes.add(attr)
             try:
                 super(ValueBinder, self).__setattr__(attr, val)
@@ -420,9 +428,14 @@ class ValueBinder(object):
                 initialval = val
                 val = getattr(self, attr)
                 if val is not initialval:
-                    log.debug(
+                    enable_debug_logs and log.debug(
                         "%r instance %r attribute val changed after set.",
-                        cn, attr)
+                        self.__class__.__name__, attr)
+            except Exception as exc:
+                append_to_exception_message(
+                    exc, '; setting attribute %s of %s instance' % (
+                        attr, type(self).__name__))
+                raise
             finally:
                 settingAttributes.remove(attr)
         except AttributeError as exc:
@@ -433,13 +446,14 @@ class ValueBinder(object):
             log.error(
                 "Runtime error setting attribute %r on %r instance to %r. "
                 "MRO is: %r.",
-                attr, cn, val, self.__class__.__mro__)
+                attr, self.__class__.__name__, val, self.__class__.__mro__)
             raise
 
         if existing_val is not val:
             self.vb_updateAttributeBindings(attr, existing_val, val)
         else:
-            log.debug("New val is old val so don't update bindings.")
+            enable_debug_logs and log.debug(
+                "New val is old val so don't update bindings.")
 
     def __delattr__(self, attr):
         log.detail("Del %r.", attr)
@@ -447,15 +461,6 @@ class ValueBinder(object):
         if attr.startswith('_'):
             log.detail("Directly setting vb private attribute")
             return super(ValueBinder, self).__delattr__(attr)
-
-        deleattr, dele = self._vb_delegateForAttribute(attr)
-        if deleattr is not None:
-            if dele is None:
-                raise AttributeError(
-                    "Attribute %r of %r instance cannot be deleted as the "
-                    "delegate attribute %r is None." % (
-                        attr, self.__class__.__name__, deleattr))
-            return delattr(dele, attr)
 
         existing_val = getattr(self, attr, sentinel)
         if existing_val is sentinel:
@@ -527,11 +532,11 @@ class ValueBinder(object):
         """
         attr, _ = self.VB_PartitionPath(path)
         vbdas = self._vb_delegate_attributes
-        if attr not in vbdas:
+        da = vbdas.get(attr)
+        if da is None:
             log.detail("Non-delegated path %r", path)
             return path
 
-        da = vbdas[attr]
         log.detail("Delegated path %r through %r", path, da)
         return self.VB_JoinPath((da, path))
 
@@ -834,13 +839,15 @@ class ValueBinder(object):
             nextattr = splitpath[-1]
         return nextobj, nextattr
 
-    def _vb_initDependencies(self):
-        if not hasattr(self, "vb_dependencies"):
+    @classmethod
+    def _vb_initDependencies(cls):
+        deps = getattr(cls, 'vb_dependencies', None)
+
+        if deps is None:
             return
 
-        log.debug("%r has VB dependencies", self.__class__.__name__)
-        deps = self.vb_dependencies
-        deleattrmap = self._vb_delegate_attributes
+        log.debug("%r has VB dependencies", cls.__name__)
+        deleattrmap = cls._vb_delegate_attributes
         for dele, deleattrs in deps:
             for deleattr in deleattrs:
                 if deleattr in deleattrmap:
@@ -854,16 +861,3 @@ class ValueBinder(object):
             return
 
         self.bindBindings(self.vb_bindings)
-
-    def _vb_delegateForAttribute(self, attr):
-        sd = self.__dict__
-        das = sd['_vb_delegate_attributes']
-        if attr not in das:
-            return None, None
-
-        deleattr = das[attr]
-        log.debug(
-            "%r instance pass delegate attr %r to attr %r",
-            self.__class__.__name__, attr, deleattr)
-        dele = getattr(self, deleattr)
-        return deleattr, dele

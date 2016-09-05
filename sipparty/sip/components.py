@@ -22,6 +22,7 @@ from six import binary_type as bytes
 from socket import AF_INET6
 from . import defaults
 from .prot import (bdict as abnf_name_bdict, Incomplete)
+from ..classmaker import classbuilder
 from ..deepclass import (DeepClass, dck)
 from ..parse import (Parser, ParsedProperty, ParsedPropertyOfClass)
 from ..transport import IPAddressFamilyFromName
@@ -32,7 +33,8 @@ log = logging.getLogger(__name__)
 
 
 @TwoCompatibleThree
-class Host(
+@classbuilder(
+    bases=(
         DeepClass("_hst_", {
             "address": {dck.check: lambda x: isinstance(x, bytes)},
             "port": {
@@ -40,8 +42,10 @@ class Host(
                     lambda x: isinstance(x, Integral) and 0 <= x <= 0xffff),
             }
         }),
-        Parser, TupleRepresentable, ValueBinder):
-
+        Parser, TupleRepresentable, ValueBinder
+    )
+)
+class Host:
     parseinfo = {
         Parser.Pattern:
             # Have to expand 'host' because it uses 'IPv6reference' instead of
@@ -54,6 +58,7 @@ class Host(
              ("address",),
              ("address",),
              ("port", int)],
+        Parser.PassMappingsToInit: True,
     }
 
     def addrTuple(self):
@@ -97,12 +102,16 @@ class Host(
 
 
 @TwoCompatibleThree
-class AOR(
+@classbuilder(
+    bases=(
         DeepClass("_aor_", {
             "username": {dck.check: lambda x: isinstance(x, bytes)},
             "host": {
                 dck.descriptor: ParsedPropertyOfClass(Host), dck.gen: Host}}),
-        Parser, TupleRepresentable, ValueBinder):
+        Parser, TupleRepresentable, ValueBinder
+    )
+)
+class AOR:
     """A AOR object."""
 
     parseinfo = {
@@ -112,6 +121,7 @@ class AOR(
         Parser.Mappings:
             [("username",),
              ("host", Host)],
+        Parser.PassMappingsToInit: True,
     }
 
     vb_dependencies = [
@@ -161,14 +171,18 @@ class AOR(
 
 
 @TwoCompatibleThree
-class URI(
+@classbuilder(
+    bases=(
         DeepClass("_uri_", {
             "scheme": {dck.gen: lambda: defaults.scheme},
             "aor": {dck.descriptor: ParsedPropertyOfClass(AOR), dck.gen: AOR},
             "parameters": {dck.gen: lambda: b''},
             "headers": {dck.gen: lambda: b''},
             "absoluteURIPart": {dck.gen: lambda: None}}),
-        Parser, ValueBinder):
+        Parser, ValueBinder
+    )
+)
+class URI:
     """A URI object.
 
     This decomposes addr-spec from RFC 3261:
@@ -200,6 +214,7 @@ class URI(
              ("headers",),
              ("scheme",),
              ("absoluteURIPart",)],
+        Parser.PassMappingsToInit: True,
     }
 
     vb_dependencies = [
@@ -246,13 +261,17 @@ class URI(
 
 
 @TwoCompatibleThree
-class DNameURI(
+@classbuilder(
+    bases=(
         DeepClass("_dnur_", {
             "uri": {dck.descriptor: ParsedPropertyOfClass(URI), dck.gen: URI},
             "display_name": {dck.gen: lambda: b""},
             "headers": {dck.gen: lambda: b""},
             "absoluteURIPart": {dck.gen: lambda: None}}),
-        Parser, ValueBinder):
+        Parser, ValueBinder
+    )
+)
+class DNameURI:
     """A display name plus a uri value object.
 
     This is basically (name-addr/addr-spec) where:
@@ -284,7 +303,8 @@ class DNameURI(
             [uri_mapping,
              uri_mapping,
              display_name_mapping,
-             uri_mapping]
+             uri_mapping],
+        Parser.PassMappingsToInit: True,
     }
 
     def __bytes__(self):

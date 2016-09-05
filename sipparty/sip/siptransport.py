@@ -355,4 +355,4 @@ class SIPTransport:
         raise RuntimeError(
             'Unable to find a dialog for message with dialog ID %r, '
             'provisional dialogs: %r, established dialogs: %r' % (
-                did, provDs, estDs))
+                did, provDs.keys(), estDs.keys()))

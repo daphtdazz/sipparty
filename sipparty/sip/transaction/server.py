@@ -53,7 +53,7 @@ class InviteServerTransaction(ServerTransaction):
         InitialState: {
             Inputs.request: {
                 tsk.NewState: States.proceeding,
-                tsk.Action: (('inform_tu', 'request'),),
+                tsk.Action: (('inform_tu', 'consume_request'),),
             },
         },
         States.proceeding: {
@@ -126,7 +126,7 @@ class NonInviteServerTransaction(ServerTransaction):
         InitialState: {
             Inputs.request: {
                 tsk.NewState: States.trying,
-                tsk.Action: [('inform_tu', 'request')],
+                tsk.Action: [('inform_tu', 'consume_request')],
             },
         },
         States.trying: {
@@ -184,7 +184,7 @@ class OneShotServerTransaction(ServerTransaction):
         InitialState: {
             Inputs.ack: {
                 tsk.NewState: Transaction.States.terminated,
-                tsk.Action: [('inform_tu', 'request')],
+                tsk.Action: [('inform_tu', 'consume_request')],
             },
             Inputs.response_2: {
                 tsk.NewState: Transaction.States.terminated,

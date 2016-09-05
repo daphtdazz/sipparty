@@ -17,7 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
-from six import add_metaclass
+from ..classmaker import classbuilder
 from ..deepclass import (DeepClass, dck)
 from ..parse import (ParsedPropertyOfClass, Parser)
 from ..util import (
@@ -30,9 +30,9 @@ from .prot import (bdict, protocols, RequestTypes)
 log = logging.getLogger(__name__)
 
 
-@add_metaclass(attributesubclassgen)
 @TwoCompatibleThree
-class Request(
+@classbuilder(
+    bases=(
         DeepClass("_rq_", {
             "uri": {dck.descriptor: ParsedPropertyOfClass(URI), dck.gen: URI},
             "protocol": {
@@ -40,7 +40,11 @@ class Request(
                 dck.gen: lambda: defaults.sipprotocol
             }
         }),
-        Parser, ValueBinder):
+        Parser, ValueBinder
+    ),
+    mc=attributesubclassgen
+)
+class Request:
     """Encapsulates a SIP method request line.
 
     Request-Line  =  Method SP Request-URI SP SIP-Version CRLF
@@ -63,6 +67,7 @@ class Request(
             [None,  # First group is for the constructor.
              ("uri", URI),
              ("protocol",)],
+        Parser.PassMappingsToInit: True,
     }
 
     type = ClassType("Request")

@@ -34,7 +34,7 @@ class TransactionUser(object):
     """This is what Transaction Users must look like."""
 
     @abstractmethod
-    def request(self, msg, transaction):
+    def consume_request(self, msg, transaction):
         """Consume a request passed up from the transaction.
 
         :param msg: The request to consume.
@@ -45,7 +45,7 @@ class TransactionUser(object):
         raise NotImplemented
 
     @abstractmethod
-    def response(self, msg):
+    def consume_response(self, msg):
         """Consume a response passed up from the transaction.
 
         :param msg: The response to consume.
@@ -114,6 +114,7 @@ class Transaction(
 
         self.last_message = None
         self.last_socket = None
+        self.retransmit_count = 0
 
     #
     # ---------------------------- TRANSPORT INTERFACE ------------------------
@@ -123,9 +124,7 @@ class Transaction(
             if message.type == 'ACK':
                 return self.hit('ack', message)
             return self.hit(self.Inputs.request, message)
-
-        inp = self.__most_specific_input_for_inbound_response(message.type)
-        return self.hit(inp, message)
+        return self.hit('response_' + str(message.type), message)
 
     #
     # ---------------------------- TU INTERFACE -------------------------------
@@ -134,8 +133,7 @@ class Transaction(
         return self.hit(self.Inputs.request, message, **kwargs)
 
     def respond(self, message, **kwargs):
-        inp = self.__most_specific_input_for_outbound_response(message.type)
-        return self.hit(inp, message, **kwargs)
+        return self.hit('respond_' + str(message.type), message, **kwargs)
 
     def handle_outbound_message(self, message, **kwargs):
         if message.isrequest():
@@ -158,9 +156,16 @@ class Transaction(
 
         getattr(tu, method_name)(*args, **kwargs)
 
-    def retransmit(self):
+    def retransmit(self, msg=None):
+        """Retransmit the last response.
+
+        :param req:
+            a message may be passed in if we're handling this as a result of
+            receiving a retransmission, but we ignore it.
+        """
         log.debug('resend message')
         self.transmit(self.last_message)
+        self.retransmit_count += 1
 
     def transmit(self, message, remote_name=None, remote_port=None):
         log.debug('send %s message', message.type)
@@ -182,21 +187,26 @@ class Transaction(
             message, self.remote_name, self.remote_port)
 
     #
-    # ---------------------------- MAGIC METHODS ------------------------------
+    # ---------------------------- OVERRIDES ---------------------------------
+    #
+    def _fsm_hit(self, input, *args, **kwargs):
+        inp_type, _, code = input.partition('_')
+        if _ and inp_type in ('response', 'respond'):
+            input = self.__most_specific_input_for_response(
+                inp_type + '_', code)
+
+        super(Transaction, self)._fsm_hit(input, *args, **kwargs)
+
+    #
+    # ---------------------------- MAGIC METHODS -----------------------------
     #
     def __del__(self):
         log.debug('__del__ %s', type(self).__name__)
         getattr(super(Transaction, self), '__del__', lambda: None)()
 
     #
-    # ---------------------------- INTERNAL METHODS ---------------------------
+    # ---------------------------- INTERNAL METHODS --------------------------
     #
-    def __most_specific_input_for_inbound_response(self, rtype):
-        return self.__most_specific_input_for_response('response_', rtype)
-
-    def __most_specific_input_for_outbound_response(self, rtype):
-        return self.__most_specific_input_for_response('respond_', rtype)
-
     def __most_specific_input_for_response(self, prepend, rtype):
         """Work out what input to use for the response type.
 
@@ -215,13 +225,14 @@ class Transaction(
             inp = prepend + str(next_rtype)
             if inp in self._fsm_transitions[self._fsm_state]:
                 return inp
-            next_rtype /= 10
+            next_rtype = int(next_rtype / 10)
 
         # Try catch all.
         inp = prepend + 'xxx'
-        if inp in self.Inputs:
+        if inp in self._fsm_transitions[self._fsm_state]:
             return inp
 
         # Couldn't find one. Raise.
         raise UnexpectedInput(
-            'No response input for prepend %s code %s' % (prepend, rtype,))
+            'No response input to %s fsm for prepend %s code %s' % (
+                type(self).__name__, prepend, rtype,))

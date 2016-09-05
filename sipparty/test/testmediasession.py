@@ -111,7 +111,7 @@ class TestSession(SIPPartyTestCase):
             formats={123: {}})
         ms = ss.mediaSession
         self.assertIsNone(ms.name)
-        ss.listen()
+        ss.listen(port=0)
         self.assertIsNotNone(ms.name)
         self.assertIn(IPAddressFamilyFromName(ms.name), SOCK_FAMILIES)
         self.assertTrue(IsValidPortNum(ms.port))

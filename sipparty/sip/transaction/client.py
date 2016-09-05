@@ -84,12 +84,12 @@ class InviteClientTransaction(ClientTransaction):
             },
             Inputs.response_2: {
                 tsk.NewState: States.terminated,
-                tsk.Action: [('inform_tu', 'response')],
+                tsk.Action: [('inform_tu', 'consume_response')],
                 tsk.StopTimers: ['a_timer_retry', 'b_timer_giveup'],
             },
             Inputs.response_xxx: {
                 tsk.NewState: States.completed,
-                tsk.Action: (('inform_tu', 'response'), 'ack'),
+                tsk.Action: (('inform_tu', 'consume_response'), 'ack'),
                 tsk.StopTimers: ['a_timer_retry', 'b_timer_giveup'],
             },
             Inputs.transport_error: {
@@ -100,15 +100,15 @@ class InviteClientTransaction(ClientTransaction):
         },
         States.proceeding: {
             Inputs.response_1: {
-                tsk.Action: [('inform_tu', 'response')],
+                tsk.Action: [('inform_tu', 'consume_response')],
             },
             Inputs.response_2: {
                 tsk.NewState: States.terminated,
-                tsk.Action: (('inform_tu', 'response'),),
+                tsk.Action: (('inform_tu', 'consume_response'),),
             },
             Inputs.response_xxx: {
                 tsk.NewState: States.completed,
-                tsk.Action: [('inform_tu', 'response'), 'ack'],
+                tsk.Action: [('inform_tu', 'consume_response'), 'ack'],
                 tsk.StartTimers: ['d_timer_stop_response_squelching'],
             },
         },
@@ -174,11 +174,11 @@ class NonInviteClientTransaction(ClientTransaction):
             },
             Inputs.response_1: {
                 tsk.NewState: States.proceeding,
-                tsk.Action: [('inform_tu', 'response')],
+                tsk.Action: [('inform_tu', 'consume_response')],
             },
             Inputs.response_xxx: {
                 tsk.NewState: States.completed,
-                tsk.Action: [('inform_tu', 'response')],
+                tsk.Action: [('inform_tu', 'consume_response')],
                 tsk.StopTimers: ['e_timer_retry', 'f_timer_giveup'],
                 tsk.StartTimers: ['k_timer_stop_response_squelching'],
             },
@@ -204,11 +204,11 @@ class NonInviteClientTransaction(ClientTransaction):
                 tsk.StopTimers: ['e_timer_retry', 'f_timer_giveup'],
             },
             Inputs.response_1: {
-                tsk.Action: [('inform_tu', 'response')],
+                tsk.Action: [('inform_tu', 'consume_response')],
             },
             Inputs.response_xxx: {
                 tsk.NewState: States.completed,
-                tsk.Action: [('inform_tu', 'response')],
+                tsk.Action: [('inform_tu', 'consume_response')],
                 tsk.StopTimers: ['e_timer_retry', 'f_timer_giveup'],
                 tsk.StartTimers: ['k_timer_stop_response_squelching'],
             },

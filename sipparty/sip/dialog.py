@@ -121,6 +121,7 @@ class Dialog:
         kwargs['transport'] = transport
         super(Dialog, self).__init__(**kwargs)
         self._dlg_requests = []
+        self.request = None
         self.__last_response = None
 
     def initiate(self, *args, **kwargs):
@@ -181,7 +182,7 @@ class Dialog:
             if attrVal is None:
                 raise ValueError(
                     "Attribute %r of %r instance required to send %s request "
-                    "is None." % (req_type, reqdAttr, self.__class__.__name__))
+                    "is None." % (reqdAttr, self.__class__.__name__, req_type))
             if reqdAttr == 'transport':
                 # Transport is weak so ensure we retain it here.
                 tp = attrVal
@@ -193,8 +194,9 @@ class Dialog:
         req.FromHeader.field.value.uri = deepcopy(self.from_uri)
         req.ContactHeader.uri = deepcopy(self.contact_uri)
 
-        req.FromHeader.parameters.tag = deepcopy(self.localTag)
-        req.ToHeader.parameters.tag = deepcopy(self.remoteTag)
+        req.FromHeader.parameters.tag.value = self.localTag.value
+        if self.remoteTag is not None:
+            req.ToHeader.parameters.tag = deepcopy(self.remoteTag)
 
         if self.callIDHeader is None:
             self.callIDHeader = Call_IdHeader()
@@ -211,17 +213,21 @@ class Dialog:
         self._dlg_requests.append(req)
         tp.updateDialogGrouping(self)
 
-    def send_response(self, response, req):
-        log.debug("Send response type %r.", response)
+    def send_response(self, response_code, req=None):
+        log.debug("Send response type %r.", response_code)
 
-        resp = MessageResponse(response)
+        if req is None:
+            req = self.request
+        assert req is not None
+
+        resp = MessageResponse(response_code)
         self.configureResponse(resp, req)
         vh = req.viaheader
         tp = self.transport
         if tp is None:
             log.warning(
                 'Unable to send %s response to %s request as transport has '
-                'been released' % (response.type, req.type))
+                'been released' % (response_code, req.type))
             return
 
         self.transport.send_message_with_transaction(
@@ -245,7 +251,7 @@ class Dialog:
     #
     # =================== TRANSACTION USER METHODS ============================
     #
-    def request(self, msg):
+    def consume_request(self, msg):
         log.debug("Dialog receiving message")
         log.detail("%r", msg)
         mtype = msg.type
@@ -264,10 +270,14 @@ class Dialog:
             self.remoteTag = rtag
             self.transport.updateDialogGrouping(self)
 
+        self.remote_name = astr(msg.ContactHeader.address)
+        self.remote_port = msg.ContactHeader.port
+
+        self.request = msg
         return self.hit(
             'receiveRequest' + getattr(Request.types, mtype), msg)
 
-    def response(self, msg):
+    def consume_response(self, msg):
 
         log.debug("Dialog receiving response")
         log.detail("%r", msg)

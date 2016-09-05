@@ -41,6 +41,7 @@ class Response(Parser, ValueBinder):
             [('protocol',),
              ('code', int),
              ('codeMessage',)],
+        Parser.PassMappingsToInit: True,
     }
 
     @classmethod

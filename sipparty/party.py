@@ -17,6 +17,7 @@ limitations under the License.
 import logging
 from six import (binary_type as bytes, itervalues)
 from weakref import proxy
+from .classmaker import classbuilder
 from .deepclass import (DeepClass, dck)
 from .parse import (ParsedPropertyOfClass)
 from .sip import DNameURI, URI, Incomplete, Message
@@ -25,7 +26,7 @@ from .transport import (
     IPaddress_re, IPAddressFamilyFromName, is_null_address, IsSpecialName,
     LoopbackAddressFromFamily,
 )
-from .util import abytes
+from .util import abytes, astr
 from .vb import ValueBinder
 
 log = logging.getLogger(__name__)
@@ -47,8 +48,10 @@ class Timeout(PartyException):
     """Timeout waiting for something to happen."""
 
 
-class Party(
+@classbuilder(
+    bases=(
         DeepClass("_pt_", {
+            'dialog_delegate': {},
             "display_name_uri": {
                 dck.descriptor: ParsedPropertyOfClass(DNameURI),
                 dck.gen: DNameURI},
@@ -63,7 +66,10 @@ class Party(
             },
             "transport": {dck.gen: SIPTransport}
         }),
-        AORHandler, ValueBinder):
+        AORHandler, ValueBinder
+    )
+)
+class Party:
     """A party in a sip call, aka an endpoint, caller or callee etc."""
 
     #
@@ -81,22 +87,19 @@ class Party(
     # =================== INSTANCE INTERFACE =================================
     #
     @property
+    def dialogs(self):
+        return list(self.__iter_dialogs())
+
+    @property
     def inCallDialogs(self):
         """Return a list of dialogs that are currently in call.
 
         This is only a snapshot, and nothing should be assumed about how long
         the dialogs will stay in call for!
         """
-        try:
-            icds = [
-                invD
-                for invDs in itervalues(self._pt_inviteDialogs)
-                for invD in invDs
-                if invD.state == invD.States.InDialog]
-        except AttributeError as exc:
-            log.debug(exc, exc_info=True)
-            raise
-        return icds
+        return [
+            invD for invD in self.__iter_dialogs()
+            if invD.state == invD.States.InDialog]
 
     def __init__(self, display_name_uri=None, **kwargs):
         """Create the party.
@@ -157,7 +160,7 @@ class Party(
         else:
             remote_name, remote_port = self._pt_resolveProxyAddress(target)
 
-        invD = self.__new_dialog(self.ClientDialog, to_uri)
+        invD = self.__make_new_dialog(self.ClientDialog, to_uri)
 
         log.debug("Initialize dialog to %r", ((remote_name, remote_port,)))
         invD.initiate(remote_name=remote_name, remote_port=remote_port)
@@ -174,6 +177,12 @@ class Party(
         ms = self.__class__.MediaSession(username=b'-')
         return ms
 
+    def unlisten(self):
+        self.transport.removeDialogHandlerForAOR(self.uri.aor)
+        self.transport.release_listen_address(
+            port=self.contact_uri.host.port,
+            name=astr(self.contact_uri.host.address))
+
     #
     # =================== IAORHandler =========================================
     #
@@ -182,7 +191,8 @@ class Party(
             log.debug('New INVITE dialog creating message being handled')
             # Note that the tags and call IDs are learnt by the consume message
             # method of the dialog, so we don't have to configure them here.
-            return self.__new_dialog(self.ServerDialog, message.FromHeader.uri)
+            return self.__make_new_dialog(
+                self.ServerDialog, message.FromHeader.uri)
 
         assert 0, (
             '%s instance only supports new invite dialogs' % (
@@ -197,7 +207,13 @@ class Party(
     #
     # =================== INTERNAL METHODS ===================================
     #
-    def __new_dialog(self, dlg_type, to_uri):
+    def __iter_dialogs(self):
+        return (
+            invD
+            for invDs in itervalues(self._pt_inviteDialogs)
+            for invD in invDs)
+
+    def __make_new_dialog(self, dlg_type, to_uri):
         if dlg_type is None:
             raise TypeError(
                 "No dialog type specified to create for %s.", self)
@@ -211,7 +227,7 @@ class Party(
         else:
             ids[to_uri].append(invD)
 
-        invD.delegate = self
+        invD.delegate = self.dialog_delegate
 
         return invD
 

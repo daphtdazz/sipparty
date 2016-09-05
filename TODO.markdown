@@ -1,17 +1,20 @@
 ### TODO for SIP party. ###
 
-## List. ##
+## Little list
 
-3. REGISTER dialogues.
+13. de-camel-cap methods etc that should be under_scores, e.g. addDialogHandlerForAOR
+2. Refactor singleton out of util.
+3. message.isrequest replace with property is_request
+13. Make util a package with sub-modules.
+
+## Big List ##
+
+2. REGISTER dialogues.
 4. TCP support.
 5. Move "Programming guides" into a section of the documentation.
-9. Smarter ACK than simply "ACK all 200s" in dialog.py
+4. UT of ipython notebooks
 10. expiry timer for invites
 11. The mechanism for determining the correct response type to input is not thread-safe.
-11. Refactor singleton out of util.
-12. message.isrequest replace with property is_request
-13. de-camel-cap methods etc that should be under_scores, e.g. addDialogHandlerForAOR
-13. Make util a package with sub-modules.
 14. packagify transport splitting out the different classes
 10. Get rid of "delegateattributes", use "vb_dependencies". -- ?? semi done?
 12. Move sipheader out of util and probably into prot.
@@ -32,6 +35,18 @@
 30. Use bridge pattern to make FSM more lightweight and allow asynchronous flexibility
 
 ## Done list. ##
+
+### September 2016
+
+### August 2016
+
+1. Must be able to unlisten a party.
+
+### Earlier 2016
+
+1. Smarter ACK than simply "ACK all 200s" in dialog.py
+
+### 2015
 
 1. Move transport to sipparty not sipparty/sip -- done 10/08/2015
 2. Smart UT logging system. -- done 12/08/2015

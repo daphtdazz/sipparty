@@ -98,7 +98,7 @@ class TransactionManager(object):
             log.debug('Return existing server transaction for outbound msg')
             return trans
 
-        return self._new_transaction('server', msg, self.transport, **kwargs)
+        return self._new_transaction('server', msg, **kwargs)
 
     def __del__(self):
         log.info('DELETE TransactionManager')
@@ -183,4 +183,6 @@ class TransactionManager(object):
             return OneShotServerTransaction(**kwargs)
 
         raise KeyError(
-            'No server transaction could be found for %s message' % msg.type)
+            'No server transaction could be found for %s message with request '
+            'type %s' % (
+                msg.type, msg.cseqheader.reqtype))

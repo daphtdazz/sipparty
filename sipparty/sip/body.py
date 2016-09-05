@@ -40,7 +40,8 @@ class Body(
             b'(.*)',
         Parser.Mappings: [
             ("content",),
-        ]
+        ],
+        Parser.PassMappingsToInit: True,
     }
 
     def bytesGen(self):

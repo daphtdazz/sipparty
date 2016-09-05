@@ -31,7 +31,6 @@ from ..util import (abytes, WaitFor)
 from .setup import SIPPartyTestCase
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.INFO)
 
 
 class TestParty(SIPPartyTestCase):
@@ -147,7 +146,7 @@ class TestParty(SIPPartyTestCase):
         p3 = BasicParty(
             aor=b'charlie@charlesville.com',
             contact_uri__address=abytes(contact_name))
-        p3.listen(sock_type=sock_type, name=contact_name, port=5061)
+        p3.listen(sock_type=sock_type, name=contact_name, port=0)
         self.assertTrue(p3.transport is p1.transport)
         self.assertTrue(p3.transport is p2.transport)
         invD3to2 = p2.invite(p3)
@@ -158,6 +157,7 @@ class TestParty(SIPPartyTestCase):
         self.assertEqual(len(p2.inCallDialogs), 1)
         self.assertEqual(len(p1.inCallDialogs), 0)
 
+        log.info('Terminate invD3to2')
         invD3to2.terminate()
         WaitFor(lambda: invD3to2.state == invD3to2.States.Terminated, 1)
 
@@ -168,23 +168,32 @@ class TestParty(SIPPartyTestCase):
         return
 
     def test_double_listen(self):
+        tp = SIPTransport()
         p1 = NoMediaSimpleCallsParty()
         self.assertRaises(Incomplete, p1.listen)
 
+        log.info('test listening twice uses a single socket')
         p1.uri = 'sip:p1@test.com'
-        p1.listen()
-        self.assertEqual(p1.contact_uri.port, 5060)
+        p1.listen(port=0)
+        port = p1.contact_uri.port
 
         p2 = NoMediaSimpleCallsParty()
         p2.uri = 'sip:p2@test.com'
-        p2.listen()
-        self.assertEqual(p1.contact_uri.port, 5060)
+        p2.listen(port=0)
+        self.assertEqual(p2.contact_uri.port, port)
+        self.assertEqual(tp.listen_socket_count, 1)
+
+        log.info('Now unlisten from both')
+        p2.unlisten()
+        self.assertEqual(tp.listen_socket_count, 1)
+        p1.unlisten()
+        self.assertEqual(tp.listen_socket_count, 0)
 
     def test_no_media_party(self):
 
         log.info('Create two new no-media parties.')
         p1 = NoMediaSimpleCallsParty(uri='sip:p1@test.com')
-        p1.listen()
+        p1.listen(port=0)
         self.assertTrue(IsValidPortNum(p1.contact_uri.port))
 
     def test_aor_bindings(self):
@@ -196,7 +205,7 @@ class TestParty(SIPPartyTestCase):
         self.assertRaises(ValueError, p1.invite, p2)
         self.assertRaises(ValueError, p1.invite, p2)
 
-        p1.listen()
+        p1.listen(port=0)
         self.assertEqual(p2.transport.listen_socket_count, 1)
         self.assertEqual(p2.transport.connected_socket_count, 0)
 
@@ -221,7 +230,7 @@ class TestParty(SIPPartyTestCase):
             "someone who isn't listening")
         self.assertRaises(ValueError, p3.invite, p2)
         self.assertRaises(ValueError, p3.invite, p2)
-        p2.listen()
+        p2.listen(port=0)
         inv3 = p3.invite(p2)
         WaitFor(lambda: inv3.state == inv2.States.InDialog)
 
@@ -230,6 +239,32 @@ class TestParty(SIPPartyTestCase):
 
         log.info("And still only two connected sockets due to reuse.")
         self.assertEqual(p3.transport.connected_socket_count, 2)
+
+    def test_server_terminates(self):
+
+        class DialogDelegate:
+            def fsm_dele_handle_invite(self, dialog, invite):
+                self.dialog = dialog
+                self.invite = invite
+
+        server_dialog_delegate = DialogDelegate()
+
+        party = NoMediaSimpleCallsParty(
+            display_name_uri='sip:alice@atlanta.com',
+            dialog_delegate=server_dialog_delegate)
+        party.listen(port=0)
+
+        party2 = NoMediaSimpleCallsParty('sip:bob@biloxi.com')
+
+        party2.invite(party)
+        WaitFor(lambda: hasattr(server_dialog_delegate, 'invite'))
+
+        server_dialog_delegate.dialog.hit('accept')
+        server_dialog_delegate.dialog.waitForStateCondition(
+            lambda st: st == server_dialog_delegate.dialog.States.InDialog)
+        server_dialog_delegate.dialog.terminate()
+        server_dialog_delegate.dialog.waitForStateCondition(
+            lambda st: st == server_dialog_delegate.dialog.States.Terminated)
 
 
 class TestPartyWeakReferences(SIPPartyTestCase):
@@ -244,6 +279,7 @@ class TestPartyWeakReferences(SIPPartyTestCase):
 
         log.info('Check SIPTransport deletes cleanly')
         tp = SIPTransport()
+        self.wtp = ref(tp)
         tp2 = SIPTransport('other_transport')
         self.assertIsNot(tp, tp2)
         w_tp2 = ref(tp2)
@@ -270,7 +306,7 @@ class TestPartyWeakReferences(SIPPartyTestCase):
 
         log.info('Check listening party deletes cleanly')
         p1 = NoMediaSimpleCallsParty(aor='p1@test.com')
-        p1.listen()
+        p1.listen(port=0)
         w_p1 = ref(p1)
         w_tp = ref(p1.transport)
         self.assertIs(w_p1(), p1)
@@ -279,10 +315,12 @@ class TestPartyWeakReferences(SIPPartyTestCase):
         self.assertIsNone(w_p1())
         self.assertIsNone(w_tp())
 
+    def test_tidy_ups_after_invite(self):
+
         log.info('Check connected party deletes cleanly.')
         p1 = NoMediaSimpleCallsParty(aor=b'alice@atlanta.com')
         wp1 = ref(p1)
-        p1.listen()
+        p1.listen(port=0)
         self.wtp = ref(p1.transport)
         p2 = NoMediaSimpleCallsParty(aor=b'bob@biloxi.com')
         wtp2 = ref(p2.transport)

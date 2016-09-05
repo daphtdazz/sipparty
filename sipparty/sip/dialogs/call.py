@@ -129,7 +129,7 @@ class SimpleServerDialog(Dialog):
     I = Inputs
 
     States = Enum((
-        InitialState, 'ReceivedInvite', 'Sent200', "InDialog",
+        InitialState, 'Ringing', 'Sent200', "InDialog",
         "TerminatingDialog",
         "Terminated"))
     S = States
@@ -146,7 +146,7 @@ class SimpleServerDialog(Dialog):
     FSMDefinitions = {
         S.Initial: {
             I.receiveRequestINVITE: {
-                tsk.NewState: S.ReceivedInvite,
+                tsk.NewState: S.Ringing,
                 tsk.Action: 'handle_invite',
                 # TODO: 13.3.1 says if the INVITE contains an expires header
                 # we should start a timer after which we'll send 487 if accept
@@ -154,7 +154,7 @@ class SimpleServerDialog(Dialog):
                 # tsk.StartTimers
             }
         },
-        S.ReceivedInvite: {
+        S.Ringing: {
             I.accept: {
                 tsk.NewState: S.Sent200,
                 tsk.Action: (('send_response', 200),),
@@ -177,6 +177,8 @@ class SimpleServerDialog(Dialog):
             },
         },
         S.InDialog: {
+            I.receiveRequestACK: {
+            },
             I.terminate: {
                 tsk.NewState: S.TerminatingDialog,
                 tsk.Action: (('send_request', 'BYE'),)

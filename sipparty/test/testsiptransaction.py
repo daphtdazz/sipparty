@@ -20,10 +20,13 @@ import logging
 
 from ..fsm import fsmtimer
 from ..fsm import retrythread
+from ..sip.header import CseqHeader, ViaHeader
 from ..sip.message import Message, MessageResponse
 from ..sip.transaction import (
     Transaction, TransactionManager, TransactionTransport, TransactionUser)
 from ..sip.transaction.client import NonInviteClientTransaction
+from ..sip.transaction.server import (
+    InviteServerTransaction, OneShotServerTransaction)
 from ..util import WaitFor
 from .setup import (MagicMock, patch, SIPPartyTestCase)
 
@@ -53,8 +56,8 @@ class TransactionTest(SIPPartyTestCase):
         self.addCleanup(select_patch.stop)
 
         # TU interface
-        self.request = MagicMock()
-        self.response = MagicMock()
+        self.consume_request = MagicMock()
+        self.consume_response = MagicMock()
         self.transport_error = MagicMock()
         self.timeout = MagicMock()
         self.transaction_terminated = MagicMock()
@@ -106,10 +109,6 @@ class TestNonInviteTransaction(TransactionTest):
 
 class TestTransactionManager(TransactionTest):
 
-    def tearDown(self):
-        log.debug('tearing down tm test')
-        super(TestTransactionManager, self).tearDown()
-
     def test_client_transaction(self):
 
         tm = TransactionManager(self)
@@ -151,3 +150,55 @@ class TestTransactionManager(TransactionTest):
             'same response')
         server_trns2 = tm.transaction_for_outbound_message(resp)
         self.assertIs(server_trns, server_trns2)
+
+    def test_server_transaction(self):
+        # Test that when we ask for a transaction for a 200 response retransmit
+        # where the original transaction has been destroyed it works.
+        tm = TransactionManager(self)
+        resp = MessageResponse(200)
+        resp.addHeader(CseqHeader(reqtype='INVITE'))
+        resp.addHeader(ViaHeader())
+        resp.ViaHeader.parameters.branch = b'branch1'
+
+        trans = tm.transaction_for_outbound_message(resp)
+        self.assertTrue(
+            isinstance(trans, OneShotServerTransaction), type(trans).__name__)
+
+
+class TestServerTransaction(TransactionTest):
+
+    def test_response_deduction(self):
+
+        class ServerDelegate:
+
+            def __init__(self):
+                self.request_count = 0
+                self.response_type = ''
+
+            def fsm_dele_inform_tu(self, trans, action, obj):
+                if action == 'consume_request':
+                    self.request_count += 1
+                    trans.hit('respond_' + self.response_type)
+
+        # This is cheating, but saves implementing all the methods.
+        # TransactionUser.register(ServerDelegate)
+
+        sd = ServerDelegate()
+        tp = MagicMock()
+        TransactionTransport.register(MagicMock)
+        tr = InviteServerTransaction(delegate=sd, transport=tp)
+
+        inv = Message.invite()
+        inv.ViaHeader.parameters.branch = b'branch'
+        sd.response_type = 'notaresponse'
+        self.assertRaises(ValueError, tr.hit, 'request', inv)
+        self.assertEqual(sd.request_count, 1)
+        self.assertEqual(tr.state, 'proceeding')
+
+        log.info('Check we pick up the explicit input for 100')
+        tr.hit('respond_100', inv)
+        self.assertEqual(tr.state, 'proceeding')
+
+        log.info('Check we pick up the general input for XXX')
+        tr.hit('respond_400', inv)
+        self.assertEqual(tr.state, 'completed')

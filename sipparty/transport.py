@@ -27,6 +27,7 @@ from socket import (
     AF_INET, AF_INET6, error as socket_error, getaddrinfo, gethostname,
     SHUT_RDWR, socket as socket_class, SOCK_STREAM, SOCK_DGRAM)
 from weakref import WeakValueDictionary
+from .classmaker import classbuilder
 from .deepclass import (dck, DeepClass)
 from .fsm import (RetryThread)
 from .vb import ValueBinder
@@ -447,7 +448,8 @@ def GetBoundSocket(family, socktype, address, port_filter=None):
     return ssocket
 
 
-class ListenDescription(
+@classbuilder(
+    bases=(
         DeepClass('_laddr_', {
             'port': {dck.check: lambda x: x == 0 or IsValidPortNum(x)},
             'sock_family': {dck.check: lambda x: x in SOCK_FAMILIES},
@@ -458,7 +460,8 @@ class ListenDescription(
             'scopeid': {dck.check: lambda x: isinstance(x, Integral)},
             'port_filter': {dck.check: lambda x: isinstance(x, Callable)}}),
         ValueBinder,
-        TupleRepresentable):
+        TupleRepresentable))
+class ListenDescription:
 
     @classmethod
     def description_from_socket(cls, sck):
@@ -789,11 +792,10 @@ class Transport(Singleton):
         return count
 
     def __init__(self):
+        log.info('%s.__init__()', type(self).__name__)
         super(Transport, self).__init__()
         self._tp_byteConsumer = None
-        self._tp_retryThread = RetryThread(
-            name=self.singleton_name + '.retryThread')
-        self._tp_retryThread.start()
+        self._tp_retryThread = RetryThread()
 
         # Series of dictionaries keyed by (in order):
         # - socket family (AF_INET etc.)
@@ -941,12 +943,19 @@ class Transport(Singleton):
 
         return path, None
 
-    def release_listen_address(self, description):
+    def release_listen_address(self, description=None, **kwargs):
         log.debug('Release %r', description)
-        if not isinstance(description, ListenDescription):
+        if (description is not None and not isinstance(
+                description, ListenDescription)) or (
+                description is None and not kwargs):
+
             raise TypeError(
                 'Cannot release something which is not a ListenDescription: '
                 '%r' % (description,))
+
+        if description is None:
+            description = ListenDescription(**kwargs)
+            description.deduce_missing_values()
 
         if isinstance(description, ConnectedAddressDescription):
             log.debug('Release connected address')

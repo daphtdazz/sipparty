@@ -27,7 +27,8 @@ import time
 import threading
 from weakref import ref
 from ..classmaker import classbuilder
-from ..util import (CCPropsFor, class_or_instance_method, Enum, OnlyWhenLocked)
+from ..util import (
+    CCPropsFor, class_or_instance_method, Enum, OnlyWhenLocked)
 from . import (fsmtimer, retrythread)
 
 log = logging.getLogger(__name__)
@@ -445,7 +446,7 @@ class FSM:
         Subclassing: subclasses may override this to implement background timer
         popping, which is what AsyncFSM does.
         """
-        log.debug("Start timer %r", timer.name)
+        log.info("Start timer %r", timer.name)
         timer.start()
 
     def stop_timer(self, timer):
@@ -455,7 +456,7 @@ class FSM:
         Subclassing: subclasses may override this to implement background timer
         popping tidy-up, which is what AsyncFSM does.
         """
-        log.debug("Stop timer %r", timer.name)
+        log.info("Stop timer %r", timer.name)
         timer.stop()
 
     #
@@ -817,10 +818,8 @@ class AsyncFSM(LockedFSM):
 
             self.__backgroundTimerPop()
 
-        self._fsm_thread = retrythread.RetryThread(
-            action=check_weak_self_timers,
-            name=self._fsm_name + '.retry_thread')
-        self._fsm_thread.start()
+        self._fsm_thread = retrythread.RetryThread()
+        self._fsm_thread.add_action(check_weak_self_timers)
 
     def start_timer(self, timer):
         """Override of the superclass to implement background timer scheduling.
@@ -867,11 +866,7 @@ class AsyncFSM(LockedFSM):
 
     def __del__(self):
         log.info("DELETE FSM %s", self.name)
-        self._fsm_thread.cancel()
-        if self._fsm_thread is not threading.currentThread():
-            log.debug('Join retrythread...')
-            self._fsm_thread.join()
-            log.debug('Joined.')
+        getattr(super(AsyncFSM, self), '__del__', lambda: None)()
 
     @class_or_instance_method
     def _fsm_setState(self, new_state):

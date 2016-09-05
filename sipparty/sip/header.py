@@ -21,7 +21,8 @@ from collections import OrderedDict
 import logging
 from numbers import Integral
 from random import randint
-from six import (add_metaclass, binary_type as bytes, PY2)
+from six import (binary_type as bytes, PY2)
+from ..classmaker import classbuilder
 from ..deepclass import (DeepClass, dck)
 from ..parse import (Parser,)
 from ..util import (
@@ -37,13 +38,17 @@ from .request import Request
 log = logging.getLogger(__name__)
 
 
-@add_metaclass(attributesubclassgen)
 @TwoCompatibleThree
-class Header(
+@classbuilder(
+    bases=(
         DeepClass("_hdr_", {
             "header_value": {dck.gen: lambda: None}
         }),
-        Parser, BytesGenner, ValueBinder):
+        Parser, BytesGenner, ValueBinder
+    ),
+    mc=attributesubclassgen
+)
+class Header:
     """A SIP header.
 
     Each type of SIP header has its own subclass, and so generally the Header
@@ -70,7 +75,8 @@ class Header(
             b"(%(header_value)s)"  # Everything else parsed in parsecust().
             b"" % bdict,
         Parser.Mappings:
-            [("header_value",)]
+            [("header_value",)],
+        Parser.PassMappingsToInit: True,
     }
 
     def _hdr_prepend(self):
@@ -201,7 +207,8 @@ class ContactHeader(
             b"" % bdict,
         Parser.Mappings:
             [("isStar", bool),
-             ("header_value",)]
+             ("header_value",)],
+        Parser.PassMappingsToInit: True,
     }
 
     def parsecust(self, string, mo):
@@ -248,7 +255,8 @@ class Call_IdHeader(  # noqa
         Parser.Pattern:
             b"(.*)$",  # No parameters.
         Parser.Mappings:
-            [("key",)]
+            [("key",)],
+        Parser.PassMappingsToInit: True,
     }
 
     @classmethod
@@ -315,7 +323,8 @@ class CseqHeader(
             b"([\w_-]+)$",  # No parameters.
         Parser.Mappings:
             [("number", int),
-             ("reqtype", lambda x: getattr(Request.types, astr(x)))]
+             ("reqtype", lambda x: getattr(Request.types, astr(x)))],
+        Parser.PassMappingsToInit: True,
     }
 
     def bytesGen(self):
@@ -340,7 +349,8 @@ class NumberHeader(
         Parser.Pattern:
             b"(\d+)$",  # No parameters.
         Parser.Mappings:
-            [("number", int)]
+            [("number", int)],
+        Parser.PassMappingsToInit: True,
     }
 
     def bytesGen(self):
@@ -373,7 +383,8 @@ class Content_TypeHeader(  # noqa
             b"" % bdict,  # No parameters.
         Parser.Mappings:
             [("content_type",),
-             ("parameters", Parameters)]
+             ("parameters", Parameters)],
+        Parser.PassMappingsToInit: True,
     }
 
     def bytesGen(self):
