@@ -23,6 +23,7 @@ import threading
 
 from ..fsm import fsmtimer
 from ..fsm.retrythread import RetryThread
+from ..parse import Parser
 from ..parties import NoMediaSimpleCallsParty
 from ..sip.siptransport import SIPTransport
 from ..sip.standardtimers import StandardTimers
@@ -92,6 +93,11 @@ class TestStandardDialog(SIPPartyTestCase):
         self.subtest_multiple_calls(auto_start=False)
 
     def subtest_multiple_calls(self, auto_start):
+        Parser.PROFILE = True
+        self.addCleanup(
+            lambda:
+                log.info(Parser.stats_summary()) and
+                setattr(Parser, 'PROFILE', False))
         orig_auto_start = RetryThread.auto_start
         RetryThread.auto_start = auto_start
         self.addCleanup(
