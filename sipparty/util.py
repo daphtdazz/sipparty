@@ -585,33 +585,28 @@ def OnlyWhenLocked(method, allow_recursion=False):
     """This decorator sees if the owner of method has a _lock attribute, and
     if so locks it before calling method, releasing it after."""
 
-    log = logging.getLogger('OnlyWhenLocked')
+    log = logging.getLogger(method.__module__)
 
     def maybeGetLock(self, *args, **kwargs):
-
-        obj_name = (
-            getattr(self, 'name', None) or
-            getattr(self, '_fsm_name', None) or
-            self)
-
         if not getattr(self, "_lock", False):
             log.debug(
                 "No locking in %s instance %s.", self.__class__.__name__,
-                obj_name)
+                self)
             return method(self, *args, **kwargs)
 
         if not hasattr(self, "_lock_holdingThread"):
             raise AttributeError(
                 "%s instance %s uses OnlyWhenLocked but has no "
                 "attribute _lock_holdingThread which is required." %
-                (self.__class__.__name__, obj_name))
+                (type(self).__name__, self))
 
         cthr = threading.currentThread()
         hthr = self._lock_holdingThread
 
         if cthr is hthr:
             if allow_recursion:
-                log.debug('Thread legally holding lock, call method')
+                enable_debug_logs and log.debug(
+                    'Thread legally holding lock, call method')
                 return method(self, *args, **kwargs)
 
             raise RuntimeError(
@@ -619,21 +614,23 @@ def OnlyWhenLocked(method, allow_recursion=False):
                 "it." % cthr.name)
 
         # We needed the lock and we have it.
-        log.debug("Thread %s get lock for %s instance (held by %s).",
-                  cthr.name, self.__class__.__name__,
-                  hthr.name if hthr is not None else None)
+        enable_debug_logs and log.debug(
+            "Thread %s get lock for %s instance (held by %s).",
+            cthr.name, self.__class__.__name__,
+            hthr.name if hthr is not None else None)
 
         with self._lock:
-            log.debug("Thread %s GOT lock for %s.%s",
-                      cthr.name, obj_name, method.__name__)
+            enable_debug_logs and log.debug(
+                "Thread %s GOT lock for %s.%s",
+                cthr.name, obj_name, method.__name__)
             self._lock_holdingThread = cthr
             try:
                 result = method(self, *args, **kwargs)
             finally:
                 self._lock_holdingThread = None
 
-        log.debug(
-            "Thread %s RELEASED lock for %s.%s", cthr.name, obj_name,
+        enable_debug_logs and log.debug(
+            "Thread %s RELEASED lock for %s.%s", cthr.name, self,
             method.__name__)
         return result
 
