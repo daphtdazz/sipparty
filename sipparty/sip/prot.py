@@ -147,8 +147,8 @@ hostname = b"(?:%(domainlabel)s[.])*%(toplabel)s[.]?" % bglobals()
 IPv6reference = b"[[]%(IPv6address)s[]]" % bglobals()
 host = b"(?:%(hostname)s|%(IPv4address)s|%(IPv6reference)s)" % bglobals()
 hostport = b"%(host)s(?::%(port)s)?" % bglobals()
-# Should be SIP or token, but just use token.
-protocol_name = token
+# token also matches SIP but this is an optimization since it's usually SIP.
+protocol_name = b'(?:SIP|%(token)s)' % bglobals()
 protocol_version = token
 sent_protocol = b"%(protocol_name)s%(SLASH)s%(protocol_version)s" % bglobals()
 # TODO qdtext should include UTF8-NONASCII.
