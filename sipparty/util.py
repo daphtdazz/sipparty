@@ -21,7 +21,6 @@ from __future__ import absolute_import
 from abc import (ABCMeta, abstractmethod)
 from collections import (Callable, Sequence)
 import logging
-import re
 from six import (
     add_metaclass, binary_type as bytes, iteritems, itervalues, PY2)
 import threading
