@@ -18,6 +18,7 @@ limitations under the License.
 """
 import logging
 from six import (binary_type as bytes, iteritems)
+from socket import SOCK_DGRAM
 from ..adapter import AdapterProperty
 from ..deepclass import (DeepClass, dck)
 from ..sdp import (SessionDescription, MediaDescription)
@@ -44,7 +45,8 @@ class NoMediaSessions(MediaSessionError):
 def MediaSessionListenDescription():
     # Media sessions need to listen on even ports, so the RTCP port is on one
     # above.
-    return ListenDescription(port_filter=lambda pt: pt % 2 == 0)
+    return ListenDescription(
+        port_filter=lambda pt: pt % 2 == 0, sock_type=SOCK_DGRAM)
 
 
 class Session(
