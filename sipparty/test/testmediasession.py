@@ -16,6 +16,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+from __future__ import absolute_import
+
 import gc
 import logging
 from socket import AF_INET6
@@ -26,7 +28,7 @@ from ..sdp.sdpsyntax import (
 from ..transport import (
     IPAddressFamilyFromName, IsValidPortNum, SOCK_FAMILIES)
 from ..util import abytes
-from .setup import SIPPartyTestCase
+from .base import SIPPartyTestCase
 
 log = logging.getLogger(__name__)
 

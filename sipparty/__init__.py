@@ -14,7 +14,5 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-# The import order does matter. Definitely need splogging first. Then the
-# stand-alone modules that should be brought out into separate projects. Then
-# everything else.
-from . import splogging
+# Need to import logging before anything else.
+from . import logging

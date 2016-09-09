@@ -9,6 +9,7 @@ written by Michele Simionato, David Park and with input by others.
 
 And many thanks to him because this solves a thorny problem, good work!
 """
+from __future__ import absolute_import
 
 from functools import partial
 import inspect

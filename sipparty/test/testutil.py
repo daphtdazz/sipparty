@@ -16,13 +16,15 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+from __future__ import absolute_import
+
 import logging
 from six import (add_metaclass, exec_, next, PY2)
 from weakref import ref
 from ..util import (
     AsciiBytesEnum, bglobals_g, CCPropsFor, class_or_instance_method, Enum,
     FirstListItemProxy, Singleton, SingletonType, WeakMethod, WeakProperty)
-from .setup import SIPPartyTestCase
+from .base import SIPPartyTestCase
 
 log = logging.getLogger(__name__)
 

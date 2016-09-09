@@ -16,6 +16,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+from __future__ import absolute_import
+
 from abc import (ABCMeta, abstractmethod)
 from collections import (Callable, Sequence)
 import logging
@@ -1052,21 +1054,6 @@ class BytesGenner(object):
             'Generating bytes for BytesGenner subclass %r',
             type(self).__name__)
         return b''.join(self.safeBytesGen())
-
-
-class TestCaseREMixin(object):
-
-    def assertMatchesPattern(self, value, pattern):
-        cre = re.compile(pattern)
-        mo = cre.match(value)
-        if mo is None:
-            pvalue = self._tcrem_prettyFormat(value)
-            ppatt = self._tcrem_prettyFormat(pattern)
-            self.assertIsNotNone(
-                mo, "%s \nDoes not match\n%s" % (pvalue, ppatt))
-
-    def _tcrem_prettyFormat(self, string):
-        return repr(string).replace("\\n", "\\n'\n'")
 
 
 def bglobals_g(gbls):

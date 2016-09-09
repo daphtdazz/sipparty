@@ -17,6 +17,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+from __future__ import absolute_import
+
 from collections import Callable, OrderedDict
 from contextlib import contextmanager
 from copy import deepcopy
@@ -106,7 +108,7 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
 
             Note that this method is HIGHLY performance critical, and as such
             detail logging is switched out locally rather than even using the
-            global splogging disable switch. Various other parts are optimized
+            global logging disable switch. Various other parts are optimized
             too so modify at your peril.
             """
             enable_debug_logs and log.detail(

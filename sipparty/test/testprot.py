@@ -16,6 +16,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+from __future__ import absolute_import
+
 import logging
 import re
 from six import (binary_type as bytes, iteritems, PY2)
@@ -29,7 +31,7 @@ from ..sip.param import Parameters
 from ..sip.prot import (Incomplete)
 from ..sip.request import Request
 from ..util import (bglobals_g)
-from .setup import SIPPartyTestCase
+from .base import SIPPartyTestCase
 
 log = logging.getLogger(__name__)
 

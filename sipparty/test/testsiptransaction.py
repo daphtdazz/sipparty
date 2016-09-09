@@ -16,6 +16,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+from __future__ import absolute_import
+
 import logging
 
 from ..fsm import fsmtimer
@@ -28,7 +30,7 @@ from ..sip.transaction.client import NonInviteClientTransaction
 from ..sip.transaction.server import (
     InviteServerTransaction, OneShotServerTransaction)
 from ..util import WaitFor
-from .setup import (MagicMock, patch, SIPPartyTestCase)
+from .base import (MagicMock, patch, SIPPartyTestCase)
 
 log = logging.getLogger(__name__)
 

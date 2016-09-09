@@ -16,11 +16,13 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+from __future__ import absolute_import
+
 import logging
 from six import (binary_type as bytes)
 from ..sdp import (
     AddrTypes, LineTypes, MediaTypes, SessionDescription, SDPIncomplete)
-from .setup import SIPPartyTestCase
+from .base import SIPPartyTestCase
 
 log = logging.getLogger(__name__)
 

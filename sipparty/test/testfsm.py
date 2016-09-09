@@ -16,6 +16,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+from __future__ import absolute_import
+
 import logging
 import socket
 import threading
@@ -27,7 +29,7 @@ from ..fsm import (
 from ..fsm import fsmtimer
 from ..fsm import retrythread
 from ..util import (Enum, WaitFor)
-from .setup import (MagicMock, patch, SIPPartyTestCase)
+from .base import (MagicMock, patch, SIPPartyTestCase)
 
 log = logging.getLogger(__name__)
 

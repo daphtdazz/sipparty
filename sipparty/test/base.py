@@ -1,6 +1,6 @@
-"""setup.py
+"""base.py
 
-Setup for the sip party logging code.
+unittest customizations for the sipparty test cases.
 
 Copyright 2015 David Park
 
@@ -16,14 +16,16 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+from __future__ import absolute_import
+
 import gc
 import logging
+import re
 from six import (iteritems, PY2)
 import sys
 import unittest
 from ..fsm.retrythread import RetryThread
 from ..sip.siptransport import SIPTransport
-from ..util import TestCaseREMixin
 if PY2:
     from mock import (MagicMock, patch)  # noqa
 else:
@@ -33,41 +35,22 @@ log = logging.getLogger(__name__)
 sipparty = sys.modules['sipparty']
 
 
-class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
+class TestCaseREMixin(object):
 
-    default_logging_config = {
-        'version': 1,
-        'disable_existing_loggers': False,
-        'formatters': {
-            'console': {
-                'format':
-                    '%(levelname)s +%(relativeCreated)d %(name)s.%(lineno)d: '
-                    '%(message)s'
-            },
-        },
-        'handlers': {
-            'console': {
-                'level': 'WARNING',
-                'formatter': 'console',
-                'class': 'logging.StreamHandler',
-            },
-        },
-        'root': {
-            'handlers': ['console'],
-            'level': 'WARNING'
-        },
-        'loggers': {
-            'sipparty.fsm': {
-                'level': 'INFO',
-            },
-            'sipparty.transport': {
-                'level': 'INFO'
-            },
-            'sipparty.test': {
-                'level': 'INFO'
-            },
-        }
-    }
+    def assertMatchesPattern(self, value, pattern):
+        cre = re.compile(pattern)
+        mo = cre.match(value)
+        if mo is None:
+            pvalue = self._tcrem_prettyFormat(value)
+            ppatt = self._tcrem_prettyFormat(pattern)
+            self.assertIsNotNone(
+                mo, "%s \nDoes not match\n%s" % (pvalue, ppatt))
+
+    def _tcrem_prettyFormat(self, string):
+        return repr(string).replace("\\n", "\\n'\n'")
+
+
+class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
 
     Clock = MagicMock()
 
@@ -75,7 +58,6 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
         super(SIPPartyTestCase, self).__init__(*args, **kwargs)
         self._sptc_logLevels = {}
         self._sptc_searchedModules = None
-        logging.config.dictConfig(self.default_logging_config)
 
     def assertIsNotNone(self, exp, *args, **kwargs):
         if hasattr(super(SIPPartyTestCase, self), 'assertIsNotNone'):

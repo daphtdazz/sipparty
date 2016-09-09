@@ -16,13 +16,15 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+from __future__ import absolute_import
+
 import logging
 from socket import (AF_INET, SOCK_DGRAM)
 from .. import (sip, transport)
 from ..sip.siptransport import AORHandler, SIPTransport
 from ..sip.transaction import TransactionUser
 from ..util import WaitFor
-from .setup import (MagicMock, patch, SIPPartyTestCase)
+from .base import (MagicMock, patch, SIPPartyTestCase)
 
 log = logging.getLogger(__name__)
 
