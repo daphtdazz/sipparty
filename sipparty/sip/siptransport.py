@@ -75,6 +75,10 @@ class SIPTransport:
 
     def __init__(self):
         super(SIPTransport, self).__init__()
+
+        self.messages_sent = 0
+        self.messages_received = 0
+
         self._sptr_messageConsumer = None
         self._sptr_messages = []
         self._sptr_provisionalDialogs = {}
@@ -216,6 +220,7 @@ class SIPTransport:
             sp.release_listen_address(sprxy.local_address)
             raise
 
+        self.messages_sent += 1
         return sprxy.local_address
 
     def fixTargetAddress(self, addr):
@@ -255,6 +260,8 @@ class SIPTransport:
         except ParseError as pe:
             log.error("Parse errror %s parsing message.", pe)
             return 0
+
+        self.messages_received += 1
         try:
             self.consumeMessage(msg)
         except Exception:
@@ -356,3 +363,12 @@ class SIPTransport:
             'Unable to find a dialog for message with dialog ID %r, '
             'provisional dialogs: %r, established dialogs: %r' % (
                 did, provDs.keys(), estDs.keys()))
+
+    #
+    # =================== MAGIC METHODS =======================================
+    #
+    def __del__(self):
+        log.info(
+            'DELETE %s instance, messages received: %d, messages sent: %d',
+            type(self).__name__, self.messages_received, self.messages_sent)
+        super(SIPTransport, self).__del__()

@@ -22,6 +22,7 @@ from __future__ import absolute_import
 import re
 import logging
 from six import (binary_type as bytes, iteritems, PY2)
+from timeit import default_timer
 from .util import abytes, profile
 
 log = logging.getLogger(__name__)
@@ -201,6 +202,11 @@ class Parser(object):
     Repeats = "repeat"
     PassMappingsToInit = "pass mappings to init"
 
+    # dictionary like
+    # {'abc \d+': (<total_time>, <total_parses>)}
+    PROFILE = False
+    pattern_stats = {}
+
     @classmethod
     def ParseFail(cls, string, *args, **kwargs):
         log.debug("Parse failure of message %r", string)
@@ -240,7 +246,19 @@ class Parser(object):
 
         pre = pi[Parser.RE]
         log.debug("  match")
-        mo = pre.match(string)
+        if cls.PROFILE:
+            start = default_timer()
+            mo = pre.match(string)
+            stop = default_timer()
+            stats = cls.pattern_stats.get(pre.pattern)
+            if stats is None:
+                stats = {'sum': 0.0, 'count': 0, 'type': cls.__name__}
+                cls.pattern_stats[pre.pattern] = stats
+            stats['sum'] += stop - start
+            stats['count'] += 1
+        else:
+            mo = pre.match(string)
+
         log.debug("  match done")
         if mo is None:
             cls.ParseFail(string, "Pattern was %r" % pi[Parser.Pattern])
@@ -381,3 +399,15 @@ class Parser(object):
             attr_vals[attr] = tdata
 
         return attr_vals
+
+    @classmethod
+    def stats_summary(self, top_stats=10):
+
+        ll = list((val, key) for key, val in iteritems(self.pattern_stats))
+        ll.sort(key=lambda x: (x[0]['sum'], x[0]['count']))
+        return '\n'.join((
+            '%s: %f %d %f' % (
+                stats['type'], stats['sum'], stats['count'],
+                stats['sum'] / stats['count'])
+            for stats, key in ll[:top_stats]
+        ))
