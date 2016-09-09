@@ -183,6 +183,7 @@ class ValueBinder:
             self.__class__.__name__)
         for reqdattr in (
                 ("_vb_forwardbindings", {}), ("_vb_backwardbindings", {}),
+                ('_vb_all_bound_attributes', set()),
                 ("_vb_weakBindingParent", None),
                 ("_vb_leader_res", None),
                 ("_vb_followers", None),
@@ -242,6 +243,12 @@ class ValueBinder:
                 log.debug(
                     "Target bindings after backward bind: %r",
                     at._vb_forwardbindings)
+
+    def __update_all_bound_attributes(self):
+        # All bound attributes are cached in one set for perf lookups of them
+        # in __setattr__
+        self._vb_all_bound_attributes = (
+            set(self._vb_forwardbindings) | set(self._vb_backwardbindings))
 
     def bindBindings(self, bindings):
         """Establish a set of bindings.
@@ -394,20 +401,22 @@ class ValueBinder:
     @profile
     def __setattr__(self, attr, val):
         """Very perf sensitive `__setattr__` function."""
-        if attr.startswith('_'):
-            # For perf reasons assume anything starting with '_' is not bound.
+        # Pass up as quickly as possible if this attribute isn't bound.
+        if attr not in self._vb_all_bound_attributes:
             return super(ValueBinder, self).__setattr__(attr, val)
 
         if PROFILE:
             self.hit_set_attr(attr)
-
-        if (attr not in self._vb_forwardbindings and
-                attr not in self._vb_backwardbindings):
-            return super(ValueBinder, self).__setattr__(attr, val)
-
         enable_debug_logs = False
-        enable_debug_logs and log.debug(
-            "Set %r (on %r instance).", attr, self.__class__.__name__)
+        if enable_debug_logs:
+
+            assert self._vb_all_bound_attributes == (
+                set(self._vb_forwardbindings) |
+                set(self._vb_backwardbindings)), (
+                self._vb_all_bound_attributes, self._vb_forwardbindings,
+                self._vb_backwardbindings)
+            log.debug(
+                "Set %r (on %r instance).", attr, self.__class__.__name__)
         sd = self.__dict__
 
         existing_val = getattr(self, attr, None)
@@ -651,6 +660,11 @@ class ValueBinder:
         resolvedfrompath = self._vb_resolveFromPath(frompath)
         resolvedtopath = self._vb_resolveFromPath(topath)
 
+        # Temporarily add the from path to the bindings cache so that
+        # __setattr__ works, it'll be added properly in
+        # __update_all_bound_attributes().
+        self._vb_all_bound_attributes.add(resolvedfrompath)
+
         # Make the attribute binding dictionary if it doesn't already exist.
         _, fromattr, fromattrattrs, _, bds = self._vb_bindingdicts(
             resolvedfrompath, direction, create=True)
@@ -691,6 +705,8 @@ class ValueBinder:
         log.detail(
             "  %r bindings after bind %r", direction,
             self._vb_bindingsForDirection(direction))
+
+        self.__update_all_bound_attributes()
 
     def _vb_recurse_binddirection(
             self, frompath, resolvedfrompath, fromattr, fromattrattrs,
@@ -794,6 +810,8 @@ class ValueBinder:
             log.debug("  %r bindings after unbind %r",
                       direction,
                       self._vb_bindingsForDirection(direction))
+
+        self.__update_all_bound_attributes()
 
     def _vb_maybeReleaseParent(self):
 
