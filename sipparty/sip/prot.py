@@ -149,7 +149,7 @@ host = b"(?:%(hostname)s|%(IPv4address)s|%(IPv6reference)s)" % bglobals()
 hostport = b"%(host)s(?::%(port)s)?" % bglobals()
 # token also matches SIP but this is an optimization since it's usually SIP.
 protocol_name = b'(?:SIP|%(token)s)' % bglobals()
-protocol_version = token
+protocol_version = b'(?:2\.0|%(token)s)' % bglobals()
 sent_protocol = b"%(protocol_name)s%(SLASH)s%(protocol_version)s" % bglobals()
 # TODO qdtext should include UTF8-NONASCII.
 qdtext = b"(?:%(LWS)s|[\x21\x23-\x5B\x5D-\x7E])" % bglobals()
@@ -160,8 +160,10 @@ gen_value = b"(?:%(token)s|%(host)s|%(quoted_string)s)" % bglobals()
 generic_param = b"%(token)s(?:%(EQUAL)s%(gen_value)s)?" % bglobals()
 sent_by = b"%(host)s(?:%(COLON)s%(port)s)?" % bglobals()
 via_parm = b"%(sent_protocol)s%(LWS)s%(sent_by)s" % bglobals()
-# transport actually includes specific sets of token as well in the spec.
-transport = token
+# transport actually includes specific sets of token as well in the spec. Put
+# in the standard ones here for perf reasons.
+# transport = token
+transport = b'(?:UDP|TCP|%(token)s)' % bglobals()
 
 user = (
     b"(?:[%(user_unreservedrange)s%(unreservedrange)s]+|%(escaped)s)+"
