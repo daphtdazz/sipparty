@@ -586,22 +586,27 @@ def OnlyWhenLocked(method, allow_recursion=False):
     if so locks it before calling method, releasing it after."""
 
     log = logging.getLogger(method.__module__)
+    sentinel = type('OnlyWhenLockedSentinel', (), {})()
 
     def maybeGetLock(self, *args, **kwargs):
+        """Get the method object's lock and call the method with it.
+
+        This function is performance critical.
+        """
         if not getattr(self, "_lock", False):
             log.debug(
                 "No locking in %s instance %s.", self.__class__.__name__,
                 self)
             return method(self, *args, **kwargs)
 
-        if not hasattr(self, "_lock_holdingThread"):
+        hthr = getattr(self, "_lock_holdingThread", sentinel)
+        if hthr is sentinel:
             raise AttributeError(
                 "%s instance %s uses OnlyWhenLocked but has no "
                 "attribute _lock_holdingThread which is required." %
                 (type(self).__name__, self))
 
         cthr = threading.currentThread()
-        hthr = self._lock_holdingThread
 
         if cthr is hthr:
             if allow_recursion:
@@ -622,17 +627,15 @@ def OnlyWhenLocked(method, allow_recursion=False):
         with self._lock:
             enable_debug_logs and log.debug(
                 "Thread %s GOT lock for %s.%s",
-                cthr.name, obj_name, method.__name__)
+                cthr.name, self, method.__name__)
             self._lock_holdingThread = cthr
             try:
-                result = method(self, *args, **kwargs)
+                return method(self, *args, **kwargs)
             finally:
                 self._lock_holdingThread = None
-
-        enable_debug_logs and log.debug(
-            "Thread %s RELEASED lock for %s.%s", cthr.name, self,
-            method.__name__)
-        return result
+                enable_debug_logs and log.debug(
+                    "Thread %s RELEASED lock for %s.%s", cthr.name, self,
+                    method.__name__)
 
     return maybeGetLock
 
