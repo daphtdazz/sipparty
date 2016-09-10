@@ -16,18 +16,19 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from six import (add_metaclass, binary_type as bytes, iteritems, next)
-from six.moves import reduce
-import re
+from collections import OrderedDict
 import logging
 from numbers import (Integral)
+import re
+from six import (add_metaclass, binary_type as bytes, iteritems, next)
+from six.moves import reduce
 from .. import (util,)
 from ..classmaker import classbuilder
 from ..deepclass import (DeepClass, dck)
 from ..parse import (ParseError,)
 from ..sdp import sdpsyntax
 from ..transport import SOCK_TYPE_IP_NAMES
-from ..util import (astr, BytesGenner)
+from ..util import (astr, BytesGenner, profile)
 from ..vb import (KeyTransformer, ValueBinder)
 from .body import Body
 from .header import Header
@@ -60,16 +61,24 @@ ContentTypeBinding = (
 )
 
 
+class UnparsedHeader:
+    __slots__ = ['type', 'contents']
+
+    def __init__(self, type, contents):
+        self.type = type
+        self.contents = contents
+
+
 @util.TwoCompatibleThree
 @classbuilder(
     bases=(
-        DeepClass("_msg_", {
-            "startline": {dck.gen: "MakeStartline"},
-            "headers": {dck.gen: lambda: []},
-            "bodies": {
-                dck.gen: lambda: [], dck.set: "setBodies"},
-            "parsedBytes": {dck.check: lambda x: isinstance(x, Integral)}
-        }),
+        DeepClass("_msg_", OrderedDict((
+            ("startline", {dck.gen: "MakeStartline"}),
+            ("headers", {dck.gen: lambda: []}),
+            ("bodies", {
+                dck.gen: lambda: [], dck.set: "setBodies"}),
+            ("parsedBytes", {dck.check: lambda x: isinstance(x, Integral)})
+        ))),
         BytesGenner, ValueBinder
     ),
     mc=(
@@ -162,13 +171,7 @@ class Message:
                 assert 0, "Bug: Unexpected end of lines in message."
 
         for hname, hcontents, bytes_used in HNameContentsGen(line_iter):
-            log.debug("Add header %r", hname)
-            log.detail("Contents: %r", hcontents)
-            hclass = getattr(Header, astr(hname))
-            newh = hclass.Parse(hcontents)
-            log.detail("Header parsed as: %r", newh)
-
-            message.addHeader(newh)
+            message.addHeader(UnparsedHeader(astr(hname), hcontents))
             used_bytes += bytes_used
 
         # We haven't yet counted the eol eol at the end of the headers.
@@ -262,7 +265,6 @@ class Message:
         addHeader(ViaHeader) ->
         Message: ToHeader, FromHeader, ViaHeader, ViaHeader, ContactHeader
         """
-        assert hdr is not None
         htype = hdr.type
         clname = self.__class__.__name__
         log.debug("Add header %r instance type %r", clname, htype)
@@ -384,10 +386,20 @@ class Message:
         if hmo is not None:
             canonicalheadername = util.sipheader(hmo.group(1))
             hdrs = self.headers
-            if hdrs:
-                for header in hdrs:
-                    if header.type == canonicalheadername:
-                        return header
+            for index, header in enumerate(hdrs):
+                if header.type == canonicalheadername:
+                    break
+            else:
+                header = None
+            if header is not None:
+                if isinstance(header, Header):
+                    return header
+
+                assert isinstance(header, UnparsedHeader)
+                hclass = getattr(Header, header.type)
+                newh = hclass.Parse(header.contents)
+                hdrs[index] = newh
+                return newh
 
         try:
             return getattr(super(Message, self), attr)

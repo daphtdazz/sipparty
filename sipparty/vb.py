@@ -401,7 +401,7 @@ class ValueBinder:
     def __setattr__(self, attr, val):
         # Pass up as quickly as possible if this attribute isn't bound. This is
         # critical for performance.
-        if attr not in self._vb_all_bound_attributes:
+        if attr not in getattr(self, '_vb_all_bound_attributes', set()):
             return super(ValueBinder, self).__setattr__(attr, val)
 
         # The remaining part of this is not perf sensitive as generally only

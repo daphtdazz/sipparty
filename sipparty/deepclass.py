@@ -75,16 +75,16 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
     # When we come to initialize the top level attributes, we need to do the
     # non descriptors first, and so separate them out here so that we don't
     # have to do it on the fly each time we create a DeepClass instance.
-    _tlad_no_descriptors = {
-        key: val
+    _tlad_no_descriptors = OrderedDict((
+        (key, val)
         for key, val in iteritems(topLevelAttributeDescs)
         if dck.descriptor not in val
-    }
-    _tlad_descriptors = {
-        key: val
+    ))
+    _tlad_descriptors = OrderedDict((
+        (key, val)
         for key, val in iteritems(topLevelAttributeDescs)
         if dck.descriptor in val
-    }
+    ))
 
     class DeepClass(object):
 
