@@ -114,7 +114,7 @@ find . -name "*.pyc" -delete
 
 if (( ${#tests} > 0 ))
 then
-    python -m unittest unittest_logging "${tests[@]}" 2>&1 | colorize >&2 &
+    python -m unittest "${tests[@]}" 2>&1 | colorize >&2 &
     child_pid=$!
 else
     if (( pymajver > 2 ))
