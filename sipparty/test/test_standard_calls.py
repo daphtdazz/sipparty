@@ -20,6 +20,7 @@ from __future__ import absolute_import
 
 import logging
 import threading
+from timeit import default_timer
 
 from ..fsm import fsmtimer
 from ..fsm.retrythread import RetryThread
@@ -105,6 +106,7 @@ class TestStandardDialog(SIPPartyTestCase):
         rt_thr = RetryThread()
 
         nn = 10
+        start = default_timer()
         log.info('Create parties which will listen')
         parties = [
             NoMediaSimpleCallsParty(aor='callee-%d@listen.com' % (test + 1,))
@@ -148,3 +150,6 @@ class TestStandardDialog(SIPPartyTestCase):
 
         for dlg in dlgs:
             dlg.waitForStateCondition(lambda st: st == dlg.States.Terminated)
+
+        stop = default_timer()
+        log.info('From start to finish took %f seconds', stop - start)
