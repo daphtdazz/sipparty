@@ -830,7 +830,6 @@ class AsyncFSM(LockedFSM):
 
     def checkTimers(self):
         """Check all the timers."""
-        log.debug('check timers on fsm %s', self.name)
         for name, timer in iteritems(self._fsm_timers):
             # Squelch the exception if the timer isn't running yet, because
             # that's easier than checking each one first.
