@@ -28,7 +28,7 @@ from ..deepclass import (DeepClass, dck)
 from ..parse import (ParseError,)
 from ..sdp import sdpsyntax
 from ..transport import SOCK_TYPE_IP_NAMES
-from ..util import (astr, BytesGenner, profile)
+from ..util import (abytes, astr, BytesGenner)
 from ..vb import (KeyTransformer, ValueBinder)
 from .body import Body
 from .header import Header
@@ -61,12 +61,20 @@ ContentTypeBinding = (
 )
 
 
-class UnparsedHeader:
+class UnparsedHeader(BytesGenner):
     __slots__ = ['type', 'contents']
 
     def __init__(self, type, contents):
         self.type = type
         self.contents = contents
+
+    #
+    # =================== BytesGenner =========================================
+    #
+    def bytesGen(self):
+        yield abytes(self.type)
+        yield b': '
+        yield self.contents
 
 
 @util.TwoCompatibleThree
