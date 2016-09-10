@@ -398,31 +398,26 @@ class ValueBinder:
     #
     # =================== MAGIC METHODS ======================================
     #
-    @profile
     def __setattr__(self, attr, val):
-        """Very perf sensitive `__setattr__` function."""
-        # Pass up as quickly as possible if this attribute isn't bound.
+        # Pass up as quickly as possible if this attribute isn't bound. This is
+        # critical for performance.
         if attr not in self._vb_all_bound_attributes:
             return super(ValueBinder, self).__setattr__(attr, val)
 
-        if PROFILE:
-            self.hit_set_attr(attr)
-        enable_debug_logs = False
-        if enable_debug_logs:
-
-            assert self._vb_all_bound_attributes == (
-                set(self._vb_forwardbindings) |
-                set(self._vb_backwardbindings)), (
-                self._vb_all_bound_attributes, self._vb_forwardbindings,
-                self._vb_backwardbindings)
-            log.debug(
-                "Set %r (on %r instance).", attr, self.__class__.__name__)
-        sd = self.__dict__
+        # The remaining part of this is not perf sensitive as generally only
+        # few attributes are actually bound, relatively speaking.
+        #
+        # Check that the cached all bound attributes dictionary is correct
+        assert self._vb_all_bound_attributes == (
+            set(self._vb_forwardbindings) |
+            set(self._vb_backwardbindings)), (
+            self._vb_all_bound_attributes, self._vb_forwardbindings,
+            self._vb_backwardbindings)
+        log.debug("Set %r (on %r instance).", attr, type(self).__name__)
 
         existing_val = getattr(self, attr, None)
-
         try:
-            settingAttributes = sd["_vb_settingAttributes"]
+            settingAttributes = self._vb_settingAttributes
             if attr in settingAttributes:
                 raise RuntimeError(
                     "Recursion attempting to set attribute %r on %r "
@@ -439,9 +434,9 @@ class ValueBinder:
                 initialval = val
                 val = getattr(self, attr)
                 if val is not initialval:
-                    enable_debug_logs and log.debug(
+                    log.debug(
                         "%r instance %r attribute val changed after set.",
-                        self.__class__.__name__, attr)
+                        type(self).__name__, attr)
             except Exception as exc:
                 append_to_exception_message(
                     exc, '; setting attribute %s of %s instance' % (
@@ -463,8 +458,7 @@ class ValueBinder:
         if existing_val is not val:
             self.vb_updateAttributeBindings(attr, existing_val, val)
         else:
-            enable_debug_logs and log.debug(
-                "New val is old val so don't update bindings.")
+            log.debug("New val is old val so don't update bindings.")
 
     def __delattr__(self, attr):
         log.detail("Del %r.", attr)
@@ -492,9 +486,7 @@ class ValueBinder:
         # in our children.
         self._vb_unbindAllCondition(tolerate_no_such_binding=True)
         sp = super(ValueBinder, self)
-        dm = getattr(sp, '__del__', None)
-        if dm is not None:
-            dm()
+        dm = getattr(sp, '__del__', lambda: None)()
 
     #
     # =================== INTERNAL METHODS ===================================
@@ -663,7 +655,8 @@ class ValueBinder:
         # Temporarily add the from path to the bindings cache so that
         # __setattr__ works, it'll be added properly in
         # __update_all_bound_attributes().
-        self._vb_all_bound_attributes.add(resolvedfrompath)
+        self._vb_all_bound_attributes.add(
+            resolvedfrompath.partition(self.PS)[0])
 
         # Make the attribute binding dictionary if it doesn't already exist.
         _, fromattr, fromattrattrs, _, bds = self._vb_bindingdicts(
@@ -750,7 +743,6 @@ class ValueBinder:
                     log.debug("  Has child attr %r", fromattr)
                     self._vb_push_value_to_target(val, resolvedtopath, bd)
             else:
-                log.debug("Pull value.")
                 val = self._vb_pullValue(resolvedtopath)
                 self._vb_push_value_to_target(val, fromattr, bd)
 
