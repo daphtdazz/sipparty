@@ -74,7 +74,7 @@ class _FDSource(object):
                 raise
 
             self._fds_exceptionCount += 1
-            log.error(
+            log.exception(
                 "%s exception (%d%s) processing new data for selectable %r "
                 "(fd %d): %s",
                 type(exc).__name__,

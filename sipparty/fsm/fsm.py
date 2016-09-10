@@ -812,9 +812,7 @@ class AsyncFSM(LockedFSM):
         def check_weak_self_timers():
             self = weak_self()
             if self is None:
-                log.debug("Weak check timers has been released.")
                 return
-            log.debug("Weak check timers has not been released.")
 
             self.__backgroundTimerPop()
 
