@@ -42,15 +42,6 @@ default_logging_config = {
         'level': 'WARNING'
     },
     'loggers': {
-        # 'sipparty.fsm': {
-        #     'level': 'INFO',
-        # },
-        'sipparty.sip.siptransport': {
-            'level': 'INFO',
-        },
-        # 'sipparty.transport': {
-        #     'level': 'INFO'
-        # },
         'sipparty.test': {
             'level': 'INFO'
         },
