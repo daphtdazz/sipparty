@@ -21,7 +21,7 @@ from six import iteritems
 from weakref import (ref as wref)
 
 from .classmaker import classbuilder
-from .util import append_to_exception_message, profile
+from .util import append_to_exception_message
 
 log = logging.getLogger(__name__)
 
@@ -486,7 +486,7 @@ class ValueBinder:
         # in our children.
         self._vb_unbindAllCondition(tolerate_no_such_binding=True)
         sp = super(ValueBinder, self)
-        dm = getattr(sp, '__del__', lambda: None)()
+        getattr(sp, '__del__', lambda: None)()
 
     #
     # =================== INTERNAL METHODS ===================================
