@@ -34,18 +34,19 @@ class SipPartyLogger(logging.getLoggerClass()):
 
     def __init__(self, *args, **kwargs):
         super(SipPartyLogger, self).__init__(*args, **kwargs)
+        self.__do_nothing = lambda *args, **kwargs: None
         self.__detail_up_call = partial(self.log, logging.DETAIL)
 
     @property
     def debug(self):
         if not self.global_debug_logs_enabled:
-            return lambda *args, **kwargs: None
+            return self.__do_nothing
         return super(SipPartyLogger, self).debug
 
     @property
     def detail(self):
         if not self.global_debug_logs_enabled:
-            return lambda *args, **kwargs: None
+            return self.__do_nothing
         return self.__detail_up_call
 
 logging.setLoggerClass(SipPartyLogger)

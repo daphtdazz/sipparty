@@ -126,14 +126,14 @@ class RetryThread(Singleton, threading.Thread):
             master_thread = threading.currentThread()
         self._rthr_masterThread = master_thread
 
+        # Initialize support for util.OnlyWhenLocked
+        self._lock = threading.RLock()
+        self._lock_holdingThread = None
+
         # Set up the trigger mechanism.
         self._rthr_triggerRunFD, output = socketpair()
         self._rthr_trigger_run_read_fd = output
         self.addInputFD(output, lambda selectable: selectable.recv(1))
-
-        # Initialize support for util.OnlyWhenLocked
-        self._lock = threading.RLock()
-        self._lock_holdingThread = None
 
         # Because this is a singleton clients that don't care whether they get
         # a fresh version shouldn't need to worry about starting the thread,

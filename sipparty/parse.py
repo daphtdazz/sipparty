@@ -23,7 +23,8 @@ import re
 import logging
 from six import (binary_type as bytes, iteritems, PY2)
 from timeit import default_timer
-from .util import abytes, profile
+from .classmaker import classbuilder
+from .util import abytes, append_to_exception_message, profile
 
 log = logging.getLogger(__name__)
 
@@ -84,7 +85,31 @@ def ParsedPropertyOfClass(cls):
     return _ParsedPropertyOfClass
 
 
-class Parser(object):
+class ParserType(type):
+
+    def __init__(self, name, bases, dict_):
+
+        if 'Parser' in globals():
+            pattern_key = Parser.Pattern
+            re_key = Parser.RE
+        else:
+            pattern_key = dict_['Pattern']
+            re_key = dict_['RE']
+
+        # Compile regular expressions.
+        pi = dict_.get('parseinfo', {})
+        ptrn = pi.get(pattern_key)
+        if ptrn is not None:
+            try:
+                pi[re_key] = re.compile(ptrn)
+            except Exception as exc:
+                append_to_exception_message(exc, ' - pattern was %r' % (ptrn,))
+                raise
+        super(ParserType, self).__init__(name, bases, dict_)
+
+
+@classbuilder(mc=ParserType)
+class Parser:
     """This mixin class provides a way of parsing hierarchical text into an
     object graph using regular expressions.
 
@@ -219,30 +244,14 @@ class Parser(object):
             "".format(**locals()))
 
     @classmethod
+    @profile
     def SimpleParse(cls, string):
-        if not hasattr(cls, "parseinfo"):
+        pi = getattr(cls, 'parseinfo', None)
+        if pi is None:
             raise TypeError(
                 "{cls.__name__!r} does not support parsing (has no "
                 "'parseinfo' field)."
                 "".format(**locals()))
-
-        pi = cls.parseinfo
-        if Parser.RE not in pi:
-            # not compiled yet.
-            try:
-                ptrn = pi[Parser.Pattern]
-            except KeyError:
-                raise TypeError(
-                    "{0!r} does not have a Parser.Pattern in its "
-                    "'parseinfo' dictionary.".format(cls))
-            log.debug("  compile pattern.")
-            try:
-                pi[Parser.RE] = re.compile(ptrn)
-            except re.error:
-                log.error("Class %r pattern failed to compile:", cls.__name__)
-                log.error("%r", ptrn)
-                raise
-            log.debug("  compile done.")
 
         pre = pi[Parser.RE]
         log.debug("  match")
@@ -335,6 +344,7 @@ class Parser(object):
         log.debug("Parse result %r", result)
         return result
 
+    @profile
     def parse(self, string, mo=None):
 
         log.debug("%r parse:", self.__class__.__name__)
@@ -356,6 +366,7 @@ class Parser(object):
             self.parsecust(string=string, mo=mo)
 
     @classmethod
+    @profile
     def parsemappings(cls, mo, mappings):
         """Return dictionary of mappings of attribute to value to set."""
         attr_vals = {}
@@ -401,7 +412,7 @@ class Parser(object):
         return attr_vals
 
     @classmethod
-    def stats_summary(self, top_stats=10):
+    def stats_summary(self, top_stats=None):
 
         ll = list((val, key) for key, val in iteritems(self.pattern_stats))
         ll.sort(key=lambda x: (x[0]['sum'], x[0]['count']))
