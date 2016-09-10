@@ -19,6 +19,7 @@ limitations under the License.
 from __future__ import absolute_import
 
 import logging
+import os
 import threading
 from timeit import default_timer
 
@@ -105,9 +106,9 @@ class TestStandardDialog(SIPPartyTestCase):
             lambda: setattr(RetryThread, 'auto_start', orig_auto_start))
         rt_thr = RetryThread()
 
-        nn = 10
         start = default_timer()
         log.info('Create parties which will listen')
+        nn = int(os.environ.get('SPT_NN', 10))
         parties = [
             NoMediaSimpleCallsParty(aor='callee-%d@listen.com' % (test + 1,))
             for test in range(nn)]
