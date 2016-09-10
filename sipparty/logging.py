@@ -18,6 +18,7 @@ limitations under the License.
 """
 from __future__ import absolute_import
 
+from functools import partial
 import logging
 import logging.config
 
@@ -31,14 +32,20 @@ class SipPartyLogger(logging.getLoggerClass()):
     global_debug_logs_enabled = False
     global_detail_logs_enabled = False
 
-    def debug(self, msg, *args, **kwargs):
-        if not self.global_debug_logs_enabled:
-            return
-        return super(SipPartyLogger, self).debug(msg, *args, **kwargs)
+    def __init__(self, *args, **kwargs):
+        super(SipPartyLogger, self).__init__(*args, **kwargs)
+        self.__detail_up_call = partial(self.log, logging.DETAIL)
 
-    def detail(self, msg, *args, **kwargs):
-        if not self.global_detail_logs_enabled:
-            return
-        self.log(logging.DETAIL, msg, *args, **kwargs)
+    @property
+    def debug(self):
+        if not self.global_debug_logs_enabled:
+            return lambda *args, **kwargs: None
+        return super(SipPartyLogger, self).debug
+
+    @property
+    def detail(self):
+        if not self.global_debug_logs_enabled:
+            return lambda *args, **kwargs: None
+        return self.__detail_up_call
 
 logging.setLoggerClass(SipPartyLogger)

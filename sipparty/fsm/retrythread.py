@@ -69,20 +69,22 @@ class _FDSource(object):
         try:
             self._fds_action(self._fds_selectable)
             self._fds_exceptionCount = 0
-        except Exception:
+        except Exception as exc:
             if self._fds_exceptionCount >= self._fds_maxExceptions:
                 raise
 
             self._fds_exceptionCount += 1
             log.exception(
-                "Exception (%d%s) processing new data for selectable %r "
-                "(fd %d):", self._fds_exceptionCount,
+                "%s exception (%d%s) processing new data for selectable %r "
+                "(fd %d): %s",
+                type(exc).__name__,
+                self._fds_exceptionCount,
                 'st' if self._fds_exceptionCount == 1 else
                 'nd' if self._fds_exceptionCount == 2 else
                 'rd' if self._fds_exceptionCount == 3 else
                 'th',
                 self._fds_selectable,
-                self._fds_int)
+                self._fds_int, exc)
 
 
 class RetryThread(Singleton, threading.Thread):

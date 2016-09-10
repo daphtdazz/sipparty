@@ -30,7 +30,6 @@ from .util import (
     profile)
 
 log = logging.getLogger(__name__)
-enable_debug_logs = False
 
 DeepClassKeys = Enum(("check", "get", "set", "gen", "descriptor",))
 dck = DeepClassKeys
@@ -76,16 +75,16 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
     # When we come to initialize the top level attributes, we need to do the
     # non descriptors first, and so separate them out here so that we don't
     # have to do it on the fly each time we create a DeepClass instance.
-    _tlad_no_descriptors = {
-        key: val
+    _tlad_no_descriptors = OrderedDict((
+        (key, val)
         for key, val in iteritems(topLevelAttributeDescs)
         if dck.descriptor not in val
-    }
-    _tlad_descriptors = {
-        key: val
+    ))
+    _tlad_descriptors = OrderedDict((
+        (key, val)
         for key, val in iteritems(topLevelAttributeDescs)
         if dck.descriptor in val
-    }
+    ))
 
     class DeepClass(object):
 
@@ -111,9 +110,6 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
             global logging disable switch. Various other parts are optimized
             too so modify at your peril.
             """
-            enable_debug_logs and log.detail(
-                "DeepClass %r init with kwargs: %r", type(self).__name__,
-                kwargs)
 
             # Preload the top level attributes dictionary and our instance
             # dictionary.
@@ -131,8 +127,6 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
                 self.__dict__[topLevelPrepend + tl_name] = None
                 topLevelAttrArgs[tl_name] = [None, {}]
 
-            enable_debug_logs and log.detail("Start dict: %r", self.__dict__)
-
             if kwargs:
                 # As a very small optimization only do this if we have kwargs.
                 superKwargs, dele_attrs = self._dck_filter_super_kwargs(
@@ -141,8 +135,6 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
                 dele_attrs = superKwargs = {}
 
             # Call super init.
-            enable_debug_logs and log.detail(
-                "super init dict: %r", superKwargs)
             try:
                 super(DeepClass, self).__init__(**superKwargs)
             except TypeError as terr:
@@ -162,43 +154,23 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
                 if tlval is None:
                     tlattr_val = getattr(self, tlattr, None)
                     if tlattr_val is not None:
-                        enable_debug_logs and log.debug(
-                            "No need to generate %r for %r: already "
-                            "set (probably by bindings) to %r.",
-                            tlattr, type(self).__name__, tlattr_val)
                         continue
 
                     genner = tlad.get(gen_key)
                     if genner is None:
-                        enable_debug_logs and log.debug(
-                            "%r attribute not set and doesn't have "
-                            "generator",
-                            tlattr)
                         # Need to set the internal representation, to allow
                         # check functions not to have to check for None.
                         setattr(
                             self, str(topLevelPrepend) + str(tlattr), None)
                         continue
 
-                    enable_debug_logs and log.debug(
-                        "Generating attribute %r of %r instance", tlattr,
-                        type(self).__name__)
                     tlval = self._dck_genTopLevelValueFromTLDict(
                         genner, tlad, tlsvals)
 
-                enable_debug_logs and log.detail(
-                    "Set %r attribute %r to %r", type(self).__name__,
-                    tlattr, tlval)
                 setattr(self, tlattr, tlval)
 
-            enable_debug_logs and log.detail(
-                "Dict before dele attributes: %r", self.__dict__)
             for deleAttr, deleVal in iteritems(dele_attrs):
-                enable_debug_logs and log.debug(
-                    "Set delegate attribute %r", deleAttr)
                 setattr(self, deleAttr, deleVal)
-
-            enable_debug_logs and log.detail("Final dict: %r", self.__dict__)
 
         def _dc_kvReprGen(self):
             for attr in iterkeys(topLevelAttributeDescs):
@@ -267,8 +239,6 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
                 desc = topLevelAttributeDescs.get(topLevelAttrName)
                 if desc is None:
                     if topLevelAttrName not in vbds:
-                        enable_debug_logs and log.detail(
-                            "Super kwarg %r", kwName)
                         superKwargs[kwName] = kwVal
                         continue
 
@@ -276,8 +246,6 @@ def DeepClass(topLevelPrepend, topLevelAttributeDescs, recurse_repr=False):
                     dele_attrs[kwName] = kwVal
                     continue
 
-                enable_debug_logs and log.detail(
-                    "Deep class kwarg %r %r", kwName, kwVal)
                 tlaa = topLevelAttrArgs[topLevelAttrName]
 
                 if len(_) != 0:
