@@ -21,6 +21,7 @@ import logging
 from numbers import Integral
 import re
 from .. import (parse)
+from ..classmaker import classbuilder
 from ..util import (abytes, TwoCompatibleThree)
 from ..vb import (KeyTransformer, KeyIgnoredExceptions, ValueBinder)
 from ..deepclass import (DeepClass, dck)
@@ -44,7 +45,8 @@ class SDPIncomplete(SDPException):
 
 
 @TwoCompatibleThree
-class SDPSection(parse.Parser, ValueBinder):
+@classbuilder(bases=(parse.Parser, ValueBinder))
+class SDPSection:
 
     @staticmethod
     def Line(line_type, value):

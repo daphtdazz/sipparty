@@ -17,6 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import logging
+from ..classmaker import classbuilder
 from ..parse import Parser
 from ..util import (DerivedProperty, TwoCompatibleThree)
 from ..vb import ValueBinder
@@ -27,7 +28,8 @@ log = logging.getLogger(__name__)
 
 
 @TwoCompatibleThree
-class Response(Parser, ValueBinder):
+@classbuilder(bases=(Parser, ValueBinder))
+class Response:
     """Response line class, such as
     200 INVITE
     """
