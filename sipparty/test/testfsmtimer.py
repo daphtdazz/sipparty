@@ -23,22 +23,20 @@ from threading import Semaphore, Thread
 from ..fsm import fsmtimer
 from ..fsm.fsmtimer import NotRunning, Timer
 from ..util import WaitFor
-from .base import (MagicMock, patch, SIPPartyTestCase)
+from .base import (patch, SIPPartyTestCase)
 
 log = logging.getLogger(__name__)
 
 
 class TestFSMTimer(SIPPartyTestCase):
 
-    Clock = MagicMock()
-
     def setUp(self):
         super(TestFSMTimer, self).setUp()
         self.timer_pops = 0
         self.sema = Semaphore()
-        self.Clock.return_value = 0
+        self.clock_time = 0
         fsmtimer_clock_patch = patch.object(
-            fsmtimer, 'Clock', new=TestFSMTimer.Clock)
+            fsmtimer, 'Clock', new=self.Clock)
         fsmtimer_clock_patch.start()
         self.addCleanup(fsmtimer_clock_patch.stop)
 
@@ -61,7 +59,7 @@ class TestFSMTimer(SIPPartyTestCase):
             for ii in range(1000):
                 tm.check()
 
-        self.Clock.return_value = 1
+        self.clock_time = 1
         td1, td2 = Thread(target=check_expired), Thread(target=check_timer)
         td1.start()
         td2.start()

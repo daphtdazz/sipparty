@@ -52,7 +52,9 @@ class TestCaseREMixin(object):
 
 class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
 
-    Clock = MagicMock()
+    # Faster than a mock
+    def Clock(self):
+        return self.clock_time
 
     def __init__(self, *args, **kwargs):
         super(SIPPartyTestCase, self).__init__(*args, **kwargs)
@@ -71,7 +73,7 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
 
     def setUp(self):
         super(SIPPartyTestCase, self).setUp()
-        self.Clock.return_value = 0
+        self.clock_time = 0
 
     def tearDown(self):
         self.popAllLogLevels()

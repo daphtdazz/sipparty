@@ -37,13 +37,11 @@ log = logging.getLogger(__name__)
 
 class TransactionTest(SIPPartyTestCase):
 
-    Clock = MagicMock()
-
     def setUp(self):
         self.retry = 0
         self.cleanup = 0
 
-        self.Clock.return_value = 0
+        self.clock_time = 0
         self.msgs_sent = []
         self.msg_tu_datas = []
 
@@ -67,14 +65,18 @@ class TransactionTest(SIPPartyTestCase):
         # Transport Interface.
         self.send_message = MagicMock()
 
+        pp = patch.object(fsmtimer, 'Clock', new=self.Clock)
+        pp.start()
+        self.addCleanup(pp.stop)
+        pp = patch.object(retrythread, 'Clock', new=self.Clock)
+        pp.start()
+
 TransactionUser.register(TransactionTest)
 TransactionTransport.register(TransactionTest)
 
 
 class TestNonInviteTransaction(TransactionTest):
 
-    @patch.object(fsmtimer, 'Clock', new=TransactionTest.Clock)
-    @patch.object(retrythread, 'Clock', new=TransactionTest.Clock)
     def test_basic(self):
 
         class FakeMessage(object):
@@ -99,12 +101,12 @@ class TestNonInviteTransaction(TransactionTest):
                 (11.49, 5),
                 (11.5, 6),
                 (31.9, 11)):
-            self.Clock.return_value = time
+            self.clock_time = time
             WaitFor(lambda: self.send_message.call_count == resend_count)
             self.send_message.assert_called_with(fm, 'nowhere.com', 5060)
 
         self.assertEqual(non_inv_trans.state, non_inv_trans.States.trying)
-        self.Clock.return_value = 32
+        self.clock_time = 32
         WaitFor(lambda: non_inv_trans.state == non_inv_trans.States.terminated)
         self.assertEqual(self.send_message.call_count, resend_count)
 

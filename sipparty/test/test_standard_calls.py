@@ -51,7 +51,7 @@ class TestStandardDialog(SIPPartyTestCase):
 
     def setUp(self):
         super(TestStandardDialog, self).setUp()
-        pp = patch.object(fsmtimer, 'Clock', new=SIPPartyTestCase.Clock)
+        pp = patch.object(fsmtimer, 'Clock', new=self.Clock)
         pp.start()
         self.addCleanup(pp.stop)
 
@@ -84,7 +84,7 @@ class TestStandardDialog(SIPPartyTestCase):
         self.assertEqual(ctrns.retransmit_count, 0)
 
         log.info('Trigger a retransmit')
-        self.Clock.return_value = StandardTimers.T1
+        self.clock_time = StandardTimers.T1
         ctrns.checkTimers()
         self.assertEqual(ctrns.retransmit_count, 1)
 
