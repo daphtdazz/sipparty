@@ -380,10 +380,7 @@ class Message:
                 yield bs
 
     def __getattr__(self, attr):
-        """Get some part of the message. E.g. get a particular header like:
-        message.toheader
-        """
-
+        # This is very performance sensitive.
         reqmo = self.reqattrre.match(attr)
         if reqmo is not None:
             sl = self.startline

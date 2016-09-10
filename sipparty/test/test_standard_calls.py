@@ -19,7 +19,9 @@ limitations under the License.
 from __future__ import absolute_import
 
 import logging
+import os
 import threading
+from timeit import default_timer
 
 from ..fsm import fsmtimer
 from ..fsm.retrythread import RetryThread
@@ -49,7 +51,7 @@ class TestStandardDialog(SIPPartyTestCase):
 
     def setUp(self):
         super(TestStandardDialog, self).setUp()
-        pp = patch.object(fsmtimer, 'Clock', new=SIPPartyTestCase.Clock)
+        pp = patch.object(fsmtimer, 'Clock', new=self.Clock)
         pp.start()
         self.addCleanup(pp.stop)
 
@@ -82,7 +84,7 @@ class TestStandardDialog(SIPPartyTestCase):
         self.assertEqual(ctrns.retransmit_count, 0)
 
         log.info('Trigger a retransmit')
-        self.Clock.return_value = StandardTimers.T1
+        self.clock_time = StandardTimers.T1
         ctrns.checkTimers()
         self.assertEqual(ctrns.retransmit_count, 1)
 
@@ -104,8 +106,9 @@ class TestStandardDialog(SIPPartyTestCase):
             lambda: setattr(RetryThread, 'auto_start', orig_auto_start))
         rt_thr = RetryThread()
 
-        nn = 10
+        start = default_timer()
         log.info('Create parties which will listen')
+        nn = int(os.environ.get('SPT_NN', 10))
         parties = [
             NoMediaSimpleCallsParty(aor='callee-%d@listen.com' % (test + 1,))
             for test in range(nn)]
@@ -148,3 +151,6 @@ class TestStandardDialog(SIPPartyTestCase):
 
         for dlg in dlgs:
             dlg.waitForStateCondition(lambda st: st == dlg.States.Terminated)
+
+        stop = default_timer()
+        log.info('From start to finish took %f seconds', stop - start)

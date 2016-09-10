@@ -116,7 +116,6 @@ class Timer(object):
             # The actual timer pop is done without the lock as it may recurse
             # to hit this fsm, which may cause this timer to be stopped, which
             # needs the lock.
-            log.debug('Perform timer pop')
             self._tmr_pop()
 
     #
@@ -176,15 +175,12 @@ class Timer(object):
                     self.__class__.__name__, self._tmr_name))
 
         if self.has_expired:
-            log.debug('Timer %s has already expired', self._tmr_name)
             return False
 
         now = Clock()
 
-        log.debug("Check timer %s at time %r", self._tmr_name, now)
-
         if now >= self._tmr_alarmTime:
-            log.debug('Going to pop')
+            log.debug('Going to pop as %s >= %s', now, self._tmr_alarmTime)
             self._tmr_setNextPopTime()
             return True
         return False

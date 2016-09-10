@@ -35,14 +35,19 @@ log = logging.getLogger(__name__)
 
 
 class TestFSMBase(SIPPartyTestCase):
-    Clock = MagicMock()
 
     def setUp(self):
         self.retry = 0
         self.cleanup = 0
         self.done = False
 
-        self.Clock.return_value = 0
+        pp = patch.object(fsmtimer, 'Clock', new=self.Clock)
+        pp.start()
+        self.addCleanup(pp.stop)
+        pp = patch.object(retrythread, 'Clock', new=self.Clock)
+        pp.start()
+        self.addCleanup(pp.stop)
+        self.clock_time = 0
 
     def do_and_mark_completion(self, func):
         func()
@@ -163,8 +168,6 @@ class TestFSM(TestFSMBase):
 
         self.assertEqual(lfsm.state, 'end')
 
-    @patch.object(fsmtimer, 'Clock', new=TestFSMBase.Clock)
-    @patch.object(retrythread, 'Clock', new=TestFSMBase.Clock)
     def testTimer(self):
         nf = FSM(name="TestTimerFSM")
 
@@ -189,29 +192,29 @@ class TestFSM(TestFSMBase):
         nf.hit("start")
         self.assertEqual(self.retry, 0)
         nf.checkTimers()
-        self.Clock.return_value = 4.9999
+        self.clock_time = 4.9999
         nf.checkTimers()
         self.assertEqual(self.retry, 0)
-        self.Clock.return_value = 5
+        self.clock_time = 5
         nf.checkTimers()
         self.assertEqual(self.retry, 1)
-        self.Clock.return_value += 5
+        self.clock_time += 5
         nf.checkTimers()
         self.assertEqual(self.retry, 2)
-        self.Clock.return_value += 5
+        self.clock_time += 5
         nf.checkTimers()
         self.assertEqual(self.retry, 2)
 
         # Timers are capable of being restarted, so we should be able to
         # restart.
         nf.hit("start")
-        self.Clock.return_value += 5
+        self.clock_time += 5
         nf.checkTimers()
         self.assertEqual(self.retry, 3)
 
         # Transition to running and check the timer is stopped.
         nf.hit("start_done")
-        self.Clock.return_value += 5
+        self.clock_time += 5
         nf.checkTimers()
         self.assertEqual(self.retry, 3)
 
@@ -230,7 +233,7 @@ class TestFSM(TestFSMBase):
         nf.hit("cleanup")
         cleanup = 0
         for ii in range(20):
-            self.Clock.return_value += 5
+            self.clock_time += 5
             cleanup += 1
             nf.checkTimers()
             self.assertEqual(self.cleanup, cleanup)
@@ -272,7 +275,7 @@ class TestFSM(TestFSMBase):
         log.debug("Hit async FSM with start")
         nf.hit("start")
         WaitFor(lambda: nf.state == "starting", timeout_s=2)
-        self.Clock.return_value = 0.1
+        self.clock_time = 0.1
         log.debug("clock incremented")
         WaitFor(lambda: retry[0] == 1, timeout_s=2)
 
@@ -310,8 +313,6 @@ class TestFSM(TestFSMBase):
     def testAsyncFSMClass(self):
         self.subtest_FSM_class(async=True)
 
-    @patch.object(fsmtimer, 'Clock', new=TestFSMBase.Clock)
-    @patch.object(retrythread, 'Clock', new=TestFSMBase.Clock)
     def subtest_FSM_class(self, async):
         actnow_hit = [0]
 
@@ -363,14 +364,14 @@ class TestFSM(TestFSMBase):
                 self.assertEqual(nf.retries, val)
 
         self.assertEqual(nf.retries, 0)
-        self.Clock.return_value = 1
+        self.clock_time = 1
         check_retries(1)
-        self.Clock.return_value = 2
+        self.clock_time = 2
         check_retries(2)
-        self.Clock.return_value = 3
+        self.clock_time = 3
         check_retries(3)
         nf.hit("start_done")
-        self.Clock.return_value = 4
+        self.clock_time = 4
         check_retries(3)
         nf.hit("stop")
         nf.hit("start")
@@ -378,7 +379,7 @@ class TestFSM(TestFSMBase):
         # The timer endeavours not to lose pops, so if we set the clock
         # forward some number of seconds and check 3 times in a row, we
         # should pop on each one.
-        self.Clock.return_value = 10
+        self.clock_time = 10
         WaitFor(lambda: nf.checkTimers() is None and nf.retries == 6)
 
         # The Inputs should be instance specific.
@@ -627,8 +628,6 @@ class TestFSM(TestFSMBase):
         tfsm.meth1.assert_called_once_with()
         tfsm.meth2.assert_called_once_with()
 
-    @patch.object(fsmtimer, 'Clock', new=TestFSMBase.Clock)
-    @patch.object(retrythread, 'Clock', new=TestFSMBase.Clock)
     def test_timer_definitions(self):
 
         class TimerFSM(FSM):
@@ -667,17 +666,17 @@ class TestFSM(TestFSMBase):
         tfsm = TimerFSM()
         tfsm.hit('input')
         self.assertEqual(tfsm.action_count, 0)
-        self.Clock.return_value = 3
+        self.clock_time = 3
         tfsm.checkTimers()
         self.assertEqual(tfsm.action_count, 1)
-        self.Clock.return_value = 3.9
+        self.clock_time = 3.9
         tfsm.checkTimers()
         self.assertEqual(tfsm.action_count, 1)
-        self.Clock.return_value = 4
+        self.clock_time = 4
         tfsm.checkTimers()
         self.assertEqual(tfsm.action_count, 2)
         tfsm.hit('input')
-        self.Clock.return_value = 6
+        self.clock_time = 6
         tfsm.checkTimers()
         self.assertEqual(tfsm.action_count, 2)
 
@@ -708,8 +707,6 @@ class TestFSM(TestFSMBase):
         tfsm.meth2.assert_called_once_with()
         tfsm.meth3.assert_called_once_with()
 
-    @patch.object(fsmtimer, 'Clock', new=TestFSMBase.Clock)
-    @patch.object(retrythread, 'Clock', new=TestFSMBase.Clock)
     def test_async_timer_lifetime(self):
 
         class TimerFSM(AsyncFSM):
@@ -744,8 +741,6 @@ class TestFSM(TestFSMBase):
         del tfsm
         self.assertIsNone(wtfsm())
 
-    @patch.object(fsmtimer, 'Clock', new=TestFSMBase.Clock)
-    @patch.object(retrythread, 'Clock', new=TestFSMBase.Clock)
     def test_timer_cancel(self):
 
         class TimerCancelTestFSM(FSM):
@@ -781,11 +776,11 @@ class TestFSM(TestFSMBase):
 
         fsm = TimerCancelTestFSM()
         fsm.hit('start')
-        TestFSMBase.Clock.return_value = 1
+        self.clock_time = 1
         fsm.checkTimers()
         self.assertEqual(fsm.timer_action_count, 1)
         fsm.hit('stop')
-        TestFSMBase.Clock.return_value = 2
+        self.clock_time = 2
         fsm.checkTimers()
         self.assertEqual(fsm.timer_action_count, 1)
 
