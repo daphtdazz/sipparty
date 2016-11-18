@@ -14,6 +14,7 @@ High-level Contents:
    intro
    top
    party
+   sip
 
 Low-level contents:
 

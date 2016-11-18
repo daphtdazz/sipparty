@@ -274,17 +274,17 @@ class URI:
 class DNameURI:
     """A display name plus a uri value object.
 
-    This is basically (name-addr/addr-spec) where:
+    This is basically (`name-addr/addr-spec`) where::
 
-    name-addr      =  [ display-name ] LAQUOT addr-spec RAQUOT
-    display-name   =  *(token LWS)/ quoted-string
+        name-addr      =  [ display-name ] LAQUOT addr-spec RAQUOT
+        display-name   =  *(token LWS)/ quoted-string
 
-    contact-params     =  c-p-q / c-p-expires
-                          / contact-extension
-    c-p-q              =  "q" EQUAL qvalue
-    c-p-expires        =  "expires" EQUAL delta-seconds
-    contact-extension  =  generic-param
-    delta-seconds      =  1*DIGIT
+        contact-params     =  c-p-q / c-p-expires
+                              / contact-extension
+        c-p-q              =  "q" EQUAL qvalue
+        c-p-expires        =  "expires" EQUAL delta-seconds
+        contact-extension  =  generic-param
+        delta-seconds      =  1*DIGIT
 
     """
 

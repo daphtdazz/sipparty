@@ -145,7 +145,17 @@ class Party:
         cURI_host.port = l_desc.port
 
     def invite(self, target, proxy=None, media_session=None):
+        """Start a dialog with someone.
 
+        :param target:
+            Who you gonna call. May be any of :py:class:`Party`,
+            :py:class:`URI`.
+
+        :raises:
+            Various things if the party is not configured correctly. Generally
+            though these will be bugs.
+        :returns: A :py:class:`.Dialog` instance.
+        """
         if media_session is not None:
             raise NotImplementedError(
                 "Passing a 'media_session' to 'invite' is not yet supported.")
