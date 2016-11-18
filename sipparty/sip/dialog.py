@@ -26,6 +26,7 @@ from ..fsm import (AsyncFSM, InitialStateKey, UnexpectedInput)
 from ..deepclass import DeepClass, dck
 from ..parse import ParsedPropertyOfClass
 from ..sdp import (sdpsyntax, SDPIncomplete)
+from ..transport import IsValidPortNum
 from ..util import (abytes, astr, Enum, WeakProperty)
 from . import prot
 from .body import Body
@@ -74,7 +75,8 @@ AckTransforms = {
         "transport": {dck.descriptor: WeakProperty},
         "localSession": {},
         "remoteSession": {},
-        'callIDHeader': {}}),
+        'callIDHeader': {},
+        'remote_port': {dck.check: IsValidPortNum}}),
     TransactionUser, StandardTimers, AsyncFSM, vb.ValueBinder))
 class Dialog:
     """`Dialog` class has a slightly wider scope than a strict SIP dialog, to
@@ -207,8 +209,14 @@ class Dialog:
         if req.type == req.types.invite:
             self.addLocalSessionSDP(req)
 
-        tp.send_message_with_transaction(
-            req, self, self.remote_name, self.remote_port)
+        trans = tp.send_message_with_transaction(
+            req, self, remote_name=self.remote_name,
+            remote_port=self.remote_port)
+        if self.remote_port is None:
+            # learn the remote port. If we didn't specify one then this is
+            # probably just the transport's DefaultPort
+            self.remote_port = trans.remote_port
+
         req.unbindAll()
         self._dlg_requests.append(req)
         tp.updateDialogGrouping(self)
@@ -231,7 +239,7 @@ class Dialog:
             return
 
         self.transport.send_message_with_transaction(
-            resp, self, astr(vh.address), vh.port)
+            resp, self, remote_name=astr(vh.address), remote_port=vh.port)
         self.__last_response = resp
 
     def configureResponse(self, resp, req):

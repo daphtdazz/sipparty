@@ -138,12 +138,22 @@ SpecialNames = set((
 ))
 
 
-def address_as_tuple(addr_name):
+def address_as_tuple(addr_name, raise_on_non_ip_addr_name=True):
+    """Convert an IP address into a tuple of numbers.
 
+    :param str addr_name: The IP address string (or `bytes`) to convert.
+    :param Bool raise_on_non_ip_addr_name:
+        If `False`, return `None` instead of raising `ValueError` if
+        `addr_name` was not a valid IP address.
+    :raises ValueError: if `addr_name` was a non-valid IP address.
+    :returns: `tuple` of `int`s. 4 for IPv4, 16 for IPv6.
+    """
     bname = abytes(addr_name)
     fam = IPAddressFamilyFromName(bname, exact=True)
     if fam is None:
-        raise ValueError('%s is not an IP address' % (addr_name,))
+        if raise_on_non_ip_addr_name:
+            raise ValueError('%s is not an IP address' % (addr_name,))
+        return None
 
     if fam == AF_INET:
         return _ipv4_address_as_tuple(bname)
@@ -233,7 +243,10 @@ def IPAddressFamilyFromName(name, exact=False):
 
 
 def is_null_address(name):
-    return all(num == 0 for num in (address_as_tuple(name) or [1]))
+    at = address_as_tuple(name, raise_on_non_ip_addr_name=False)
+    if at is None:
+        return False
+    return all(num == 0 for num in at)
 
 
 def IsSpecialName(name):
@@ -277,19 +290,6 @@ def UnregisteredPortGenerator(port_filter=None):
 
 class TransportException(Exception):
     pass
-
-
-@TwoCompatibleThree
-class UnresolvableAddress(TransportException):
-
-    def __init__(self, address, port):
-        super(UnresolvableAddress, self).__init__()
-        self.address = address
-        self.port = port
-
-    def __bytes__(self):
-        return "The address:port %r:%r was not resolvable." % (
-            self.address, self.port)
 
 
 @TwoCompatibleThree
@@ -988,35 +988,6 @@ class Transport(Singleton):
                 log.warning(
                     'Exception closing socket for %s: %s', self, exc)
             del ldict[key]
-
-    def resolve_host(self, host, port=None, family=None):
-        """Resolve a host.
-        :param bytes host: A host in `bytes` form that we want to resolve.
-        May be a domain name or an IP address.
-        :param integer,None port: A port we want to connect to on the host.
-        """
-        if port is None:
-            port = self.DefaultPort
-        if not isinstance(port, Integral):
-            raise TypeError('Port is not an Integer: %r' % port)
-        if not IsValidPortNum(port):
-            raise ValueError('Invalid port number: %r' % port)
-        if family not in (None, AF_INET, AF_INET6):
-            raise ValueError("Invalid socket family %r" % family)
-
-        try:
-            ais = socket.getaddrinfo(host, port)
-            log.debug(
-                "Options for address %r:%r family %r are %r.", host, port,
-                family, ais)
-            for ai in ais:
-                if family is not None and ai[0] != family:
-                    continue
-                return ai[4]
-        except socket.gaierror:
-            pass
-
-        raise(UnresolvableAddress(address=host, port=port))
 
     def close_all(self):
         """Last ditch attempt to avoid leaving sockets lying around."""

@@ -170,7 +170,7 @@ class Party:
         if proxy is not None:
             assert 0
         else:
-            remote_name, remote_port = self._pt_resolveProxyAddress(target)
+            remote_name, remote_port = self._pt_resolveRemoteAddress(target)
 
         invD = self.__make_new_dialog(self.ClientDialog, to_uri)
 
@@ -252,6 +252,9 @@ class Party:
             log.debug("Target is a URI.")
             return target
 
+        if isinstance(target, str):
+            target = abytes(target)
+
         if isinstance(target, bytes):
             log.debug("Attempt to parse a URI from the target.")
             return URI.Parse(target)
@@ -260,18 +263,19 @@ class Party:
 
     @staticmethod
     def _pt_check_address_tuple(_tuple):
-        return not any(val is None for val in _tuple)
+        return not any(map(lambda val: val is None, _tuple))
 
-    def _pt_resolveProxyAddress(self, target):
-        name, port = self._pt_naive_resolveProxyAddress(target)
+    def _pt_resolveRemoteAddress(self, target):
+        name, port = self._pt_naive_resolveRemoteAddress(target)
         if is_null_address(name):
             name = LoopbackAddressFromFamily(IPAddressFamilyFromName(name))
 
         return name, port
 
-    def _pt_naive_resolveProxyAddress(self, target):
+    def _pt_naive_resolveRemoteAddress(self, target):
 
         if hasattr(target, "listenAddress"):
+            # Probably it's another Party object.
             pAddr = target.listenAddress
             if pAddr is not None:
                 log.debug("Target has listen address %r", pAddr)
@@ -282,23 +286,16 @@ class Party:
                         pAddr[1])
                 return pAddr
 
-        if hasattr(target, "contact_uri"):
-            log.debug("Target has a proxy contact URI.")
-            cURI = target.contact_uri
-            rtup = (cURI.address, cURI.port)
-            if not self._pt_check_address_tuple(rtup):
-                raise ValueError(
-                    "Target's contact URI is not complete: %r" % cURI)
-            return rtup
+        uri = getattr(target, 'contact_uri', None)
+        if uri is None:
+            try:
+                uri = self._pt_resolveTargetURI(target)
+            except (TypeError, ValueError) as exc:
+                raise type(exc)("Can't resolve proxy from target %r" % (
+                    target,))
 
-        try:
-            turi = self._pt_resolveTargetURI(target)
-        except (TypeError, ValueError) as exc:
-            raise type(exc)("Can't resolve proxy from target %r" % (
-                target,))
-
-        rtup = (turi.address, turi.port)
-        if not self._pt_check_address_tuple(rtup):
-            raise ValueError("Target URI is not complete: %r" % (turi,))
-
-        return rtup
+        addr, port = uri.address, uri.port
+        if addr is None:
+            raise ValueError(
+                "Target's contact URI has no address: %r" % uri)
+        return (addr, port)

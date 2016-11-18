@@ -21,7 +21,8 @@ from __future__ import absolute_import
 import logging
 from socket import (SOCK_DGRAM, SOCK_STREAM, AF_INET, AF_INET6)
 from ..transport import (
-    address_as_tuple, ConnectedAddressDescription, ListenDescription,
+    address_as_tuple, ConnectedAddressDescription,
+    is_null_address, ListenDescription,
     NameAll, SendFromAddressNameAny,
     SocketProxy, Transport, IPv6address_re,
     IPv6address_only_re)
@@ -219,6 +220,17 @@ class TestTransport(SIPPartyTestCase):
 
         for bad_name in ('not-an-ip', 'fe80::1::1'):
             self.assertRaises(ValueError, address_as_tuple, bad_name)
+            self.assertIsNone(address_as_tuple(
+                bad_name, raise_on_non_ip_addr_name=False))
+
+        for not_null in ('not-an-ip', 'fe80::1', 'fe80::1::1'):
+            self.assertFalse(is_null_address(not_null))
+
+        for null in ('0.0.0.0', '::', '0:0:0:0:0:0:0:0'):
+            self.assertTrue(is_null_address(null))
+
+        for valid_not_null in ('not-an-ip', '::1'):
+            self.assertFalse(is_null_address(valid_not_null))
 
         for inp, out in (
                 ('127.0.0.1', (127, 0, 0, 1)),

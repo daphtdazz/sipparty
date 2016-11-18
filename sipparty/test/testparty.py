@@ -20,7 +20,7 @@ from __future__ import absolute_import
 
 import gc
 import logging
-from socket import SOCK_STREAM, SOCK_DGRAM
+from socket import AF_INET, socket, SOCK_STREAM, SOCK_DGRAM
 from weakref import ref
 from ..media.sessions import SingleRTPSession
 from ..party import (Party)
@@ -268,6 +268,17 @@ class TestParty(SIPPartyTestCase):
         server_dialog_delegate.dialog.waitForStateCondition(
             lambda st: st == server_dialog_delegate.dialog.States.Terminated)
 
+    def test_default_port(self):
+
+        p1 = NoMediaSimpleCallsParty('sip:alice@atlanta.com')
+
+        ls = socket(AF_INET, SOCK_DGRAM)
+        ls.bind(('127.0.0.1', 0))
+        self.addCleanup(ls.close)
+
+        p1.transport.DefaultPort = ls.getsockname()[1]
+        dlg = p1.invite('sip:bob@127.0.0.1')
+        self.assertEqual(dlg.remote_port, p1.transport.DefaultPort)
 
 class TestPartyWeakReferences(SIPPartyTestCase):
     def test_weak_references(self):

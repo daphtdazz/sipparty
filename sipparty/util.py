@@ -670,14 +670,8 @@ class _DerivedProperty(object):
         log.detail("%r", self)
 
     def __get__(self, obj, cls):
-        enable_debug_logs and log.debug(
-            "Get derived prop for obj %r class %r.", obj, cls)
         target = obj if obj is not None else cls
-
-        enable_debug_logs and log.detail("Get the underlying value (if any).")
-        pname = self._rp_propName
-        val = getattr(target, pname)
-        enable_debug_logs and log.detail("Underlying value %r.", val)
+        val = getattr(target, self._rp_propName)
 
         gt = self._rp_get
         if gt is None:
@@ -690,7 +684,7 @@ class _DerivedProperty(object):
             if not isinstance(meth, Callable):
                 raise ValueError(
                     "Getter attribute %r of %r object is not callable." % (
-                        gt, target.__class__.__name__))
+                        gt, type(target).__name__))
             return meth(val)
 
         # Else getter should be a callable.
@@ -698,7 +692,7 @@ class _DerivedProperty(object):
             raise ValueError(
                 "Getter %r object for DerivedValue on %r on %r object is not "
                 "a callable or a method name." % (
-                    gt, pname, target.__class__.__name__))
+                    gt, self._rp_propName, type(target).__name__))
         val = gt(obj, val)
         return val
 
