@@ -918,7 +918,12 @@ class Singleton(object):
         si = cls.__dict__.get('_St_SharedInstances')
         if si is None:
             return
-        WaitFor(lambda: all(wr is None for wr in si.values()), **kwargs)
+        try:
+            WaitFor(lambda: all(wr is None for wr in si.values()), **kwargs)
+        except Timeout:
+            raise Timeout(
+                'Timed out waiting for no instances of Singleton class %s' % (
+                    cls.__name__,))
 
     def __new__(cls, singleton=None, *args, **kwargs):
         log.detail("Singleton.__new__(%r, %r)", args, kwargs)

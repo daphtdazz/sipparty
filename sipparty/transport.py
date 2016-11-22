@@ -24,9 +24,9 @@ import logging
 from numbers import Integral
 import re
 from six import iteritems
-import socket  # TODO: should remove and rely on from socket import ... below.
 from socket import (
-    AF_INET, AF_INET6, error as socket_error, getaddrinfo, gethostname,
+    AF_INET, AF_INET6, error as socket_error, gaierror,
+    getaddrinfo, gethostname,
     SHUT_RDWR, socket as socket_class, SOCK_STREAM, SOCK_DGRAM)
 from weakref import WeakValueDictionary
 from .classmaker import classbuilder
@@ -426,7 +426,7 @@ def GetBoundSocket(family, socktype, address, port_filter=None):
             socketError = _se
             attempts += 1
 
-        except socket.gaierror as _se:
+        except gaierror as _se:
             log.debug("GAI error on %r", bind_addr)
             socketError = _se
             break
@@ -578,10 +578,12 @@ class ConnectedAddressDescription(
 
         :returns: a SocketProxy object
         """
-        if self.remote_name is None or self.remote_port is None:
-            raise ValueError(
-                'remote_name (%r) or remote_port %r are None' % (
-                    self.remote_name, self.remote_port))
+        for reqd_attr in ('remote_name', 'remote_port'):
+            if getattr(self, reqd_attr) is None:
+                raise TypeError(
+                    '%s attribute of %s instance cannot be None when calling '
+                    'connect()' % (
+                        reqd_attr, type(self).__name__))
 
         self.deduce_missing_values()
 
@@ -590,7 +592,7 @@ class ConnectedAddressDescription(
                 self.sock_family, self.sock_type))
 
         log.debug('Connect socket using %r', self)
-        sck = socket.socket(self.sock_family, self.sock_type)
+        sck = socket_class(self.sock_family, self.sock_type)
         sck.bind(self.sockname_tuple)
         log.debug(
             'Bind socket to %r, result %r', self.sockname_tuple,
@@ -855,6 +857,44 @@ class Transport(Singleton):
             data_callback=None,
             from_description=None, to_description=None):
         """Get a SocketProxy to send data on.
+
+        Arguments are all optional. If possible, they will be deduced from
+        other arguments, but if not possible they will essentially be packed
+        at random by the system in such a way as to maximise the chance of
+        success.
+
+        :param int sock_type:
+            Such as `socket.SOCK_STREAM` (tcp) or `socket.SOCK_DGRAM` (udp).
+        :param int sock_family:
+            Such as `socket.AF_INET` (IPv4) or `socket.AF_INET6` (IPv6).
+        :param str name:
+            The local address / name to send from. Use
+            `transport.SendFromAddressNameAny` to select any possible one.
+        :param int port: Port to send from. Use 0 to select any.
+        :param flowinfo: IPv6 flowinfo. Automatically selected if `None`.
+        :param scopeid: IPv6 scopeid. Automatically selected if `None`.
+        :param str remote_name: Remote IP address or hostname to connect to.
+        :param int remote_port: The remote port to connect to.
+        :param Callable port_filter:
+            A `Callable` that takes one argument, a port number, and returns
+            `True` or `False`, where `True` indicates that the local port
+            number offered
+            suitable for use for this application, `False` otherwise.
+
+            E.g. say you didn't mind which port to use as long as it was even,
+            you could provide::
+
+                transport.get_send_from_address(
+                    port_filter=lambda p: p % 2 == 0,
+                    ...)
+        :param Callable data_callback:
+            The callback to call when data is received on the socket. Takes one
+            argument, the data received, which takes three arguments:
+
+            1.  The `SocketProxy` that received the data.
+            2.  The address and port from which the data was received in
+                `socket` tuple form, e.g. `('127.0.0.1', 12345)`.
+            3.  The data itself, as a `bytes` object.
 
         :returns: SocketProxy instance.
         """

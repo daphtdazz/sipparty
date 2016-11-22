@@ -19,7 +19,10 @@ limitations under the License.
 from __future__ import absolute_import
 
 import logging
-from socket import (SOCK_DGRAM, SOCK_STREAM, AF_INET, AF_INET6)
+from queue import Queue
+from socket import (socket, SOCK_DGRAM, SOCK_STREAM, AF_INET, AF_INET6)
+from .. import transport
+from ..fsm import retrythread
 from ..transport import (
     address_as_tuple, ConnectedAddressDescription,
     is_null_address, ListenDescription,
@@ -27,7 +30,7 @@ from ..transport import (
     SocketProxy, Transport, IPv6address_re,
     IPv6address_only_re)
 from ..util import WaitFor
-from .base import (SIPPartyTestCase)
+from .base import (MagicMock, patch, SIPPartyTestCase)
 
 log = logging.getLogger(__name__)
 
@@ -253,7 +256,7 @@ class TestTransport(SIPPartyTestCase):
             name=SendFromAddressNameAny, sock_type=SOCK_DGRAM)
 
         # ValueError since remote_port is None
-        self.assertRaises(ValueError, cad.connect, lambda x: None, tp)
+        self.assertRaises(TypeError, cad.connect, lambda x: None, tp)
 
         log.info('Connect cad')
         cad.remote_port = lprx.local_address.port
@@ -263,3 +266,108 @@ class TestTransport(SIPPartyTestCase):
         log.info('Re-find connected proxy with %s', cad)
         cprx2 = tp.find_or_create_send_from_socket(cad, None)
         self.assertIs(cprx, cprx2)
+
+
+class TestTransportErrors(SIPPartyTestCase):
+
+    def retry_thread_select(self, in_, out, error, wait):
+        assert wait >= 0
+
+        if self.finished:
+            return [], [], []
+
+        res = self.sel_queue.get()
+        if res is None:
+            self.finished = True
+            res = [], [], []
+
+        return res
+
+    def setUp(self):
+        super(TestTransportErrors, self).setUp()
+
+        self.finished = False
+        self.sel_queue = Queue()
+        self.addCleanup(lambda: self.sel_queue.put(None))
+
+        select_patch = patch.object(
+            retrythread, 'select', new=self.retry_thread_select)
+        select_patch.start()
+        self.addCleanup(select_patch.stop)
+
+        self.socket_exception = None
+        test_case = self
+
+        class SocketMock(socket):
+
+            _fileno = 1
+
+            def __init__(self, *args, **kwargs):
+                if test_case.socket_exception is not None:
+                    raise test_case.socket_exception
+
+                super(SocketMock, self).__init__(*args, **kwargs)
+
+                for attr in (
+                    'connect', 'bind', 'listen', 'accept', 'send',
+                ):
+                    setattr(self, attr, MagicMock())
+
+                for attr in ('peer_name', 'sockname'):
+                    setattr(self, attr, getattr(test_case, attr))
+
+                self._fileno = SocketMock._fileno
+                SocketMock._fileno += 1
+
+            def fileno(self):
+                return self._fileno
+
+            def getpeername(self):
+                return self.peer_name
+
+            def getsockname(self):
+                return self.sockname
+
+            def recv(self, numbytes):
+                return self.data
+
+            def recvfrom(self, numbytes):
+                return self.data, self.getpeername()
+
+        socket_patch = patch.object(
+            transport, 'socket_class', spec=type, new=SocketMock)
+        socket_patch.start()
+        self.addCleanup(socket_patch.stop)
+
+        self.socket = RuntimeError('No socket configured')
+
+    def tearDown(self):
+        self.sel_queue.put(None)
+        super(TestTransportErrors, self).tearDown()
+
+    def test_mock_socket_read(self):
+        """Test that the mock socket can connect and "send" data."""
+        log.info('Create Transport')
+        tp = Transport()
+
+        log.info('Get a connected socket')
+
+        # configure the socket we'll get
+        self.peer_name = ('127.0.0.5', 12480)
+        self.sockname = ('mock-sock', 55555)
+
+        ds = MagicMock()
+
+        sprxy = tp.get_send_from_address(
+            remote_name=self.peer_name[0], remote_port=self.peer_name[1],
+            name=SendFromAddressNameAny, sock_type=SOCK_DGRAM,
+            data_callback=ds)
+
+        # Spin the retrythread because we need to pick up the new socket.
+        self.sel_queue.put(([], [], []))
+
+        sprxy.socket.data = b'some data'
+        self.sel_queue.put(([sprxy.socket.fileno()], [], []))
+
+        WaitFor(lambda: ds.call_count == 1, timeout_s=0.2)
+        ds.assert_called_with(sprxy, self.peer_name, sprxy.socket.data)

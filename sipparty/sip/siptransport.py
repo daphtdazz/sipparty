@@ -25,7 +25,7 @@ from ..transport import (
     UnregisteredPortGenerator)
 from ..util import (abytes, DerivedProperty, WeakMethod)
 from . import prot
-from .components import AOR, Host
+from .components import AOR
 from .message import Message
 from .transaction import TransactionManager, TransactionTransport
 from . import Incomplete
