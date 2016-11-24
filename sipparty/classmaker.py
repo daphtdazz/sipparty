@@ -40,6 +40,7 @@ def _remove_redundant(metaclasses):
         skipset.update(inspect.getmro(meta)[1:])
     return tuple(_skip_redundant(metaclasses, skipset))
 
+
 #
 # now the core of the module: two mutually recursive functions
 #
@@ -101,5 +102,6 @@ def _full_class_builder(mc, bases, shell_class):
 
 def classbuilder(bases=(), mc=()):
     return partial(_full_class_builder, mc, bases)
+
 
 __all__ = ['classmaker', 'classbuilder']

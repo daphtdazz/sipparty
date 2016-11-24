@@ -44,6 +44,7 @@ from .util import (
 def bglobals():
     return bglobals_g(globals())
 
+
 SOCK_TYPES = Enum((SOCK_STREAM, SOCK_DGRAM))
 SOCK_TYPES_NAMES = AsciiBytesEnum((b"SOCK_STREAM", b"SOCK_DGRAM"))
 SOCK_TYPE_IP_NAMES = AsciiBytesEnum((b"TCP", b"UDP"))
@@ -102,6 +103,7 @@ next_port = first_unregistered_port
 class Name(object):
     def __repr__(self):
         return __name__ + '.' + self.__class__.__name__
+
 
 NameAll = type(
     'NameAll', (Name,), {
@@ -665,7 +667,8 @@ class SocketOwner:
 
         :param SocketProxy socket_proxy: The socket proxy for the new socket.
         """
-        log.info('New %s %s socket at %s.',
+        log.info(
+            'New %s %s socket at %s.',
             SockFamilyName(socket_proxy.family),
             SockTypeName(socket_proxy.type),
             socket_proxy.getsockname())

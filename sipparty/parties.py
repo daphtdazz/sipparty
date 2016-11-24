@@ -40,6 +40,7 @@ class SingleRTPSessionSimplenParty(Party):
     ServerDialog = SimpleServerDialog
     MediaSession = SingleRTPSession
 
+
 AllPartyTypes = [
     _lval for _lval in itervalues(dict(locals()))
     if isinstance(_lval, type)

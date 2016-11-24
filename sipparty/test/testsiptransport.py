@@ -88,4 +88,5 @@ class TestSIPTransport(AORHandler, SIPPartyTestCase):
         rmsg = self.rcvd_messages.pop()
         self.assertEqual(msg.type, rmsg.type, rmsg)
 
+
 TransactionUser.register(TestSIPTransport)

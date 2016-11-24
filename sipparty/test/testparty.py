@@ -280,6 +280,7 @@ class TestParty(SIPPartyTestCase):
         dlg = p1.invite('sip:bob@127.0.0.1')
         self.assertEqual(dlg.remote_port, p1.transport.DefaultPort)
 
+
 class TestPartyWeakReferences(SIPPartyTestCase):
     def test_weak_references(self):
         self.sub_test_weak_reference()

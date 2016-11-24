@@ -80,4 +80,5 @@ class Request:
             "{0.__class__.__name__}(uri={0.uri!r}, protocol={0.protocol!r})"
             "".format(self))
 
+
 Request.addSubclassesFromDict(locals())

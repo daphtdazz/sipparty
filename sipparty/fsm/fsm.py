@@ -50,6 +50,7 @@ class UnexpectedInput(FSMError):
 class FSMTimeout(FSMError):
     pass
 
+
 InitialStateKey = 'Initial'
 TransitionKeys = Enum((
     'NewState',

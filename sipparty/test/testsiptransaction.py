@@ -75,6 +75,7 @@ class TransactionTest(SIPPartyTestCase):
         pp.start()
         self.addCleanup(pp.stop)
 
+
 TransactionUser.register(TransactionTest)
 TransactionTransport.register(TransactionTest)
 

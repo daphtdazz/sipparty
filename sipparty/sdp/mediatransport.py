@@ -18,7 +18,6 @@ limitations under the License.
 """
 import logging
 from ..transport import Transport
-from ..util import WeakMethod
 
 log = logging.getLogger(__name__)
 

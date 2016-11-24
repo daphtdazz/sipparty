@@ -28,6 +28,7 @@ from ..util import (abytes, AsciiBytesEnum, bglobals_g)
 def bglobals():
     return bglobals_g(globals())
 
+
 NetTypes = AsciiBytesEnum((b"IN",))
 AddrTypes = AsciiBytesEnum((b"IP4", b"IP6"))
 MediaTypes = AsciiBytesEnum((
@@ -164,5 +165,6 @@ def sock_family_to_addr_type(sock_family):
         return AddrTypes.IP6
 
     raise ValueError('Unknown socket family: %r' % sock_family)
+
 
 bdict = bglobals()

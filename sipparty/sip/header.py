@@ -396,4 +396,5 @@ class Content_TypeHeader(  # noqa
         for bs in self.parameters.safeBytesGen():
             yield bs
 
+
 Header.addSubclassesFromDict(locals())

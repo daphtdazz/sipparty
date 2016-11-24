@@ -248,4 +248,5 @@ class TagParam(Param):
         self._prm_value = value
         return value
 
+
 Param.addSubclassesFromDict(dict(locals()))
