@@ -27,7 +27,7 @@ from ..deepclass import DeepClass, dck
 from ..parse import ParsedPropertyOfClass
 from ..sdp import (sdpsyntax, SDPIncomplete)
 from ..transport import IsValidPortNum
-from ..util import (abytes, astr, Enum, WeakProperty)
+from ..util import (abytes, astr, CCPropsFor, Enum, WeakProperty)
 from . import prot
 from .body import Body
 from .components import URI
@@ -43,7 +43,7 @@ log = logging.getLogger(__name__)
 
 States = Enum((
     InitialStateKey, "SentInvite", "InDialog", "TerminatingDialog",
-    "SuccessCompletion", "ErrorCompletion"))
+    "Terminated"))
 Inputs = Enum(("initiate", "receiveRequest", "terminate"))
 
 tfk = TransformKeys
@@ -64,20 +64,22 @@ AckTransforms = {
 }
 
 
-@classbuilder(bases=(
-    DeepClass("_dlg_", {
-        "from_uri": {dck.descriptor: ParsedPropertyOfClass(URI)},
-        "to_uri": {dck.descriptor: ParsedPropertyOfClass(URI)},
-        "contact_uri": {
-            dck.descriptor: ParsedPropertyOfClass(URI), dck.gen: URI},
-        "localTag": {dck.gen: TagParam},
-        "remoteTag": {},
-        "transport": {dck.descriptor: WeakProperty},
-        "localSession": {},
-        "remoteSession": {},
-        'callIDHeader': {},
-        'remote_port': {dck.check: IsValidPortNum}}),
-    TransactionUser, StandardTimers, AsyncFSM, vb.ValueBinder))
+@classbuilder(
+    bases=(
+        DeepClass("_dlg_", {
+            "from_uri": {dck.descriptor: ParsedPropertyOfClass(URI)},
+            "to_uri": {dck.descriptor: ParsedPropertyOfClass(URI)},
+            "contact_uri": {
+                dck.descriptor: ParsedPropertyOfClass(URI), dck.gen: URI},
+            "localTag": {dck.gen: TagParam},
+            "remoteTag": {},
+            "transport": {dck.descriptor: WeakProperty},
+            "localSession": {},
+            "remoteSession": {},
+            'callIDHeader': {},
+            'remote_port': {dck.check: IsValidPortNum}}),
+        TransactionUser, StandardTimers, AsyncFSM, vb.ValueBinder),
+    mc=CCPropsFor('FSMStateEntryActions'))
 class Dialog:
     """`Dialog` class has a slightly wider scope than a strict SIP dialog, to
     include one-off request response pairs (e.g. OPTIONS) as well as long-lived
@@ -98,10 +100,14 @@ class Dialog:
     #
     States = States
     Transforms = None
+    FSMStateEntryActions = [
+        (States.Terminated, 'record_termination_reason'),
+    ]
 
     #
     # =================== INSTANCE INTERFACE ==================================
     #
+    termination_reason = None
 
     @property
     def provisionalDialogID(self):
@@ -124,6 +130,7 @@ class Dialog:
         super(Dialog, self).__init__(**kwargs)
         self._dlg_requests = []
         self.request = None
+        self.response = None
         self.__last_response = None
 
     def initiate(self, *args, **kwargs):
@@ -132,6 +139,13 @@ class Dialog:
 
     def terminate(self, *args, **kwargs):
         self.hit(Inputs.terminate, *args, **kwargs)
+
+    #
+    # =========================== FSM ACTIONS =================================
+    #
+    def record_termination_reason(self, reason):
+        log.info('Termination reason: %s', reason)
+        self.termination_reason = reason
 
     def resend_response(self):
         assert self.__last_response is not None
@@ -302,7 +316,7 @@ class Dialog:
             self.raise_unexpected_input('response %r' % (mtype,))
 
         rinp = self._fix_response_input(mtype)
-
+        self.response = msg
         self.hit(rinp, msg)
 
     def timeout(self, error):

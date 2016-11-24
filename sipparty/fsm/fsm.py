@@ -763,7 +763,7 @@ class FSM:
         # Perform actions registered for state entry.
         acts = self._fsm_state_entry_actions.get(new_state, ())
         for act in acts:
-            act()
+            act(*args, **kwargs)
 
         log.debug("Done hit.")
 

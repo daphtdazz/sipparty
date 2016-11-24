@@ -26,10 +26,8 @@ from weakref import ref
 from ..fsm import (
     AsyncFSM, FSM, FSMTimeout, InitialStateKey, LockedFSM, Timer,
     TransitionKeys, UnexpectedInput)
-from ..fsm import fsmtimer
-from ..fsm import retrythread
 from ..util import (Enum, WaitFor)
-from .base import (MagicMock, patch, SIPPartyTestCase)
+from .base import (MagicMock, SIPPartyTestCase)
 
 log = logging.getLogger(__name__)
 
@@ -41,13 +39,7 @@ class TestFSMBase(SIPPartyTestCase):
         self.cleanup = 0
         self.done = False
 
-        pp = patch.object(fsmtimer, 'Clock', new=self.Clock)
-        pp.start()
-        self.addCleanup(pp.stop)
-        pp = patch.object(retrythread, 'Clock', new=self.Clock)
-        pp.start()
-        self.addCleanup(pp.stop)
-        self.clock_time = 0
+        self.patch_clock()
 
     def do_and_mark_completion(self, func):
         func()

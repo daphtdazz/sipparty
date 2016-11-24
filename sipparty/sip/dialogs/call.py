@@ -64,7 +64,10 @@ class SimpleClientDialog(Dialog):
             },
             I.response_xxx: {
                 tsk.NewState: S.Terminated,
-                tsk.Action: 'errorResponse'
+                tsk.Action: 'record_termination_reason'
+            },
+            I.terminate: {
+                tsk.NewState: S.Terminated,
             }
         },
         S.InDialog: {

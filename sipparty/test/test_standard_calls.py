@@ -23,7 +23,6 @@ import os
 import threading
 from timeit import default_timer
 
-from ..fsm import fsmtimer
 from ..fsm.retrythread import RetryThread
 from ..parse import Parser
 from ..parties import NoMediaSimpleCallsParty
@@ -31,7 +30,7 @@ from ..sip.siptransport import SIPTransport
 from ..sip.standardtimers import StandardTimers
 from ..util import WaitFor
 
-from .base import patch, SIPPartyTestCase
+from .base import SIPPartyTestCase
 
 log = logging.getLogger(__name__)
 
@@ -51,9 +50,7 @@ class TestStandardDialog(SIPPartyTestCase):
 
     def setUp(self):
         super(TestStandardDialog, self).setUp()
-        pp = patch.object(fsmtimer, 'Clock', new=self.Clock)
-        pp.start()
-        self.addCleanup(pp.stop)
+        self.patch_clock()
 
     def test_retransmit(self):
         log.info('test_retransmit')

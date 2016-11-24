@@ -50,7 +50,7 @@ class SocketMock(object):
     def __init__(self, family=AF_INET, type=SOCK_STREAM):
         test_case = self.test_case
         assert test_case is not None
-        if test_case.socket_exception is not None:
+        if getattr(test_case, 'socket_exception', None) is not None:
             raise test_case.socket_exception
 
         super(SocketMock, self).__init__()
@@ -58,17 +58,23 @@ class SocketMock(object):
         self.type = type
 
         for attr in (
-            'connect', 'bind', 'listen', 'accept', 'send',
+            'bind', 'listen', 'accept', 'send',
         ):
             setattr(self, attr, Mock())
 
-        for attr in ('peer_name', 'sockname'):
-            setattr(self, attr, getattr(test_case, attr))
+        self.peer_name = getattr(test_case, 'peer_name', None)
+        self.sockname = getattr(test_case, 'sockname', None)
 
         self._fileno = SocketMock._fileno
         SocketMock._fileno += 1
 
         self.read_exception = None
+
+    def connect(self, addr_tuple):
+        self.peer_name = addr_tuple
+        if self.sockname is None:
+            self.sockname = ('pretend-local-sockname', 12345)
+        return
 
     def close(self):
         pass

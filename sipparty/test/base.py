@@ -24,9 +24,12 @@ import re
 from six import (iteritems, PY2)
 import sys
 import unittest
+from ..fsm import fsmtimer, retrythread
 from ..fsm.retrythread import RetryThread
 from ..sip.siptransport import SIPTransport
-from ..util import Timeout
+from ..transport import base as transport_base
+from ..transport.mocksock import SocketMock
+from ..util import Timeout, WaitFor
 if PY2:
     from mock import (MagicMock, Mock, patch)  # noqa
 else:
@@ -74,7 +77,24 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
 
     def setUp(self):
         super(SIPPartyTestCase, self).setUp()
+
+    def patch_clock(self):
+        pp = patch.object(fsmtimer, 'Clock', new=self.Clock)
+        pp.start()
+        self.addCleanup(pp.stop)
+        pp = patch.object(retrythread, 'Clock', new=self.Clock)
+        pp.start()
+        self.addCleanup(pp.stop)
         self.clock_time = 0
+        self.addCleanup(setattr, self, 'clock_time', 0)
+
+    def patch_socket(self):
+        SocketMock.test_case = self
+        self.addCleanup(setattr, SocketMock, 'test_case', None)
+        socket_patch = patch.object(
+            transport_base, 'socket_class', spec=type, new=SocketMock)
+        socket_patch.start()
+        self.addCleanup(socket_patch.stop)
 
     def tearDown(self):
         self.popAllLogLevels()
@@ -148,3 +168,10 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
             log.debug("Reset %r log level to %r", mod, levels[0])
             self.setLogLevel(mod, levels[0])
             del levels[:]
+
+    def wait_for(self, condition, **kwargs):
+
+        try:
+            WaitFor(condition, **kwargs)
+        except Timeout:
+            self.assertTrue(condition(), "Condition did not become true.")

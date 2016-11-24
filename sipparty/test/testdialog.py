@@ -19,12 +19,14 @@ limitations under the License.
 from __future__ import absolute_import
 
 import logging
+from six import next
 from weakref import ref
 from .base import SIPPartyTestCase
 from ..fsm import UnexpectedInput
 from ..sip.components import (AOR, Host, URI)
 from ..sip.dialogs import SimpleClientDialog, SimpleServerDialog
 from ..sip.siptransport import AORHandler, SIPTransport
+from ..sip.standardtimers import StandardTimers
 from ..util import WaitFor
 
 log = logging.getLogger(__name__)
@@ -117,3 +119,55 @@ class TestDialog(AORHandler, SIPPartyTestCase):
     for _ii in range(3):
         locals()['test_transaction_creation_depth_%d' % _ii] = create_sub_test(
             sub_test_transaction_creation, (_ii,))
+
+
+class TestDialogMockedSockets(SIPPartyTestCase):
+
+    def setUp(self):
+        super(TestDialogMockedSockets, self).setUp()
+        self.patch_socket()
+        self.patch_clock()
+
+    def test_no_remote_party(self):
+        """Test attempting to contact an uncontactable remote party."""
+        tp = SIPTransport()
+        dl = SimpleClientDialog(tp)
+        dl.from_uri = 'sip:me@local'
+        dl.to_uri = 'sip:then@uncontactable-host'
+
+        log.info('Send first INVITE')
+        dl.initiate(remote_name='127.0.0.1', remote_port=12345)
+        self.assertEqual(tp.messages_sent, 1)
+
+        log.info('Increment time and see us timeout')
+        sts = StandardTimers()
+        giveup_time, = tuple(sts.standard_timer_giveup_gen())
+        assert self.clock_time == 0
+        self.clock_time = giveup_time
+
+        dl.waitForStateCondition(lambda st: st == dl.States.Terminated)
+        # We only resend once because we coalesce resends.
+        self.assertEqual(tp.messages_sent, 2)
+        self.assertIsNone(dl.response)
+
+    def test_no_remote_party_user_cancels(self):
+        """Attempt to contact an uncontactable remote party but give up."""
+        tp = SIPTransport()
+        dl = SimpleClientDialog(tp)
+        dl.from_uri = 'sip:me@local'
+        dl.to_uri = 'sip:then@uncontactable-host'
+
+        log.info('Send first INVITE')
+        dl.initiate(remote_name='127.0.0.1', remote_port=12345)
+        self.assertEqual(tp.messages_sent, 1)
+
+        log.info('Increment time and see us retry')
+        sts = StandardTimers()
+        retry_time = next(sts.standard_timer_retransmit_gen())
+        self.clock_time = retry_time
+        self.wait_for(lambda: tp.messages_sent == 2)
+
+        dl.terminate('User cancelled')
+        self.assertEqual(dl.state, dl.States.Terminated)
+
+        self.assertEqual(dl.termination_reason, 'User cancelled')
