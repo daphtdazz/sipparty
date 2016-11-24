@@ -32,6 +32,7 @@ from ..transport import (
     NameAll, SendFromAddressNameAny, SocketOwner,
     SocketProxy, Transport, IPv6address_re,
     IPv6address_only_re)
+from ..transport.mocksock import SocketMock
 from ..util import WaitFor
 from .base import (Mock, patch, SIPPartyTestCase)
 
@@ -318,57 +319,8 @@ class TestTransportErrors(SIPPartyTestCase):
         self.addCleanup(select_patch.stop)
 
         self.socket_exception = None
-        test_case = self
-
-        class SocketMock(object):
-
-            _fileno = 1
-
-            def __init__(self, family=AF_INET, type=SOCK_STREAM):
-                if test_case.socket_exception is not None:
-                    raise test_case.socket_exception
-
-                super(SocketMock, self).__init__()
-                self.family = family
-                self.type = type
-
-                for attr in (
-                    'connect', 'bind', 'listen', 'accept', 'send',
-                ):
-                    setattr(self, attr, Mock())
-
-                for attr in ('peer_name', 'sockname'):
-                    setattr(self, attr, getattr(test_case, attr))
-
-                self._fileno = SocketMock._fileno
-                SocketMock._fileno += 1
-
-                self.read_exception = None
-
-            def close(self):
-                pass
-
-            def fileno(self):
-                return self._fileno
-
-            def getpeername(self):
-                return self.peer_name
-
-            def getsockname(self):
-                return self.sockname
-
-            def recv(self, numbytes):
-                log.debug('sock mock recv numbytes %d', numbytes)
-                if self.read_exception is not None:
-                    raise self.read_exception
-                data = self.data
-                del self.data
-                return data
-
-            def recvfrom(self, numbytes):
-                log.debug('sock mock recvfrom numbytes %d', numbytes)
-                return self.recv(numbytes), self.getpeername()
-
+        SocketMock.test_case = self
+        self.addCleanup(setattr, SocketMock, 'test_case', None)
         socket_patch = patch.object(
             transport.base, 'socket_class', spec=type, new=SocketMock)
         socket_patch.start()
