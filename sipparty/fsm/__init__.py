@@ -3,7 +3,7 @@ Overview
 --------
 The FSM module provides a framework for writing Finite State Machines easily
 and descriptively, both for use synchronously and asynchronously. It was
-written for and is used heavily by the `sipparty`_ SIP implementation.
+written for and is used heavily by the :py:mod:`sipparty` SIP implementation.
 
 .. sipparty: index.html
 
@@ -78,7 +78,7 @@ effects.
 
 
 3.  If no transition is found for the state / input pair,
-    :py:exception:`UnexpectedInput` is raised.
+    :py:exc:`UnexpectedInput` is raised.
 
 ..
     Copyright 2015 David Park
@@ -100,3 +100,5 @@ from .fsm import (
     tsk, UnexpectedInput)
 from .retrythread import RetryThread
 from .fsmtimer import Timer
+
+__all__ = [name for name in dict(locals())]

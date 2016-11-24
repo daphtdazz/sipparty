@@ -20,7 +20,6 @@ from __future__ import absolute_import
 
 import logging
 
-from ..fsm import fsmtimer
 from ..fsm import retrythread
 from ..sip.header import CseqHeader, ViaHeader
 from ..sip.message import Message, MessageResponse
@@ -38,6 +37,9 @@ log = logging.getLogger(__name__)
 class TransactionTest(SIPPartyTestCase):
 
     def setUp(self):
+
+        super(TransactionTest, self).setUp()
+
         self.retry = 0
         self.cleanup = 0
 
@@ -65,11 +67,8 @@ class TransactionTest(SIPPartyTestCase):
         # Transport Interface.
         self.send_message = MagicMock()
 
-        pp = patch.object(fsmtimer, 'Clock', new=self.Clock)
-        pp.start()
-        self.addCleanup(pp.stop)
-        pp = patch.object(retrythread, 'Clock', new=self.Clock)
-        pp.start()
+        self.patch_clock()
+
 
 TransactionUser.register(TransactionTest)
 TransactionTransport.register(TransactionTest)

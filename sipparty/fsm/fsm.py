@@ -50,6 +50,7 @@ class UnexpectedInput(FSMError):
 class FSMTimeout(FSMError):
     pass
 
+
 InitialStateKey = 'Initial'
 TransitionKeys = Enum((
     'NewState',
@@ -378,6 +379,10 @@ class FSM:
         self._fsm_transitions = OrderedDict()
         class_timers = self._fsm_timers
         self._fsm_timers = {}
+        # It's important that the timers are scheduled predictably for
+        # the case where timers are due to pop at the same time, so we need to
+        # track the running timers in a list.
+        self._fsm_running_timers = []
         self.Inputs = copy(self.Inputs)
 
         self._fsm_state = getattr(self, '_fsm_state')
@@ -416,7 +421,7 @@ class FSM:
     def checkTimers(self):
         "Check all the timers that are running."
         log.debug('check timers on fsm %s', self.name)
-        for name, timer in iteritems(self._fsm_timers):
+        for timer in self._fsm_running_timers:
             timer.check()
 
     def hit(self, input, *args, **kwargs):
@@ -446,8 +451,12 @@ class FSM:
         Subclassing: subclasses may override this to implement background timer
         popping, which is what AsyncFSM does.
         """
-        log.info("Start timer %r", timer.name)
         timer.start()
+
+        # Don't re-add the timer if it's already there; we're allowed to
+        # restart timers.
+        if timer not in self._fsm_running_timers:
+            self._fsm_running_timers.append(timer)
 
     def stop_timer(self, timer):
         """Signals the timer that it should stop.
@@ -456,7 +465,7 @@ class FSM:
         Subclassing: subclasses may override this to implement background timer
         popping tidy-up, which is what AsyncFSM does.
         """
-        log.info("Stop timer %r", timer.name)
+        del self._fsm_running_timers[self._fsm_running_timers.index(timer)]
         timer.stop()
 
     #
@@ -754,7 +763,7 @@ class FSM:
         # Perform actions registered for state entry.
         acts = self._fsm_state_entry_actions.get(new_state, ())
         for act in acts:
-            act()
+            act(*args, **kwargs)
 
         log.debug("Done hit.")
 
@@ -824,13 +833,12 @@ class AsyncFSM(LockedFSM):
 
         :param timer: The FSMTimer to start.
         """
-        log.debug("Start timer %r", timer.name)
-        timer.start()
+        super(AsyncFSM, self).start_timer(timer)
         self._fsm_thread.addRetryTime(timer.nextPopTime)
 
     def checkTimers(self):
         """Check all the timers."""
-        for name, timer in iteritems(self._fsm_timers):
+        for timer in self._fsm_running_timers:
             # Squelch the exception if the timer isn't running yet, because
             # that's easier than checking each one first.
             timer.check(exception_if_not_running=False)

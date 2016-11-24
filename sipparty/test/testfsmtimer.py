@@ -20,10 +20,9 @@ from __future__ import print_function, absolute_import
 
 import logging
 from threading import Semaphore, Thread
-from ..fsm import fsmtimer
 from ..fsm.fsmtimer import NotRunning, Timer
 from ..util import WaitFor
-from .base import (patch, SIPPartyTestCase)
+from .base import SIPPartyTestCase
 
 log = logging.getLogger(__name__)
 
@@ -34,11 +33,7 @@ class TestFSMTimer(SIPPartyTestCase):
         super(TestFSMTimer, self).setUp()
         self.timer_pops = 0
         self.sema = Semaphore()
-        self.clock_time = 0
-        fsmtimer_clock_patch = patch.object(
-            fsmtimer, 'Clock', new=self.Clock)
-        fsmtimer_clock_patch.start()
-        self.addCleanup(fsmtimer_clock_patch.stop)
+        self.patch_clock()
 
     def timer_pop(self):
         self.timer_pops += 1

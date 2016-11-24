@@ -131,7 +131,7 @@ class TransactionManager(object):
                     ttype, tk, message.type))
         return trans
 
-    def transaction_terminated(self, key):
+    def transaction_terminated(self, key, *args, **kwargs):
         log.info('Dropping terminated transaction %s', key)
         del self.transactions[key]
 

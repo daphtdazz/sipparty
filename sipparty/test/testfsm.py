@@ -26,10 +26,8 @@ from weakref import ref
 from ..fsm import (
     AsyncFSM, FSM, FSMTimeout, InitialStateKey, LockedFSM, Timer,
     TransitionKeys, UnexpectedInput)
-from ..fsm import fsmtimer
-from ..fsm import retrythread
 from ..util import (Enum, WaitFor)
-from .base import (MagicMock, patch, SIPPartyTestCase)
+from .base import (MagicMock, SIPPartyTestCase)
 
 log = logging.getLogger(__name__)
 
@@ -41,13 +39,7 @@ class TestFSMBase(SIPPartyTestCase):
         self.cleanup = 0
         self.done = False
 
-        pp = patch.object(fsmtimer, 'Clock', new=self.Clock)
-        pp.start()
-        self.addCleanup(pp.stop)
-        pp = patch.object(retrythread, 'Clock', new=self.Clock)
-        pp.start()
-        self.addCleanup(pp.stop)
-        self.clock_time = 0
+        self.patch_clock()
 
     def do_and_mark_completion(self, func):
         func()
@@ -237,6 +229,40 @@ class TestFSM(TestFSMBase):
             cleanup += 1
             nf.checkTimers()
             self.assertEqual(self.cleanup, cleanup)
+
+    def test_timer_order(self):
+        nf = FSM(name="TestTimerOrderFSM")
+
+        def pop1_func():
+            self.last_method = 'pop1_func'
+
+        def pop2_func():
+            self.last_method = 'pop2_func'
+
+        nf.addTimer("retry1", pop1_func, [1])
+        nf.addTimer("retry2", pop2_func, [1])
+        nf.addTransition("Initial", "step", "step1",
+                         start_timers=['retry1', 'retry2'])
+        nf.addTransition("step1", "step", "step2",
+                         stop_timers=['retry1', 'retry2'])
+        # Order of timers is reversed.
+        nf.addTransition("step2", "step", "step3",
+                         start_timers=['retry2', 'retry1'])
+        nf.addTransition("step3", "step", "finished",
+                         stop_timers=['retry1', 'retry2'])
+
+        self.last_method = None
+        nf.hit('step')
+        self.clock_time = 1
+        nf.checkTimers()
+        self.assertEqual(self.last_method, 'pop2_func')
+
+        nf.hit('step')
+        self.last_method = None
+        nf.hit('step')
+        self.clock_time = 2
+        nf.checkTimers()
+        self.assertEqual(self.last_method, 'pop1_func')
 
     def test_action_hit_exception(self):
 

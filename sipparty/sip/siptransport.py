@@ -21,11 +21,11 @@ from socket import SOCK_DGRAM
 from ..classmaker import classbuilder
 from ..parse import ParseError
 from ..transport import (
-    IsValidTransportName, Transport, SockTypeFromName,
+    IsValidTransportName, Transport, SocketOwner, SockTypeFromName,
     UnregisteredPortGenerator)
-from ..util import (abytes, DerivedProperty, WeakMethod)
+from ..util import (abytes, DerivedProperty)
 from . import prot
-from .components import AOR, Host
+from .components import AOR
 from .message import Message
 from .transaction import TransactionManager, TransactionTransport
 from . import Incomplete
@@ -47,7 +47,7 @@ class AORHandler(object):
         raise NotImplemented
 
 
-@classbuilder(bases=(Transport, TransactionTransport))
+@classbuilder(bases=(Transport, SocketOwner, TransactionTransport))
 class SIPTransport:
     """SIPTransport."""
 
@@ -59,15 +59,13 @@ class SIPTransport:
 
     @classmethod
     def port_generator(cls):
-        yield 5060
+        yield cls.DefaultPort
         for port in UnregisteredPortGenerator():
             yield port
 
     #
     # =================== INSTANCE INTERFACE ==================================
     #
-    messageConsumer = DerivedProperty("_sptr_messageConsumer")
-
     # Do not iterate over these dictionaries, as they are weak value
     # dictionaries whose values may disappear at any time.
     provisionalDialogs = DerivedProperty("_sptr_provisionalDialogs")
@@ -78,8 +76,6 @@ class SIPTransport:
 
         self.messages_sent = 0
         self.messages_received = 0
-
-        self._sptr_messageConsumer = None
         self._sptr_messages = []
         self._sptr_provisionalDialogs = {}
         self._sptr_establishedDialogs = {}
@@ -99,8 +95,7 @@ class SIPTransport:
             if val not in kwargs or kwargs[val] is None:
                 kwargs[val] = default
         return super(
-            SIPTransport, self).listen_for_me(
-                WeakMethod(self, 'sipByteConsumer'), **kwargs)
+            SIPTransport, self).listen_for_me(self, **kwargs)
 
     #
     # =================== AOR MANAGER INTERFACE ===============================
@@ -172,21 +167,33 @@ class SIPTransport:
         except AttributeError:
             pass
 
-    def send_message_with_transaction(
-            self, msg, transaction_user, remote_name=None, remote_port=None,
-            **kwargs):
-        """Send a message reliabily using an appropriate transaction."""
-        log.debug('Find the transaction')
+    def send_message_with_transaction(self, msg, transaction_user,
+                                      remote_port=None, **kwargs):
+        """Send a message reliably using an appropriate transaction.
 
-        kwargs.update({
-            k: v
-            for k, v in (
-                ('remote_name', remote_name), ('remote_port', remote_port)
-            ) if v is not None
-        })
+        :param Message msg: The message to send.
+        :param TransactionUser transaction_user:
+            An object conforming to :py:class:`TransactionUser` which will
+            be registered as the user of the :py:class:`Transaction`.
+        :param int remote_port:
+            The port to send the message to. If left `None`, then the
+            `SIPTransport.DefaultPort` will be used unless there is an existing
+            transaction for the message which already has a `remote_port`.
+        :param **kwargs:
+            Passed through to :py:meth:`Transaction.handle_outbound_message`.
+        :returns: The :py:class:`Transaction` used to send the message.
+        """
+        log.debug('Find the transaction')
         trns = self.transaction_manager.transaction_for_outbound_message(
             msg, transaction_user=transaction_user)
-        trns.handle_outbound_message(msg, **kwargs)
+
+        # fix remote_port as per docstring
+        if remote_port is None:
+            if trns.remote_port is None:
+                remote_port = self.DefaultPort
+
+        trns.handle_outbound_message(msg, remote_port=remote_port, **kwargs)
+        return trns
 
     #
     # =================== TRANSPORT SENDER INTERFACE ==========================
@@ -201,11 +208,9 @@ class SIPTransport:
 
         sock_type = SockTypeFromName(msg.viaheader.transport)
 
-        sp = super(SIPTransport, self)
         sprxy = super(SIPTransport, self).get_send_from_address(
             sock_type=sock_type, remote_name=name,
-            remote_port=port,
-            data_callback=WeakMethod(self, 'sipByteConsumer'))
+            remote_port=port, owner=self)
 
         ch = msg.contactheader
         if not ch.address:
@@ -217,28 +222,14 @@ class SIPTransport:
         try:
             sprxy.send(bytes(msg))
         except Incomplete:
-            sp.release_listen_address(sprxy.local_address)
+            super(SIPTransport, self).release_listen_address(
+                sprxy.local_address)
             raise
 
         self.messages_sent += 1
         return sprxy.local_address
 
-    def fixTargetAddress(self, addr):
-        if addr is None:
-            return (None, 0)
-
-        if isinstance(addr, Host):
-            return self.resolve_host(addr.address, addr.port)
-
-        if isinstance(addr, bytes):
-            return self.resolve_host(addr)
-
-        if addr[1] is None:
-            return (addr[0], self.DefaultPort)
-
-        return addr
-
-    def sipByteConsumer(self, local_addr, remote_addr, data):
+    def consume_data(self, local_addr, remote_addr, data):
         log.debug(
             "SIPTransport attempting to consume %d bytes.", len(data))
 

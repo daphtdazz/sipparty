@@ -2,13 +2,27 @@
 
 ## Little list
 
+1. check what select takes as a wait, and make sure we don't pass it anything ridiculous.
+2. check exc_clear usage and see if it's all necessary.
 13. de-camel-cap methods etc that should be under_scores, e.g. addDialogHandlerForAOR
-2. Refactor singleton out of util.
+2. Refactor singleton out of util, rename to "SharedInstances"
 3. message.isrequest replace with property is_request
 13. Make util a package with sub-modules.
+14. Rename `release_listen_address` to `release_address`.
 
 ## Big List ##
 
+1. better handling exceptions
+    a. SocketProxies have an "owner" and a "transport"
+        i. transport
+            - release_listen_address  # info
+            - add_connected_socket_proxy
+        ii. 
+            - consume_data
+            - handle_nonterminal_socket_exception  # Optional
+            - handle_terminal_socket_exception  # Optional
+            - handle_closed_socket  # Optional
+            - handle_new_connected_socket  # Optional
 2. REGISTER dialogues.
 4. TCP support.
 5. Move "Programming guides" into a section of the documentation.

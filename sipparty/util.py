@@ -460,6 +460,9 @@ def CCPropsFor(props):
     classes in subclasses.
     """
 
+    if isinstance(props, str):
+        props = (props,)
+
     class CumulativeClassProperties(type):
         def __new__(cls, name, bases, class_dict):
             """Initializes the class dictionary, so that all the properties in
@@ -670,14 +673,8 @@ class _DerivedProperty(object):
         log.detail("%r", self)
 
     def __get__(self, obj, cls):
-        enable_debug_logs and log.debug(
-            "Get derived prop for obj %r class %r.", obj, cls)
         target = obj if obj is not None else cls
-
-        enable_debug_logs and log.detail("Get the underlying value (if any).")
-        pname = self._rp_propName
-        val = getattr(target, pname)
-        enable_debug_logs and log.detail("Underlying value %r.", val)
+        val = getattr(target, self._rp_propName)
 
         gt = self._rp_get
         if gt is None:
@@ -690,7 +687,7 @@ class _DerivedProperty(object):
             if not isinstance(meth, Callable):
                 raise ValueError(
                     "Getter attribute %r of %r object is not callable." % (
-                        gt, target.__class__.__name__))
+                        gt, type(target).__name__))
             return meth(val)
 
         # Else getter should be a callable.
@@ -698,7 +695,7 @@ class _DerivedProperty(object):
             raise ValueError(
                 "Getter %r object for DerivedValue on %r on %r object is not "
                 "a callable or a method name." % (
-                    gt, pname, target.__class__.__name__))
+                    gt, self._rp_propName, type(target).__name__))
         val = gt(obj, val)
         return val
 
@@ -924,7 +921,12 @@ class Singleton(object):
         si = cls.__dict__.get('_St_SharedInstances')
         if si is None:
             return
-        WaitFor(lambda: all(wr is None for wr in si.values()), **kwargs)
+        try:
+            WaitFor(lambda: all(wr is None for wr in si.values()), **kwargs)
+        except Timeout:
+            raise Timeout(
+                'Timed out waiting for no instances of Singleton class %s' % (
+                    cls.__name__,))
 
     def __new__(cls, singleton=None, *args, **kwargs):
         log.detail("Singleton.__new__(%r, %r)", args, kwargs)

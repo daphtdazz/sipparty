@@ -39,6 +39,7 @@ def str_enumify(bytes_enum):
         [astr(rtype) for rtype in bytes_enum],
         normalize=bytes_enum._en_normalize, aliases=bytes_enum._en_aliases)
 
+
 protocols = AsciiBytesEnum((b"SIP/2.0",), normalize=lambda p: p.upper())
 
 # Refer to https://tools.ietf.org/html/rfc3261#section-25.1 for the ABNF.
@@ -377,5 +378,6 @@ def ProvisionalDialogIDFromEstablishedID(est_did):
 
 def TransactionID(ttype, branch, cseq_method):
     return (ttype, branch, cseq_method)
+
 
 bdict = bglobals()

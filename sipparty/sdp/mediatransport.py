@@ -18,7 +18,6 @@ limitations under the License.
 """
 import logging
 from ..transport import Transport
-from ..util import WeakMethod
 
 log = logging.getLogger(__name__)
 
@@ -27,7 +26,6 @@ class MediaTransport(Transport):
 
     def __init__(self):
         super(MediaTransport, self).__init__()
-        self.byteConsumer = WeakMethod(self, "mediaByteConsumer")
 
     def mediaByteConsumer(self, lAddr, rAddr):
         pass

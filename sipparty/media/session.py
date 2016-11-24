@@ -20,14 +20,15 @@ import logging
 from six import (binary_type as bytes, iteritems)
 from socket import SOCK_DGRAM
 from ..adapter import AdapterProperty
+from ..classmaker import classbuilder
 from ..deepclass import (DeepClass, dck)
 from ..sdp import (SessionDescription, MediaDescription)
 from ..sdp.mediatransport import MediaTransport
 from ..sdp.sdpsyntax import (MediaTypes, sdp_username_is_ok)
 from ..transport import (
     IsValidTransportName, ListenDescription, NameLANHostname,
-    SOCK_FAMILIES)
-from ..util import (FirstListItemProxy, WeakMethod, WeakProperty)
+    SocketOwner, SOCK_FAMILIES)
+from ..util import (FirstListItemProxy, WeakProperty)
 from ..vb import ValueBinder
 
 
@@ -116,7 +117,8 @@ class Session(
         return bytes(self.description)
 
 
-class MediaSession(
+@classbuilder(
+    bases=(
         DeepClass("_msess_", {
             'parent_session': {
                 dck.descriptor: WeakProperty
@@ -134,7 +136,9 @@ class MediaSession(
             'formats': {dck.check: lambda x: isinstance(x, dict)},
             'transProto': {dck.check: lambda x: isinstance(x, str)}
         }),
-        ValueBinder):
+        ValueBinder,
+        SocketOwner))
+class MediaSession:
 
     vb_dependencies = (
         ('local_addr_description', (
@@ -147,8 +151,7 @@ class MediaSession(
             setattr(self.local_addr_description, attr_name, attr_val)
 
         l_desc = self.transport.listen_for_me(
-            WeakMethod(self, 'data_received'),
-            listen_description=self.local_addr_description
+            self, listen_description=self.local_addr_description
         )
         log.info(
             '%s instance has listen address %s', self.__class__.__name__,
@@ -156,5 +159,5 @@ class MediaSession(
 
         self.local_addr_description = l_desc
 
-    def data_received(self, socket_proxy, remote_address_tuple, data):
+    def consume_data(self, socket_proxy, remote_address_tuple, data):
         assert 0

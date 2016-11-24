@@ -24,12 +24,16 @@ import re
 from six import (iteritems, PY2)
 import sys
 import unittest
+from ..fsm import fsmtimer, retrythread
 from ..fsm.retrythread import RetryThread
 from ..sip.siptransport import SIPTransport
+from ..transport import base as transport_base
+from ..transport.mocksock import SocketMock
+from ..util import Timeout, WaitFor
 if PY2:
-    from mock import (MagicMock, patch)  # noqa
+    from mock import (MagicMock, Mock, patch)  # noqa
 else:
-    from unittest.mock import (MagicMock, patch)  # noqa
+    from unittest.mock import (MagicMock, Mock, patch)  # noqa
 
 log = logging.getLogger(__name__)
 sipparty = sys.modules['sipparty']
@@ -73,20 +77,47 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
 
     def setUp(self):
         super(SIPPartyTestCase, self).setUp()
+
+    def patch_clock(self):
+        pp = patch.object(fsmtimer, 'Clock', new=self.Clock)
+        pp.start()
+        self.addCleanup(pp.stop)
+        pp = patch.object(retrythread, 'Clock', new=self.Clock)
+        pp.start()
+        self.addCleanup(pp.stop)
         self.clock_time = 0
+        self.addCleanup(setattr, self, 'clock_time', 0)
+
+    def patch_socket(self):
+        SocketMock.test_case = self
+        self.addCleanup(setattr, SocketMock, 'test_case', None)
+        socket_patch = patch.object(
+            transport_base, 'socket_class', spec=type, new=SocketMock)
+        socket_patch.start()
+        self.addCleanup(socket_patch.stop)
 
     def tearDown(self):
         self.popAllLogLevels()
 
-        if hasattr(super(SIPPartyTestCase, self), "tearDown"):
-            super(SIPPartyTestCase, self).tearDown()
+        getattr(super(SIPPartyTestCase, self), "tearDown", lambda: None)()
 
         RetryThread().cancel()
 
-        # Speed things up a bit by doing a gc collect.
-        gc.collect()
-        SIPTransport.wait_for_no_instances(timeout_s=2)
-        RetryThread.wait_for_no_instances(timeout_s=2)
+        exc = None
+        for ii in range(4):
+            log.debug('Doing GC collect')
+            gc.collect()
+            log.debug('Done GC collect')
+            try:
+                SIPTransport.wait_for_no_instances(timeout_s=0.1)
+                RetryThread.wait_for_no_instances(timeout_s=0.1)
+            except Timeout as ex:
+                exc = ex
+                continue
+            else:
+                break
+        else:
+            raise exc
 
     def pushLogLevelToSubMod(self, module, sub_module_name, level):
 
@@ -137,3 +168,10 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
             log.debug("Reset %r log level to %r", mod, levels[0])
             self.setLogLevel(mod, levels[0])
             del levels[:]
+
+    def wait_for(self, condition, **kwargs):
+
+        try:
+            WaitFor(condition, **kwargs)
+        except Timeout:
+            self.assertTrue(condition(), "Condition did not become true.")

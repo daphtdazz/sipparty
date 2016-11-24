@@ -54,6 +54,7 @@ class SipCallArgs(argparse.ArgumentParser):
         except ParseError:
             self.error("%r is not a valid URI." % (self.args.uri,))
 
+
 #
 # =================== Main script. =======================================
 #

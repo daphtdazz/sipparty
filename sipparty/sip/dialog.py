@@ -26,7 +26,8 @@ from ..fsm import (AsyncFSM, InitialStateKey, UnexpectedInput)
 from ..deepclass import DeepClass, dck
 from ..parse import ParsedPropertyOfClass
 from ..sdp import (sdpsyntax, SDPIncomplete)
-from ..util import (abytes, astr, Enum, WeakProperty)
+from ..transport import IsValidPortNum
+from ..util import (abytes, astr, CCPropsFor, Enum, WeakProperty)
 from . import prot
 from .body import Body
 from .components import URI
@@ -42,7 +43,7 @@ log = logging.getLogger(__name__)
 
 States = Enum((
     InitialStateKey, "SentInvite", "InDialog", "TerminatingDialog",
-    "SuccessCompletion", "ErrorCompletion"))
+    "Terminated"))
 Inputs = Enum(("initiate", "receiveRequest", "terminate"))
 
 tfk = TransformKeys
@@ -63,19 +64,22 @@ AckTransforms = {
 }
 
 
-@classbuilder(bases=(
-    DeepClass("_dlg_", {
-        "from_uri": {dck.descriptor: ParsedPropertyOfClass(URI)},
-        "to_uri": {dck.descriptor: ParsedPropertyOfClass(URI)},
-        "contact_uri": {
-            dck.descriptor: ParsedPropertyOfClass(URI), dck.gen: URI},
-        "localTag": {dck.gen: TagParam},
-        "remoteTag": {},
-        "transport": {dck.descriptor: WeakProperty},
-        "localSession": {},
-        "remoteSession": {},
-        'callIDHeader': {}}),
-    TransactionUser, StandardTimers, AsyncFSM, vb.ValueBinder))
+@classbuilder(
+    bases=(
+        DeepClass("_dlg_", {
+            "from_uri": {dck.descriptor: ParsedPropertyOfClass(URI)},
+            "to_uri": {dck.descriptor: ParsedPropertyOfClass(URI)},
+            "contact_uri": {
+                dck.descriptor: ParsedPropertyOfClass(URI), dck.gen: URI},
+            "localTag": {dck.gen: TagParam},
+            "remoteTag": {},
+            "transport": {dck.descriptor: WeakProperty},
+            "localSession": {},
+            "remoteSession": {},
+            'callIDHeader': {},
+            'remote_port': {dck.check: IsValidPortNum}}),
+        TransactionUser, StandardTimers, AsyncFSM, vb.ValueBinder),
+    mc=CCPropsFor('FSMStateEntryActions'))
 class Dialog:
     """`Dialog` class has a slightly wider scope than a strict SIP dialog, to
     include one-off request response pairs (e.g. OPTIONS) as well as long-lived
@@ -96,10 +100,14 @@ class Dialog:
     #
     States = States
     Transforms = None
+    FSMStateEntryActions = [
+        (States.Terminated, 'record_termination_reason'),
+    ]
 
     #
     # =================== INSTANCE INTERFACE ==================================
     #
+    termination_reason = None
 
     @property
     def provisionalDialogID(self):
@@ -122,6 +130,7 @@ class Dialog:
         super(Dialog, self).__init__(**kwargs)
         self._dlg_requests = []
         self.request = None
+        self.response = None
         self.__last_response = None
 
     def initiate(self, *args, **kwargs):
@@ -130,6 +139,13 @@ class Dialog:
 
     def terminate(self, *args, **kwargs):
         self.hit(Inputs.terminate, *args, **kwargs)
+
+    #
+    # =========================== FSM ACTIONS =================================
+    #
+    def record_termination_reason(self, reason):
+        log.info('Termination reason: %s', reason)
+        self.termination_reason = reason
 
     def resend_response(self):
         assert self.__last_response is not None
@@ -207,11 +223,18 @@ class Dialog:
         if req.type == req.types.invite:
             self.addLocalSessionSDP(req)
 
-        tp.send_message_with_transaction(
-            req, self, self.remote_name, self.remote_port)
+        # Prepare to send
         req.unbindAll()
         self._dlg_requests.append(req)
         tp.updateDialogGrouping(self)
+
+        trans = tp.send_message_with_transaction(
+            req, self, remote_name=self.remote_name,
+            remote_port=self.remote_port)
+        if self.remote_port is None:
+            # learn the remote port. If we didn't specify one then this is
+            # probably just the transport's DefaultPort
+            self.remote_port = trans.remote_port
 
     def send_response(self, response_code, req=None):
         log.debug("Send response type %r.", response_code)
@@ -231,7 +254,7 @@ class Dialog:
             return
 
         self.transport.send_message_with_transaction(
-            resp, self, astr(vh.address), vh.port)
+            resp, self, remote_name=astr(vh.address), remote_port=vh.port)
         self.__last_response = resp
 
     def configureResponse(self, resp, req):
@@ -293,7 +316,7 @@ class Dialog:
             self.raise_unexpected_input('response %r' % (mtype,))
 
         rinp = self._fix_response_input(mtype)
-
+        self.response = msg
         self.hit(rinp, msg)
 
     def timeout(self, error):

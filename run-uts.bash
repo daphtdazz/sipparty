@@ -20,13 +20,14 @@
 
 typeset -a tests
 PREPEND=sipparty.test
+
 while (( $# > 0 ))
 do
     if [[ $1 =~ (-l|--list) ]]
     then
         LIST=1
     else
-        tests[${#tests}]=${PREPEND}.$1
+        tests[${#tests[@]}]=${PREPEND}.$1
     fi
     shift
 done
@@ -114,18 +115,26 @@ find . -name "*.pyc" -delete
 
 if (( ${#tests} > 0 ))
 then
-    python -m unittest "${tests[@]}" 2>&1 | colorize >&2 &
-    child_pid=$!
+    run_tests () {
+        python -m unittest "${tests[@]}" 2>&1 | colorize >&2
+        return ${PIPESTATUS[0]}
+    }
 else
     if (( pymajver > 2 ))
     then
-        python -m unittest &
-        child_pid=$!
+        run_tests () {
+            python -m unittest 2>&1 | colorize >&2
+            return ${PIPESTATUS[0]}
+        }
     else
-        python -m unittest discover 2>&1 | colorize >&2 &
-        child_pid=$!
+        run_tests () {
+            python -m unittest discover 2>&1 | colorize >&2
+            return ${PIPESTATUS[0]}
+        }
     fi
 fi
+run_tests &
+child_pid=$!
 
 echo "Waiting for child $child_pid"
 wait "${child_pid}"

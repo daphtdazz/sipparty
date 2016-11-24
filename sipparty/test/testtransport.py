@@ -19,27 +19,34 @@ limitations under the License.
 from __future__ import absolute_import
 
 import logging
-from socket import (SOCK_DGRAM, SOCK_STREAM, AF_INET, AF_INET6)
+from select import error as select_error
+from six.moves.queue import Queue
+from socket import (
+    error as sock_error, SOCK_DGRAM, SOCK_STREAM, AF_INET, AF_INET6)
+from .. import transport
+from ..fsm import retrythread
+from ..fsm.retrythread import RetryThread
 from ..transport import (
-    address_as_tuple, ConnectedAddressDescription, ListenDescription,
-    NameAll, SendFromAddressNameAny,
+    address_as_tuple, ConnectedAddressDescription,
+    is_null_address, ListenDescription,
+    NameAll, SendFromAddressNameAny, SocketOwner,
     SocketProxy, Transport, IPv6address_re,
     IPv6address_only_re)
+from ..transport.mocksock import SocketMock
 from ..util import WaitFor
-from .base import (SIPPartyTestCase)
+from .base import (Mock, patch, SIPPartyTestCase)
 
 log = logging.getLogger(__name__)
 
 
-class TestTransport(SIPPartyTestCase):
+class TestTransport(SocketOwner, SIPPartyTestCase):
+
+    def consume_data(self, proxy, remote_address, data):
+        self.data_call_back_call_args.append((proxy, remote_address, data))
 
     def setUp(self):
         super(TestTransport, self).setUp()
         self.data_call_back_call_args = []
-
-    def data_callback(self, from_address, to_address, data):
-        self.data_call_back_call_args.append((
-            from_address, to_address, data))
 
     def new_connection(self, local_address, remote_address):
         return True
@@ -111,20 +118,20 @@ class TestTransport(SIPPartyTestCase):
 
         log.info('Get a standard (IPv4) listen address from the transport.')
         tp = Transport()
-        self.assertRaises(TypeError, tp.listen_for_me, 'not-a-callable')
+        self.assertRaises(ValueError, tp.listen_for_me, 'not-a-SockOwner')
         self.assertRaises(
-            ValueError, tp.listen_for_me, self.data_callback,
+            ValueError, tp.listen_for_me, None,
             sock_family=sock_family,
             sock_type='not-sock-type')
 
         laddr = tp.listen_for_me(
-            self.data_callback, sock_family=sock_family, sock_type=sock_type,
+            self, sock_family=sock_family, sock_type=sock_type,
             port=0)
         self.assertTrue(isinstance(laddr, ListenDescription), laddr)
 
         log.info('Listen a second time and reuse existing')
         laddr2 = tp.listen_for_me(
-            self.data_callback, sock_family=sock_family, sock_type=sock_type,
+            self, sock_family=sock_family, sock_type=sock_type,
             port=0)
         self.assertEqual(laddr2.sockname_tuple, laddr.sockname_tuple)
 
@@ -147,10 +154,10 @@ class TestTransport(SIPPartyTestCase):
 
         log.info("Listen twice but don't reuse socket")
         laddr = tp.listen_for_me(
-            self.data_callback, sock_family=sock_family, sock_type=sock_type,
+            self, sock_family=sock_family, sock_type=sock_type,
             port=0)
         laddr2 = tp.listen_for_me(
-            self.data_callback, sock_family=sock_family, sock_type=sock_type,
+            self, sock_family=sock_family, sock_type=sock_type,
             reuse_socket=False)
         self.assertEqual(tp.listen_socket_count, 2)
 
@@ -165,14 +172,13 @@ class TestTransport(SIPPartyTestCase):
 
         log.info('Get a listen address')
         tp = Transport()
-        laddr_desc = tp.listen_for_me(
-            self.data_callback, sock_family=sock_family)
+        laddr_desc = tp.listen_for_me(self, sock_family=sock_family)
 
         log.info('Get send from address connected to the listen address')
         conn_sock_proxy = tp.get_send_from_address(
             sock_family=sock_family,
             remote_name='127.0.0.1', remote_port=laddr_desc.port,
-            data_callback=self.data_callback)
+            owner=self)
 
         self.assertIs(conn_sock_proxy.transport, tp)
 
@@ -184,7 +190,7 @@ class TestTransport(SIPPartyTestCase):
         log.info('Reget the send from address and check it\'s the same one.')
         second_conn_sock_proxy = tp.get_send_from_address(
             remote_name='127.0.0.1', remote_port=laddr_desc.port,
-            data_callback=self.data_callback)
+            owner=self)
 
         self.assertIs(conn_sock_proxy, second_conn_sock_proxy)
         del second_conn_sock_proxy
@@ -202,13 +208,13 @@ class TestTransport(SIPPartyTestCase):
         self.assertRaises(
             TypeError, tp.get_send_from_address,
             remote_port=conn_sock_proxy.local_address,
-            data_callback=self.data_callback)
+            owner=self)
 
         log.info('Send data back on the new connection.')
         lstn_conn_sock_proxy = tp.get_send_from_address(
             remote_name=conn_sock_proxy.local_address.name,
             remote_port=conn_sock_proxy.local_address.port,
-            data_callback=self.data_callback)
+            owner=self)
 
         lstn_conn_sock_proxy.send(b'hello other')
         WaitFor(lambda: len(self.data_call_back_call_args) > 0)
@@ -219,6 +225,17 @@ class TestTransport(SIPPartyTestCase):
 
         for bad_name in ('not-an-ip', 'fe80::1::1'):
             self.assertRaises(ValueError, address_as_tuple, bad_name)
+            self.assertIsNone(address_as_tuple(
+                bad_name, raise_on_non_ip_addr_name=False))
+
+        for not_null in ('not-an-ip', 'fe80::1', 'fe80::1::1'):
+            self.assertFalse(is_null_address(not_null))
+
+        for null in ('0.0.0.0', '::', '0:0:0:0:0:0:0:0'):
+            self.assertTrue(is_null_address(null))
+
+        for valid_not_null in ('not-an-ip', '::1'):
+            self.assertFalse(is_null_address(valid_not_null))
 
         for inp, out in (
                 ('127.0.0.1', (127, 0, 0, 1)),
@@ -233,7 +250,7 @@ class TestTransport(SIPPartyTestCase):
         tp = Transport()
         laddr = ListenDescription(
             name=NameAll, sock_family=AF_INET6, sock_type=SOCK_DGRAM)
-        lprx = laddr.listen(lambda x: None, tp)
+        lprx = laddr.listen(tp, self)
 
         log.info('Create cad')
         cad = ConnectedAddressDescription(
@@ -241,13 +258,178 @@ class TestTransport(SIPPartyTestCase):
             name=SendFromAddressNameAny, sock_type=SOCK_DGRAM)
 
         # ValueError since remote_port is None
-        self.assertRaises(ValueError, cad.connect, lambda x: None, tp)
+        self.assertRaises(TypeError, cad.connect, lambda x: None, tp)
 
         log.info('Connect cad')
         cad.remote_port = lprx.local_address.port
-        cprx = cad.connect(lambda x: None, tp)
+        cprx = cad.connect(tp, type('AdhocSocketOwner', (SocketOwner,), {
+            'consume_data': lambda *args: None
+        })())
         tp.add_connected_socket_proxy(cprx)
 
         log.info('Re-find connected proxy with %s', cad)
         cprx2 = tp.find_or_create_send_from_socket(cad, None)
         self.assertIs(cprx, cprx2)
+
+
+class TestTransportErrors(SIPPartyTestCase):
+
+    def retry_thread_select(self, in_, out, error, wait):
+        assert wait >= 0
+
+        if self.finished:
+            return [], [], []
+
+        if self.select_fd_error is not None:
+            fd, error_ = self.select_fd_error
+            if fd in list(in_) + list(out) + list(error):
+                log.info('Raising select exception')
+                self.sel_exceptions_raised += 1
+                raise error_
+            return [], [], []
+
+        log.debug('Test select getting next item')
+        self.sel_queueing = True
+        res = self.sel_queue.get()
+        self.sel_queueing = False
+
+        if res is None:
+            self.finished = True
+            res = [], [], []
+
+        if isinstance(res, Exception):
+            raise res
+
+        log.debug('Test select yielding %s' % (res,))
+        return res
+
+    def setUp(self):
+        super(TestTransportErrors, self).setUp()
+
+        self.finished = False
+        self.sel_queue = Queue()
+        self.select_fd_error = None
+        self.sel_queueing = False
+        self.sel_exceptions_raised = 0
+        self.addCleanup(lambda: self.sel_queue.put(None))
+
+        select_patch = patch.object(
+            retrythread, 'select', new=self.retry_thread_select)
+        select_patch.start()
+        self.addCleanup(select_patch.stop)
+
+        self.socket_exception = None
+        SocketMock.test_case = self
+        self.addCleanup(setattr, SocketMock, 'test_case', None)
+        socket_patch = patch.object(
+            transport.base, 'socket_class', spec=type, new=SocketMock)
+        socket_patch.start()
+        self.addCleanup(socket_patch.stop)
+
+        self.socket = RuntimeError('No socket configured')
+
+    def tearDown(self):
+        self.sel_queue.put(None)
+        log.info('None put on queue')
+        super(TestTransportErrors, self).tearDown()
+
+    def test_socket_proxy_wr(self):
+
+        sp = SocketProxy()
+
+        tp = Transport()
+        sp.transport = tp
+
+        owner = type('AdhocOwner', (SocketOwner,), {
+            'consume_data': lambda *args, **kwargs: None})()
+        sp.owner = owner
+
+        self.assertIsNotNone(sp.transport)
+        self.assertIsNotNone(sp.owner)
+        del tp
+        del owner
+        self.assertIsNone(sp.transport)
+        self.assertIsNone(sp.owner)
+
+    def test_mock_socket_exception(self):
+        """Test that the mock socket can connect and "send" data."""
+        log.info('Create Transport')
+        tp = Transport()
+
+        log.info('Get a connected socket')
+
+        # configure the socket we'll get
+        self.peer_name = ('127.0.0.5', 12480)
+        self.sockname = ('mock-sock', 55555)
+
+        ds = Mock(spec=SocketOwner)
+        ds.consume_data = Mock()
+        ds.handle_terminal_socket_exception = Mock()
+
+        sprxy = tp.get_send_from_address(
+            remote_name=self.peer_name[0], remote_port=self.peer_name[1],
+            name=SendFromAddressNameAny, sock_type=SOCK_DGRAM,
+            owner=ds)
+
+        # Spin the retrythread because we need to pick up the new socket.
+        self.sel_queue.put(([], [], []))
+
+        log.info('Put data on the socket')
+        sprxy.socket.data = b'some data'
+        self.sel_queue.put(([sprxy.socket.fileno()], [], []))
+
+        WaitFor(lambda: ds.consume_data.call_count > 0, timeout_s=0.2)
+        self.assertEqual(ds.consume_data.call_count, 1)
+        ds.consume_data.assert_called_with(sprxy, self.peer_name, b'some data')
+
+        log.info('Cause an exception on the socket when reading')
+        exc = type('SocketException', (sock_error,), {})(
+            'Test socket exception')
+        sprxy.socket.read_exception = exc
+
+        self.sel_queue.put(([sprxy.socket.fileno()], [], []))
+        WaitFor(
+            lambda: ds.handle_terminal_socket_exception.call_count > 0,
+            timeout_s=0.2)
+        self.assertEqual(ds.handle_terminal_socket_exception.call_count, 1)
+        ds.handle_terminal_socket_exception.assert_called_with(sprxy, exc)
+        self.assertEqual(ds.consume_data.call_count, 1)
+
+        log.info('Test complete')
+
+    def test_select_exception(self):
+
+        rt = RetryThread()
+
+        WaitFor(lambda: self.sel_queueing)
+
+        # There may be other private fds on the rt so find one.
+        for fd in range(1, 100):
+            try:
+                rt.addInputFD(fd, lambda x: None)
+                break
+            except KeyError:
+                pass
+        else:
+            assert 0
+        self.assertRaises(KeyError, rt.addInputFD, fd, lambda x: None)
+
+        self.select_fd_error = (fd, select_error('error on %d' % fd))
+        log.info('Trigger select')
+        self.sel_queue.put(([], [], []))
+
+        # On next select call, the fd error will be triggered. retrythread
+        # will then attempt to determine which fd was the issue, will work
+        # out that it was fd by doing another select, and then
+        # move it to the dead queue.
+        WaitFor(lambda: self.sel_exceptions_raised == 2)
+        self.select_fd_error = None
+        WaitFor(lambda: self.sel_queueing)
+
+        # It should still be not possible to add the fd since it's still on the
+        # thread, just in the dead set.
+        self.assertRaises(KeyError, rt.addInputFD, fd, lambda x: None)
+
+        # We can now remove it.
+        rt.rmInputFD(fd)
+        self.assertRaises(KeyError, rt.rmInputFD, fd)

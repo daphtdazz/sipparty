@@ -49,4 +49,5 @@ class SipPartyLogger(logging.getLoggerClass()):
             return self.__do_nothing
         return self.__detail_up_call
 
+
 logging.setLoggerClass(SipPartyLogger)
