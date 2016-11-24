@@ -33,7 +33,7 @@ from ..transport import (
     SocketProxy, Transport, IPv6address_re,
     IPv6address_only_re)
 from ..util import WaitFor
-from .base import (MagicMock, Mock, patch, SIPPartyTestCase)
+from .base import (Mock, patch, SIPPartyTestCase)
 
 log = logging.getLogger(__name__)
 
@@ -335,7 +335,7 @@ class TestTransportErrors(SIPPartyTestCase):
                 for attr in (
                     'connect', 'bind', 'listen', 'accept', 'send',
                 ):
-                    setattr(self, attr, MagicMock())
+                    setattr(self, attr, Mock())
 
                 for attr in ('peer_name', 'sockname'):
                     setattr(self, attr, getattr(test_case, attr))
@@ -370,7 +370,7 @@ class TestTransportErrors(SIPPartyTestCase):
                 return self.recv(numbytes), self.getpeername()
 
         socket_patch = patch.object(
-            transport, 'socket_class', spec=type, new=SocketMock)
+            transport.base, 'socket_class', spec=type, new=SocketMock)
         socket_patch.start()
         self.addCleanup(socket_patch.stop)
 

@@ -31,11 +31,11 @@ from socket import (
     SHUT_RDWR, socket as socket_class, SOCK_STREAM, SOCK_DGRAM)
 import sys
 from weakref import WeakValueDictionary
-from .classmaker import classbuilder
-from .deepclass import (dck, DeepClass)
-from .fsm import (RetryThread)
-from .vb import ValueBinder
-from .util import (
+from ..classmaker import classbuilder
+from ..deepclass import (dck, DeepClass)
+from ..fsm import (RetryThread)
+from ..vb import ValueBinder
+from ..util import (
     abytes, AsciiBytesEnum, astr, bglobals_g, Enum,
     Singleton, Retainable,
     TupleRepresentable, TwoCompatibleThree, WeakMethod, WeakProperty)

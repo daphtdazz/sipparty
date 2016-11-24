@@ -35,7 +35,7 @@ class TestSIPTransport(AORHandler, SIPPartyTestCase):
         self.def_hname_mock = MagicMock()
         self.def_hname_mock.return_value = 'localhost'
         self.hostname_patch = patch.object(
-            transport, 'default_hostname', new=self.def_hname_mock)
+            transport.base, 'default_hostname', new=self.def_hname_mock)
         self.hostname_patch.start()
         self.consume_request = Mock()
         self.consume_response = Mock()
