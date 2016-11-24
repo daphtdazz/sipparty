@@ -209,6 +209,11 @@ class Dialog:
         if req.type == req.types.invite:
             self.addLocalSessionSDP(req)
 
+        # Prepare to send
+        req.unbindAll()
+        self._dlg_requests.append(req)
+        tp.updateDialogGrouping(self)
+
         trans = tp.send_message_with_transaction(
             req, self, remote_name=self.remote_name,
             remote_port=self.remote_port)
@@ -216,10 +221,6 @@ class Dialog:
             # learn the remote port. If we didn't specify one then this is
             # probably just the transport's DefaultPort
             self.remote_port = trans.remote_port
-
-        req.unbindAll()
-        self._dlg_requests.append(req)
-        tp.updateDialogGrouping(self)
 
     def send_response(self, response_code, req=None):
         log.debug("Send response type %r.", response_code)

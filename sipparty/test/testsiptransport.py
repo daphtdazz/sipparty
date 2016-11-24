@@ -24,7 +24,7 @@ from .. import (sip, transport)
 from ..sip.siptransport import AORHandler, SIPTransport
 from ..sip.transaction import TransactionUser
 from ..util import WaitFor
-from .base import (MagicMock, patch, SIPPartyTestCase)
+from .base import (MagicMock, Mock, patch, SIPPartyTestCase)
 
 log = logging.getLogger(__name__)
 
@@ -37,10 +37,10 @@ class TestSIPTransport(AORHandler, SIPPartyTestCase):
         self.hostname_patch = patch.object(
             transport, 'default_hostname', new=self.def_hname_mock)
         self.hostname_patch.start()
-        self.consume_request = MagicMock()
-        self.consume_response = MagicMock()
-        self.transport_error = MagicMock()
-        self.timeout = MagicMock()
+        self.consume_request = Mock()
+        self.consume_response = Mock()
+        self.transport_error = Mock()
+        self.timeout = Mock()
 
     def tearDown(self):
 

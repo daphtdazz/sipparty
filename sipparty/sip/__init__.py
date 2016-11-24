@@ -25,4 +25,4 @@ from .siptransport import SIPTransport
 from .dialog import (Dialog,)
 from .body import Body
 
-__all__ = [_name for _name in locals() if not _name.startswith('_')]
+__all__ = [_name for _name in dict(locals()) if not _name.startswith('_')]

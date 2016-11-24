@@ -26,10 +26,11 @@ import sys
 import unittest
 from ..fsm.retrythread import RetryThread
 from ..sip.siptransport import SIPTransport
+from ..util import Timeout
 if PY2:
-    from mock import (MagicMock, patch)  # noqa
+    from mock import (MagicMock, Mock, patch)  # noqa
 else:
-    from unittest.mock import (MagicMock, patch)  # noqa
+    from unittest.mock import (MagicMock, Mock, patch)  # noqa
 
 log = logging.getLogger(__name__)
 sipparty = sys.modules['sipparty']
@@ -78,15 +79,25 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
     def tearDown(self):
         self.popAllLogLevels()
 
-        if hasattr(super(SIPPartyTestCase, self), "tearDown"):
-            super(SIPPartyTestCase, self).tearDown()
+        getattr(super(SIPPartyTestCase, self), "tearDown", lambda: None)()
 
         RetryThread().cancel()
 
-        # Speed things up a bit by doing a gc collect.
-        gc.collect()
-        SIPTransport.wait_for_no_instances(timeout_s=2)
-        RetryThread.wait_for_no_instances(timeout_s=2)
+        exc = None
+        for ii in range(4):
+            log.debug('Doing GC collect')
+            gc.collect()
+            log.debug('Done GC collect')
+            try:
+                SIPTransport.wait_for_no_instances(timeout_s=0.1)
+                RetryThread.wait_for_no_instances(timeout_s=0.1)
+            except Timeout as ex:
+                exc = ex
+                continue
+            else:
+                break
+        else:
+            raise exc
 
     def pushLogLevelToSubMod(self, module, sub_module_name, level):
 

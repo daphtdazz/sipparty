@@ -21,9 +21,9 @@ from socket import SOCK_DGRAM
 from ..classmaker import classbuilder
 from ..parse import ParseError
 from ..transport import (
-    IsValidTransportName, Transport, SockTypeFromName,
+    IsValidTransportName, Transport, SocketOwner, SockTypeFromName,
     UnregisteredPortGenerator)
-from ..util import (abytes, DerivedProperty, WeakMethod)
+from ..util import (abytes, DerivedProperty)
 from . import prot
 from .components import AOR
 from .message import Message
@@ -47,7 +47,7 @@ class AORHandler(object):
         raise NotImplemented
 
 
-@classbuilder(bases=(Transport, TransactionTransport))
+@classbuilder(bases=(Transport, SocketOwner, TransactionTransport))
 class SIPTransport:
     """SIPTransport."""
 
@@ -95,8 +95,7 @@ class SIPTransport:
             if val not in kwargs or kwargs[val] is None:
                 kwargs[val] = default
         return super(
-            SIPTransport, self).listen_for_me(
-                WeakMethod(self, 'sipByteConsumer'), **kwargs)
+            SIPTransport, self).listen_for_me(self, **kwargs)
 
     #
     # =================== AOR MANAGER INTERFACE ===============================
@@ -209,11 +208,9 @@ class SIPTransport:
 
         sock_type = SockTypeFromName(msg.viaheader.transport)
 
-        sp = super(SIPTransport, self)
         sprxy = super(SIPTransport, self).get_send_from_address(
             sock_type=sock_type, remote_name=name,
-            remote_port=port,
-            data_callback=WeakMethod(self, 'sipByteConsumer'))
+            remote_port=port, owner=self)
 
         ch = msg.contactheader
         if not ch.address:
@@ -225,13 +222,14 @@ class SIPTransport:
         try:
             sprxy.send(bytes(msg))
         except Incomplete:
-            sp.release_listen_address(sprxy.local_address)
+            super(SIPTransport, self).release_listen_address(
+                sprxy.local_address)
             raise
 
         self.messages_sent += 1
         return sprxy.local_address
 
-    def sipByteConsumer(self, local_addr, remote_addr, data):
+    def consume_data(self, local_addr, remote_addr, data):
         log.debug(
             "SIPTransport attempting to consume %d bytes.", len(data))
 

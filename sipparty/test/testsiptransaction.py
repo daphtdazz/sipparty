@@ -38,6 +38,9 @@ log = logging.getLogger(__name__)
 class TransactionTest(SIPPartyTestCase):
 
     def setUp(self):
+
+        super(TransactionTest, self).setUp()
+
         self.retry = 0
         self.cleanup = 0
 
@@ -70,6 +73,7 @@ class TransactionTest(SIPPartyTestCase):
         self.addCleanup(pp.stop)
         pp = patch.object(retrythread, 'Clock', new=self.Clock)
         pp.start()
+        self.addCleanup(pp.stop)
 
 TransactionUser.register(TransactionTest)
 TransactionTransport.register(TransactionTest)

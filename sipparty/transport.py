@@ -18,24 +18,26 @@ limitations under the License.
 """
 from __future__ import absolute_import
 
+from abc import ABCMeta, abstractmethod
 from collections import Callable
 from copy import copy
 import logging
 from numbers import Integral
 import re
-from six import iteritems
+from six import iteritems, PY2
 from socket import (
     AF_INET, AF_INET6, error as socket_error, gaierror,
     getaddrinfo, gethostname,
     SHUT_RDWR, socket as socket_class, SOCK_STREAM, SOCK_DGRAM)
+import sys
 from weakref import WeakValueDictionary
 from .classmaker import classbuilder
 from .deepclass import (dck, DeepClass)
 from .fsm import (RetryThread)
 from .vb import ValueBinder
 from .util import (
-    abytes, AsciiBytesEnum, astr, bglobals_g,
-    DerivedProperty, Enum, Singleton, Retainable,
+    abytes, AsciiBytesEnum, astr, bglobals_g, Enum,
+    Singleton, Retainable,
     TupleRepresentable, TwoCompatibleThree, WeakMethod, WeakProperty)
 
 
@@ -46,7 +48,7 @@ SOCK_TYPES = Enum((SOCK_STREAM, SOCK_DGRAM))
 SOCK_TYPES_NAMES = AsciiBytesEnum((b"SOCK_STREAM", b"SOCK_DGRAM"))
 SOCK_TYPE_IP_NAMES = AsciiBytesEnum((b"TCP", b"UDP"))
 SOCK_FAMILIES = Enum((AF_INET, AF_INET6))
-SOCK_FAMILY_NAMES = AsciiBytesEnum((b"IPv4", b"IPv6"))
+SOCK_FAMILY_NAMES = Enum(("IPv4", "IPv6"))
 DEFAULT_SOCK_FAMILY = AF_INET
 log = logging.getLogger(__name__)
 prot_log = logging.getLogger(__name__ + ".messages")
@@ -515,7 +517,7 @@ class ListenDescription:
             self.__class__, self.sock_family, self.sock_type, self.port,
             self.name)
 
-    def listen(self, data_callback, transport):
+    def listen(self, transport, owner):
         """Return a SocketProxy using the ListenDescription's parameters, or
         raise an exception if not possible.
         """
@@ -528,7 +530,7 @@ class ListenDescription:
         log.info('New listen socket %s', laddr)
 
         return SocketProxy(
-            local_address=laddr, socket=lsck, data_callback=data_callback,
+            local_address=laddr, socket=lsck, owner=owner,
             transport=transport)
 
     def __str__(self):
@@ -573,7 +575,7 @@ class ConnectedAddressDescription(
         scid = self.scopeid or 0
         return (self.remote_name, self.remote_port, fi, scid)
 
-    def connect(self, data_callback, transport):
+    def connect(self, transport, owner):
         """Attempt to connect this description.
 
         :returns: a SocketProxy object
@@ -606,7 +608,7 @@ class ConnectedAddressDescription(
         log.info('New connected socket: %s', laddr)
 
         csck = SocketProxy(
-            local_address=laddr, socket=sck, data_callback=data_callback,
+            local_address=laddr, socket=sck, owner=owner,
             is_connected=True, transport=transport)
         return csck
 
@@ -625,6 +627,75 @@ class ConnectedAddressDescription(
         super(ConnectedAddressDescription, self).deduce_missing_values()
 
 
+@classbuilder(mc=ABCMeta)
+class SocketOwner:
+    """Abstract Base Class for classes wishing to own `SocketProxy`s."""
+
+    @abstractmethod
+    def consume_data(self, socket_proxy, remote_address, data):
+        """Consume / handle data received on the socket.
+
+        :param SocketProxy socket_proxy:
+            The socket on which data has been received.
+        :param tuple remote_address:
+            `socket` module style address tuple.
+
+            E.g. `('127.0.0.1', 12345)` for an IPv4 address.
+        :param bytes data:
+            The data that was received. No guarantee is given that this is a
+            complete packet or that it has a certain length or anything.
+        """
+        raise NotImplementedError(
+            'consume_data must be implemented by concrete subclasses of '
+            'SocketOwner')
+
+    def handle_closed_socket(self, socket_proxy):
+        """Optional: Handle a normal socket closure.
+
+        :param SocketProxy socket_proxy:
+            The socket proxy whose socket has closed.
+        """
+        log.info('%s %s socket %s has closed.' % (
+            SockFamilyName(socket_proxy.family),
+            SockTypeName(socket_proxy.type),
+            socket_proxy.getsockname()))
+
+    def handle_new_connected_socket(self, socket_proxy):
+        """Optional: Handle a new connected socket from a listen socket.
+
+        :param SocketProxy socket_proxy: The socket proxy for the new socket.
+        """
+        log.info('New %s %s socket at %s.',
+            SockFamilyName(socket_proxy.family),
+            SockTypeName(socket_proxy.type),
+            socket_proxy.getsockname())
+
+    def handle_nonterminal_socket_exception(self, socket_proxy, exception):
+        """Optional: Handle a non-terminal exception.
+
+        A non-terminal exception may be e.g. a "Connection Refused" message on
+        a UDP connection which may resolve without needing to close the socket,
+        since in that case we can just retry the socket without needing to
+        close it.
+        """
+        log.warning('Non-terminal exception on %s %s socket %s: %s' % (
+            SockFamilyName(socket_proxy.family),
+            SockTypeName(socket_proxy.type),
+            socket_proxy.getsockname(), exception))
+
+    def handle_terminal_socket_exception(self, socket_proxy, exception):
+        """Optional: Handle a terminal exception.
+
+        The transport co-owning the socket proxy will be told that the socket
+        has been closed on receipt of this message and close it, so this is
+        just for any other processing that the owner may wish to do.
+        """
+        log.error('Terminal Exception on %s %s socket %s: %s' % (
+            SockFamilyName(socket_proxy.family),
+            SockTypeName(socket_proxy.type),
+            socket_proxy.getsockname(), exception))
+
+
 class SocketProxy(
         DeepClass('_sck_', {
             'local_address': {dck.check: lambda x: isinstance(
@@ -632,7 +703,9 @@ class SocketProxy(
             'socket': {
                 dck.check: lambda x:
                     isinstance(x, socket_class) or hasattr(x, 'socket')},
-            'data_callback': {dck.check: lambda x: isinstance(x, Callable)},
+            'owner': {
+                dck.descriptor: WeakProperty,
+                dck.check: lambda x: isinstance(x, SocketOwner)},
             'is_connected': {dck.gen: lambda: False},
             'transport': {dck.descriptor: WeakProperty},
             'connected_sockets': {dck.gen: WeakValueDictionary}
@@ -640,6 +713,17 @@ class SocketProxy(
 
     socket_proxies = []
     socket_info = {}
+
+    @property
+    def family(self):
+        return self.socket.family
+
+    @property
+    def type(self):
+        return self.socket.type
+
+    def getsockname(self):
+        return self.socket.getsockname()
 
     def send(self, data):
 
@@ -713,52 +797,91 @@ class SocketProxy(
 
     def _readable_socket_selected(self):
 
-        sname = self.socket.getsockname()
-        log.debug('recvfrom %r local:%r', self.socket.type, sname)
-        data, addr = self.socket.recvfrom(4096)
-        if len(data) > 0:
-            prot_log.info(
-                " received %r -> %r\n<<<<<\n%s\n<<<<<", addr, sname,
-                Transport.FormatBytesForLogging(data))
+        sname = self.getsockname()
 
-        if not self.is_connected:
-            lad = self.local_address
-            if is_null_address(lad.name):
-                tsck = socket_class(lad.sock_family, lad.sock_type)
-                tsck.connect(addr)
-                lname = tsck.getsockname()
-                tsck.close()
-            else:
-                lname = lad.sockname_tuple
-            log.debug('Use local address %s', lname)
+        owner = self.owner
+        if owner is None:
+            log.warning('No owner for %r' % (self,))
+            return
 
-            csp = self.connected_sockets.get((lname[0], addr))
-            if csp is None:
-                log.debug('First receipt of data on this listen socket')
-                # Therefore need to create a new 'connected' socket proxy that
-                # uses our socket to send on.
-                tp = self.transport
-                if tp is not None:
-                    desc = self.local_address
-                    cad = ConnectedAddressDescription(
-                        sock_family=desc.sock_family, sock_type=desc.sock_type,
-                        name=lname[0], port=desc.port,
-                        remote_name=addr[0], remote_port=addr[1])
-                    csp = SocketProxy(
-                        local_address=cad, socket=self, is_connected=True,
-                        transport=tp)
-                    log.info(
-                        'New connected socket proxy using UDP listen socket: '
-                        '%s' % (cad,))
-                    tp.add_connected_socket_proxy(csp)
-                    self.connected_sockets[(lname[0], addr)] = csp
+        log.debug(
+            '%s.recvfrom %s local:%r', type(self.socket).__name__,
+            SockTypeName(self.socket.type), sname)
+        try:
+            data, addr = self.socket.recvfrom(4096)
+        except socket_error as exc:
+            log.debug('Exception %s receiving data', exc)
+            owner.handle_terminal_socket_exception(self, exc)
+            if PY2:
+                sys.exc_clear()
+            return
 
-        dc = self.data_callback
-        if dc is None:
-            raise NotImplementedError('No data callback specified.')
+        tp = self.transport
+        if tp is None:
+            log.warning('No transport for %r' % (self,))
+            return
 
-        log.debug('Passing data to callback %r', dc)
-        dc(self, addr, data)
+        if len(data) == 0:
+            log.debug('Socket is closed')
+            owner.handle_closed_socket(self)
+            tp.release_listen_address(self.local_address)
+            return
+
+        prot_log.info(
+            " received %r -> %r\n<<<<<\n%s\n<<<<<", addr, sname,
+            Transport.FormatBytesForLogging(data))
+
+        if self.is_connected:
+            log.debug('Passing connected socket data to owner %r', owner)
+            owner.consume_data(self, addr, data)
+            return
+
+        # Receiving data on non-connected socket can happen to UDP listen
+        # sockets, which aren't bound to a remote address.
+        lad = self.local_address
+        if is_null_address(lad.name):
+            # if we're listening on a null address, then we need to fix the
+            # address we actually received on. This is quite quick (since a
+            # connect on UDP is not really a connect), but it's not an
+            # ideal solution (as will probably generate some control
+            # packets at least), but this is optimized for flexibility /
+            # ease of use so worth it. If you don't want this, don't use
+            # null addresses to listen on!
+            log.debug('null listen address, convert to reachable')
+            tsck = socket_class(lad.sock_family, lad.sock_type)
+            tsck.connect(addr)
+            lname = tsck.getsockname()[0]
+            tsck.close()
+        else:
+            lname = lad.sockname_tuple[0]
+        log.debug('Use local address %s', lname)
+
+        csp = self.connected_sockets.get((lname, addr))
+        if csp is not None:
+            log.debug('Passing connected socket data to owner')
+            owner.consume_data(csp, addr, data)
+            return
+
+        log.debug('First receipt of data on this listen socket')
+        # Therefore need to create a new 'connected' socket proxy that
+        # uses our socket to send on.
+
+        desc = self.local_address
+        cad = ConnectedAddressDescription(
+            sock_family=desc.sock_family, sock_type=desc.sock_type,
+            name=lname, port=desc.port,
+            remote_name=addr[0], remote_port=addr[1])
+        csp = SocketProxy(
+            local_address=cad, socket=self, is_connected=True,
+            transport=tp)
+        log.info(
+            'New connected socket proxy using UDP listen socket: '
+            '%s' % (cad,))
+        self.connected_sockets[(lname, addr)] = csp
+        owner.handle_new_connected_socket(csp)
+        tp.add_connected_socket_proxy(csp)
+        owner.consume_data(csp, addr, data)
+        log.debug('_readable_socket_selected done')
 
 
 class Transport(Singleton):
@@ -779,8 +902,6 @@ class Transport(Singleton):
     #
     # =================== INSTANCE INTERFACE ==================================
     #
-    byteConsumer = DerivedProperty("_tp_byteConsumer")
-
     @property
     def connected_socket_count(self):
         return self._tp_count_vals_in_dict(self._tp_connected_sockets)
@@ -798,7 +919,6 @@ class Transport(Singleton):
     def __init__(self):
         log.info('%s.__init__()', type(self).__name__)
         super(Transport, self).__init__()
-        self._tp_byteConsumer = None
         self._tp_retryThread = RetryThread()
 
         # Series of dictionaries keyed by (in order):
@@ -809,14 +929,10 @@ class Transport(Singleton):
         self._tp_listen_sockets = {}
         self._tp_connected_sockets = {}
 
-    def listen_for_me(self, callback, sock_type=None, sock_family=None,
+    def listen_for_me(self, owner, sock_type=None, sock_family=None,
                       name=NameAll, port=0, port_filter=None, flowinfo=None,
                       scopeid=None, listen_description=None,
                       reuse_socket=True):
-
-        if not isinstance(callback, Callable):
-            raise TypeError(
-                '\'callback\' parameter %r is not a Callable' % callback)
 
         if listen_description is None:
             sock_family = self.fix_sock_family(sock_family)
@@ -846,7 +962,7 @@ class Transport(Singleton):
                 'All sockets matcing Description %s are already in use.' % (
                     provisional_laddr))
 
-        lsck = self.create_listen_socket(provisional_laddr, callback)
+        lsck = self.create_listen_socket(provisional_laddr, owner)
         return lsck.local_address
 
     # connect
@@ -854,7 +970,7 @@ class Transport(Singleton):
             self, sock_type=None, sock_family=None,
             name=SendFromAddressNameAny, port=0, flowinfo=None, scopeid=None,
             remote_name=None, remote_port=None, port_filter=None,
-            data_callback=None,
+            owner=None,
             from_description=None, to_description=None):
         """Get a SocketProxy to send data on.
 
@@ -887,14 +1003,7 @@ class Transport(Singleton):
                 transport.get_send_from_address(
                     port_filter=lambda p: p % 2 == 0,
                     ...)
-        :param Callable data_callback:
-            The callback to call when data is received on the socket. Takes one
-            argument, the data received, which takes three arguments:
-
-            1.  The `SocketProxy` that received the data.
-            2.  The address and port from which the data was received in
-                `socket` tuple form, e.g. `('127.0.0.1', 12345)`.
-            3.  The data itself, as a `bytes` object.
+        :param SocketOwner owner: The owner of the socket.
 
         :returns: SocketProxy instance.
         """
@@ -917,16 +1026,12 @@ class Transport(Singleton):
             create_kwargs['sock_family'])
         cad = ConnectedAddressDescription(**create_kwargs)
 
-        if (data_callback is not None and
-                not isinstance(data_callback, Callable)):
-            raise TypeError('data_callback must be a callback (was %r)' % (
-                data_callback,))
-        fsck = self.find_or_create_send_from_socket(cad, data_callback)
+        fsck = self.find_or_create_send_from_socket(cad, owner)
 
         return fsck
 
-    def create_listen_socket(self, local_address, callback):
-        lsck = local_address.listen(callback, self)
+    def create_listen_socket(self, local_address, owner):
+        lsck = local_address.listen(self, owner)
         self.add_listen_socket_proxy(lsck)
         return lsck
 
@@ -938,19 +1043,20 @@ class Transport(Singleton):
             sck.retain()
         return path, sck
 
-    def find_or_create_send_from_socket(self, cad, data_callback=None):
+    def find_or_create_send_from_socket(self, cad, owner=None):
 
         path, sck = self.find_send_from_socket(cad)
         if sck is not None:
             log.debug('Found existing send from socket')
             return sck
 
-        sck = cad.connect(data_callback, self)
+        sck = cad.connect(self, owner)
 
         self.add_connected_socket_proxy(sck, path=path)
         return sck
 
     def add_connected_socket_proxy(self, socket_proxy, *args, **kwargs):
+        log.debug('Adding connected socket proxy %s', socket_proxy)
         tpl = self.convert_connected_address_description_into_find_tuple(
             socket_proxy.local_address)
         self._add_socket_proxy(
@@ -1012,7 +1118,7 @@ class Transport(Singleton):
         path, lsck = self.find_cached_object(root_dict, ftup)
         if lsck is None:
             raise KeyError(
-                '%r was not a known ListenDescription.' % (description))
+                '%r was not a known ListenDescription.' % (description,))
 
         lsck.release()
         if not lsck.is_retained:
@@ -1061,8 +1167,9 @@ class Transport(Singleton):
                 socket_proxy.socket,
                 WeakMethod(socket_proxy, 'socket_selected'))
         socket_proxy.retain()
-        keys = [obj[0] for obj in find_tuple[len(path):]]
-        log.detail('_add_socket_proxy keys: %r', keys)
+        full_keys_path = [obj[0] for obj in find_tuple]
+        keys = full_keys_path[len(path):]
+        log.debug('Add new socket proxy at path: %r', keys)
 
         sub_root = path[-1][1] if len(path) > 0 else root_dict
         self.insert_cached_object(
@@ -1184,8 +1291,7 @@ class Transport(Singleton):
 
     @classmethod
     def yield_vals(cls, root_dict, path_so_far=None):
-        """Yields all vals in the dictionary passed in with the
-        """
+        """Yield all vals in the dictionary passed in with the path to them."""
         if path_so_far is None:
             path_so_far = []
 

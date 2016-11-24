@@ -32,6 +32,9 @@ default_logging_config = {
     },
     'handlers': {
         'console': {
+            # NB: for performance global debug logs are disabled by default
+            # in sipparty.logging, so you will need to enable them there as
+            # well if you want to turn this up.
             'level': 'WARNING',
             'formatter': 'console',
             'class': 'logging.StreamHandler',

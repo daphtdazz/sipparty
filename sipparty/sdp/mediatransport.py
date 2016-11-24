@@ -27,7 +27,6 @@ class MediaTransport(Transport):
 
     def __init__(self):
         super(MediaTransport, self).__init__()
-        self.byteConsumer = WeakMethod(self, "mediaByteConsumer")
 
     def mediaByteConsumer(self, lAddr, rAddr):
         pass

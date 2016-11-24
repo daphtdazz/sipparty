@@ -92,7 +92,7 @@ class TestDialog(AORHandler, SIPPartyTestCase):
 
             dl.initiate(remote_name=ld.name, remote_port=ld.port)
             dl.waitForStateCondition(
-                lambda st: st == dl.States.SentInvite)
+                lambda st: st == dl.States.InDialog)
             WaitFor(lambda: len(tp.establishedDialogs) == 2)
 
             log.info('wait for in dialog')

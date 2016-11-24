@@ -101,4 +101,4 @@ from .fsm import (
 from .retrythread import RetryThread
 from .fsmtimer import Timer
 
-__all__ = [name for name in locals()]
+__all__ = [name for name in dict(locals())]
