@@ -179,13 +179,28 @@ class SingletonSubclass1(Singleton, metaclass=SingletonType):
         # gradually get higher and higher.
         self.assertEqual(CCPTest1.CPList, [1, 2, 4, 5, 3])
 
+    def test_single_cumulative_prop(self):
+
+        log.info(
+            'Check we can create a class with cumulative properties metaclass '
+            'with just one property specified, as a string')
+
+        @add_metaclass(CCPropsFor("CPs"))
+        class CCPTestA(object):
+            CPs = Enum((1, 2))
+
+        class CCPTestB(CCPTestA):
+            CPs = Enum((4, 5))
+
+        self.assertEqual(CCPTestB.CPs, Enum((1, 2, 4, 5)))
+
     def testClassOrInstance(self):
 
         class MyClass(object):
 
             @class_or_instance_method
-            def AddProperty(cls_or_self, prop, val):
-                setattr(cls_or_self, prop, val)
+            def AddProperty(self, prop, val):
+                setattr(self, prop, val)
 
         inst = MyClass()
         MyClass.AddProperty("a", 1)

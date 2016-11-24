@@ -460,6 +460,9 @@ def CCPropsFor(props):
     classes in subclasses.
     """
 
+    if isinstance(props, str):
+        props = (props,)
+
     class CumulativeClassProperties(type):
         def __new__(cls, name, bases, class_dict):
             """Initializes the class dictionary, so that all the properties in
