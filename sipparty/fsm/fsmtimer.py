@@ -99,11 +99,12 @@ class Timer(object):
         self._tmr_setNextPopTime(start_time=now)
         self._tmr_startTime = now
 
-        log.debug("Start timer %s at clock %s.", self._tmr_name, now)
+        log.info("Start timer %s at clock %s.", self._tmr_name, now)
 
     @OnlyWhenLocked
     def stop(self):
         """Stop the timer."""
+        log.info('Stop timer %s', self._tmr_name)
         self.__stop()
 
     def check(self, exception_if_not_running=True):
@@ -153,7 +154,7 @@ class Timer(object):
 
     def _tmr_pop(self):
         """Pop this timer, calling the action."""
-        log.debug("POP, action %r", self._tmr_action)
+        log.info("Pop timer %s, action %r", self.name, self._tmr_action)
         act = getattr(self, '_tmr_action', None)
         if act is None:
             return None

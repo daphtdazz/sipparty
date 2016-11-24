@@ -238,6 +238,40 @@ class TestFSM(TestFSMBase):
             nf.checkTimers()
             self.assertEqual(self.cleanup, cleanup)
 
+    def test_timer_order(self):
+        nf = FSM(name="TestTimerOrderFSM")
+
+        def pop1_func():
+            self.last_method = 'pop1_func'
+
+        def pop2_func():
+            self.last_method = 'pop2_func'
+
+        nf.addTimer("retry1", pop1_func, [1])
+        nf.addTimer("retry2", pop2_func, [1])
+        nf.addTransition("Initial", "step", "step1",
+                         start_timers=['retry1', 'retry2'])
+        nf.addTransition("step1", "step", "step2",
+                         stop_timers=['retry1', 'retry2'])
+        # Order of timers is reversed.
+        nf.addTransition("step2", "step", "step3",
+                         start_timers=['retry2', 'retry1'])
+        nf.addTransition("step3", "step", "finished",
+                         stop_timers=['retry1', 'retry2'])
+
+        self.last_method = None
+        nf.hit('step')
+        self.clock_time = 1
+        nf.checkTimers()
+        self.assertEqual(self.last_method, 'pop2_func')
+
+        nf.hit('step')
+        self.last_method = None
+        nf.hit('step')
+        self.clock_time = 2
+        nf.checkTimers()
+        self.assertEqual(self.last_method, 'pop1_func')
+
     def test_action_hit_exception(self):
 
         fsm = type('ActionHitTestFSM', (FSM,), {
