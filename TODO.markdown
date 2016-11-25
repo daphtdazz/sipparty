@@ -12,17 +12,6 @@
 
 ## Big List ##
 
-1. better handling exceptions
-    a. SocketProxies have an "owner" and a "transport"
-        i. transport
-            - release_listen_address  # info
-            - add_connected_socket_proxy
-        ii. 
-            - consume_data
-            - handle_nonterminal_socket_exception  # Optional
-            - handle_terminal_socket_exception  # Optional
-            - handle_closed_socket  # Optional
-            - handle_new_connected_socket  # Optional
 2. REGISTER dialogues.
 4. TCP support.
 5. Move "Programming guides" into a section of the documentation.
@@ -49,6 +38,20 @@
 30. Use bridge pattern to make FSM more lightweight and allow asynchronous flexibility
 
 ## Done list. ##
+
+### November 2016
+
+1. better handling exceptions
+    a. SocketProxies have an "owner" and a "transport"
+        i. transport
+            - release_listen_address  # info
+            - add_connected_socket_proxy
+        ii. 
+            - consume_data
+            - handle_nonterminal_socket_exception  # Optional
+            - handle_terminal_socket_exception  # Optional
+            - handle_closed_socket  # Optional
+            - handle_new_connected_socket  # Optional
 
 ### September 2016
 
