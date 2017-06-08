@@ -20,7 +20,6 @@ from __future__ import absolute_import
 
 import logging
 
-from ..fsm import retrythread
 from ..sip.header import CseqHeader, ViaHeader
 from ..sip.message import Message, MessageResponse
 from ..sip.transaction import (
@@ -29,7 +28,7 @@ from ..sip.transaction.client import NonInviteClientTransaction
 from ..sip.transaction.server import (
     InviteServerTransaction, OneShotServerTransaction)
 from ..util import WaitFor
-from .base import (MagicMock, patch, SIPPartyTestCase)
+from .base import (MagicMock, SIPPartyTestCase)
 
 log = logging.getLogger(__name__)
 

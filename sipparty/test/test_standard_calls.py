@@ -23,7 +23,6 @@ import os
 import threading
 from timeit import default_timer
 
-from ..fsm.retrythread import RetryThread
 from ..parse import Parser
 from ..parties import NoMediaSimpleCallsParty
 from ..sip.siptransport import SIPTransport
