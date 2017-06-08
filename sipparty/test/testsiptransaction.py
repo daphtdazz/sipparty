@@ -47,15 +47,7 @@ class TransactionTest(SIPPartyTestCase):
         self.msgs_sent = []
         self.msg_tu_datas = []
 
-        def retry_thread_select(in_, out, error, wait):
-            assert wait >= 0
-
-            return [], [], []
-
-        select_patch = patch.object(
-            retrythread, 'select', new=retry_thread_select)
-        select_patch.start()
-        self.addCleanup(select_patch.stop)
+        self.patch_retrythread_select()
 
         # TU interface
         self.consume_request = MagicMock()

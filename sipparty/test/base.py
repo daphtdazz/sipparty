@@ -88,6 +88,18 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
         self.clock_time = 0
         self.addCleanup(setattr, self, 'clock_time', 0)
 
+    def patch_retrythread_select(self):
+
+        def retry_thread_select(in_, out, error, wait):
+            assert wait is None or wait >= 0
+
+            return [], [], []
+
+        select_patch = patch.object(
+            retrythread, 'select', new=retry_thread_select)
+        select_patch.start()
+        self.addCleanup(select_patch.stop)
+
     def patch_socket(self):
         SocketMock.test_case = self
         self.addCleanup(setattr, SocketMock, 'test_case', None)
@@ -100,8 +112,6 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
         self.popAllLogLevels()
 
         getattr(super(SIPPartyTestCase, self), "tearDown", lambda: None)()
-
-        RetryThread().cancel()
 
         exc = None
         for ii in range(4):

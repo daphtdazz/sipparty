@@ -35,7 +35,7 @@ from .base import SIPPartyTestCase
 log = logging.getLogger(__name__)
 
 
-class TestDialogDelegate:
+class TDialogDelegate:
 
     def __init__(self):
         self.invite_count = 0
@@ -57,7 +57,7 @@ class TestStandardDialog(SIPPartyTestCase):
         tp = SIPTransport()
         assert tp.connected_socket_count == 0
         assert tp.listen_socket_count == 0
-        dd = TestDialogDelegate()
+        dd = TDialogDelegate()
 
         p1, p2 = [
             NoMediaSimpleCallsParty(dialog_delegate=dd) for ii in range(2)]
@@ -86,22 +86,11 @@ class TestStandardDialog(SIPPartyTestCase):
         self.assertEqual(ctrns.retransmit_count, 1)
 
     def test_multiple_calls(self):
-        self.subtest_multiple_calls(auto_start=True)
-
-    def test_multiple_calls_single_thread(self):
-        self.subtest_multiple_calls(auto_start=False)
-
-    def subtest_multiple_calls(self, auto_start):
         Parser.PROFILE = True
         self.addCleanup(
             lambda:
                 log.info(Parser.stats_summary()) and
                 setattr(Parser, 'PROFILE', False))
-        orig_auto_start = RetryThread.auto_start
-        RetryThread.auto_start = auto_start
-        self.addCleanup(
-            lambda: setattr(RetryThread, 'auto_start', orig_auto_start))
-        rt_thr = RetryThread()
 
         start = default_timer()
         log.info('Create parties which will listen')
@@ -129,10 +118,6 @@ class TestStandardDialog(SIPPartyTestCase):
         dlgs = list(
             cl.invite(cle) for cl, cle in zip(send_parties, parties))
 
-        if not auto_start:
-            for ii in range(200):
-                rt_thr.single_pass(wait=0)
-
         for dlg in dlgs:
             dlg.waitForStateCondition(lambda st: st == dlg.States.InDialog)
 
@@ -141,10 +126,6 @@ class TestStandardDialog(SIPPartyTestCase):
         log.info('Terminate dialogs')
         for dlg in dlgs:
             dlg.terminate()
-
-        if not auto_start:
-            for ii in range(200):
-                rt_thr.single_pass(wait=0)
 
         for dlg in dlgs:
             dlg.waitForStateCondition(lambda st: st == dlg.States.Terminated)

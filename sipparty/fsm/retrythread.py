@@ -37,9 +37,14 @@ from six import PY2
 from socket import (error as socket_error, socketpair)
 import sys
 import threading
+from weakref import ref
 from ..util import (Clock, OnlyWhenLocked, Singleton)
 
 log = logging.getLogger(__name__)
+
+
+class OwnerFreedException(RuntimeError):
+    pass
 
 
 class _FDSource(object):
@@ -74,7 +79,7 @@ class _FDSource(object):
                 raise
 
             self._fds_exceptionCount += 1
-            log.exception(
+            log.warning(
                 "%s exception (%d%s) processing new data for selectable %r "
                 "(fd %d): %s",
                 type(exc).__name__,
@@ -91,13 +96,12 @@ class _FDSource(object):
             type(self).__name__, self._fds_selectable, self._fds_action)
 
 
-class RetryThread(Singleton, threading.Thread):
+class RetryThread(Singleton):
 
-    auto_start = True
+    def __init__(self, name=None, **kwargs):
+        """Initialize a new RetryThread.
 
-    def __init__(self, master_thread=None, auto_start=None,
-                 **kwargs):
-        """Callers must be careful that they do not hold references to the
+        Callers must be careful that they do not hold references to the
         thread and pass in actions that hold references to themselves, which
         leads to a retain deadlock (each hold the other so neither are ever
         freed).
@@ -114,23 +118,25 @@ class RetryThread(Singleton, threading.Thread):
         weak reference in Action.
         """
         super(RetryThread, self).__init__(**kwargs)
+
+        if not name:
+            num = getattr(type(self), '_retrythread_count', 0)
+            name = '%s-%d' % (type(self).__name__, 0)
+            type(self)._retrythread_count = num + 1
+        self.name = name
+
         log.info("INIT %s instance name %s", type(self).__name__, self.name)
-        self._rthr_cancelled = False
         self._rthr_retryTimes = []
         self._rthr_nextTimesLock = threading.Lock()
-        self._rthr_noWorkWait = 0.01
-        self._rthr_noWorkSequence = 0
-        self.__no_data_count = 0
-        self.__stop_spam_after_no_data_count = 5
-        self.__next_wait = self._rthr_noWorkWait
+        self._rthr_next_wait = None
         self.__actions = []
 
         self._rthr_fdSources = {}
         self._rthr_dead_fds = set()
 
-        if master_thread is None:
-            master_thread = threading.currentThread()
-        self._rthr_masterThread = master_thread
+        self._rthr_cancelled = False
+        self._rthr_thread = None
+        self._rthr_cancelled_thread = None
 
         # Initialize support for util.OnlyWhenLocked
         self._lock = threading.RLock()
@@ -141,117 +147,6 @@ class RetryThread(Singleton, threading.Thread):
         self.addInputFD(
             self._rthr_trigger_run_read_fd,
             lambda selectable: selectable.recv(1))
-
-        # Because this is a singleton clients that don't care whether they get
-        # a fresh version shouldn't need to worry about starting the thread,
-        # so start by default.
-        if auto_start or (auto_start is None and self.auto_start):
-            self.start()
-
-    def run(self):
-        """Run until cancelled.
-
-        Note that because this method runs until cancelled, it holds a
-        reference to self, and so self cannot be garbage collected until self
-        has been cancelled. Therefore along with the note about retain
-        deadlocks in `__init__` callers would do well to call `cancel` in the
-        owner's `__del__` method.
-        """
-        while self._rthr_shouldKeepRunning():
-            self.__rl_log(
-                "%s not cancelled, next retry times: %r, wait: %f. "
-                "Master thread is alive: %r.",
-                self, self._rthr_retryTimes, self.__next_wait,
-                self._rthr_masterThread.isAlive())
-
-            self.single_pass()
-
-        self.rmInputFD(self._rthr_trigger_run_read_fd)
-        log.info("EXIT %s.", self)
-
-    def single_pass(self, wait=None):
-        rsrcs = dict(self._rthr_fdSources)
-        rsrckeys = rsrcs.keys()
-
-        next_wait = wait if wait is not None else self.__next_wait
-        try:
-            self.__rl_log(
-                "%s select %r from %r wait %r.", self, select, rsrckeys,
-                next_wait)
-            rfds, wfds, efds = select(
-                rsrckeys, [], rsrckeys, next_wait)
-        except select_error as exc:
-            # One of the FDs is bad... work out which one and tidy up.
-            self.__rl_log(
-                "%s one of %r is a bad file descriptor: %r", self, rsrckeys,
-                exc)
-            for rk in rsrckeys:
-                try:
-                    self.__rl_log('Test fd %d', rk)
-                    select([rk], [], [rk], 0)
-                except select_error:
-                    log.warning('Removing dead file descriptor %d', rk)
-                    self._mark_input_fd_dead(rk)
-
-            self.__no_data_count += 1
-
-            # Exceptions hold onto information about the stack,
-            # which means holding onto some of the objects on the
-            # stack. However we don't want that to happen or else
-            # resource tidy-up won't happen correctly which means we
-            # may never get cancelled (if the cancel is in the __del__
-            # of one of the objects on the exception stack).
-            #
-            # Python 3 does this for us, thank you Python 3!
-            if PY2:
-                sys.exc_clear()
-            return
-
-        if len(rfds) == 0:
-            self.__rl_log('no data available')
-            self.__no_data_count += 1
-        else:
-            self.__no_data_count = 0
-            log.debug("%s process %r, %r, %r", self, rfds, wfds, efds)
-            self._rthr_processSelectedReadFDs(rfds, rsrcs)
-
-        # Check timers.
-        self.__rl_log("%s check timers", self)
-        with self._rthr_nextTimesLock:
-            numrts = len(self._rthr_retryTimes)
-            if numrts == 0:
-                # Initial no work wait is small, but do exponential
-                # backoff until the wait is over 10 seconds.
-                if self.__next_wait < 10:
-                    self.__next_wait = (
-                        self._rthr_noWorkWait *
-                        pow(2, self._rthr_noWorkSequence))
-                self._rthr_noWorkSequence += 1
-                return
-
-            next = self._rthr_retryTimes[0]
-            now = Clock()
-
-            if next > now:
-                self.__next_wait = next - now
-                self.__rl_log(
-                    "%s next try in %r seconds", self, self.__next_wait)
-                return
-
-            del self._rthr_retryTimes[0]
-
-        # We have some work to do.
-        log.debug("%s retrying as next %r <= now %r", self, next, now)
-        for action in self.__actions:
-            try:
-                action()
-            except Exception:
-                log.exception(
-                    "%s exception doing action %r:", self, action)
-
-        # Immediately respin since we haven't checked the next timer yet.
-        self.__next_wait = 0
-        self._rthr_noWorkSequence = 0
 
     @OnlyWhenLocked
     def addInputFD(self, fd, action):
@@ -266,6 +161,7 @@ class RetryThread(Singleton, threading.Thread):
                 "Duplicate FD source %r added to thread." % newinput)
 
         self._rthr_fdSources[newfd] = newinput
+        self._rthr_maybe_create()
         self._rthr_triggerSpin()
 
     @OnlyWhenLocked
@@ -280,6 +176,7 @@ class RetryThread(Singleton, threading.Thread):
             raise KeyError(
                 "FD %r cannot be removed as it is not on the thread." % fd)
 
+        self._rthr_maybe_cancel()
         self._rthr_triggerSpin()
 
     def add_action(self, action):
@@ -308,11 +205,7 @@ class RetryThread(Singleton, threading.Thread):
             self._rthr_retryTimes = new_rts
             log.debug("Retry times: %r", self._rthr_retryTimes)
 
-        self._rthr_triggerSpin()
-
-    def cancel(self):
-        log.info("CANCEL %s %s", type(self).__name__, self.name)
-        self._rthr_cancelled = True
+        self._rthr_maybe_create()
         self._rthr_triggerSpin()
 
     #
@@ -320,18 +213,182 @@ class RetryThread(Singleton, threading.Thread):
     #
     def __del__(self):
         log.info('DELETE %s instance: %s', type(self).__name__, self.name)
-        self._rthr_trigger_run_read_fd.close()
+
+        self._rthr_cancelled = True
+        self._rthr_triggerSpin()
+
+        # self._rthr_trigger_run_read_fd.close()
         self._rthr_triggerRunFD.close()
+        try:
+            self._rthr_trigger_run_read_fd.close()
+        except Exception as exc:
+            log.debug(
+                'Exception attempting to join thread in __del__: %s',
+                exc
+            )
         getattr(super(RetryThread, self), '__del__', lambda: None)()
 
     #
     # =================== INTERNAL METHODS ====================================
     #
+    @staticmethod
+    def _rthr_raise_no_self():
+        raise OwnerFreedException('Owner of thread "%s" freed.' % (
+            threading.current_thread().name,)
+        )
+
+    @staticmethod
+    def _rthr_weak_run(weak_self):
+        thr_name = threading.current_thread().name
+        try:
+            while RetryThread._rthr_weak_single(weak_self):
+                pass
+        except OwnerFreedException:
+            log.debug(
+                'Owner of thread "%s" released without tidying thread.',
+                thr_name
+            )
+        except Exception:
+            log.exception('Exception causing thread %s to crash', thr_name)
+        log.info('STOP thread "%s"', thr_name)
+
+    @staticmethod
+    def _rthr_get_fd_sources_and_next_wait(weak_self):
+        self = weak_self()
+        if self is None:
+            RetryThread._rthr_raise_no_self()
+        return dict(self._rthr_fdSources), self._rthr_next_wait
+
+    @staticmethod
+    def _rthr_weak_single(weak_self):
+        """Run a single pass of the retrythread, passed by weak reference.
+
+        Return whether to retry or not.
+        """
+
+        rsrcs, next_wait = RetryThread._rthr_get_fd_sources_and_next_wait(
+            weak_self
+        )
+        rsrckeys = rsrcs.keys()
+        thr_name = threading.current_thread().name
+        self = None
+
+        try:
+            log.debug(
+                "thread %s select %r from %r wait %r.",
+                thr_name, select, rsrckeys,
+                next_wait)
+            rfds, wfds, efds = select(
+                rsrckeys, [], rsrckeys, next_wait)
+        except select_error as exc:
+            # One of the FDs is bad... work out which one and tidy up.
+            log.debug(
+                "thread %s one of %r is a bad file descriptor: %r", thr_name,
+                rsrckeys, exc)
+            self = weak_self()
+            if self is None:
+                RetryThread._rthr_raise_no_self()
+
+            for rk in rsrckeys:
+                try:
+                    log.debug('Test fd %d', rk)
+                    select([rk], [], [rk], 0)
+                except select_error:
+                    log.warning('Removing dead file descriptor %d', rk)
+                    self._mark_input_fd_dead(rk)
+
+            # Exceptions hold onto information about the stack,
+            # which means holding onto some of the objects on the
+            # stack. However we don't want that to happen or else
+            # resource tidy-up won't happen correctly which means we
+            # may never get cancelled (if the cancel is in the __del__
+            # of one of the objects on the exception stack).
+            #
+            # Python 3 does this for us, thank you Python 3!
+            if PY2:
+                sys.exc_clear()
+            return not self._rthr_cancelled
+
+        self = weak_self()
+        if self is None:
+            RetryThread._rthr_raise_no_self()
+
+        if len(rfds) > 0:
+            log.debug("%s process %r, %r, %r", self, rfds, wfds, efds)
+            self._rthr_processSelectedReadFDs(rfds, rsrcs)
+
+        # Check timers.
+        log.debug("%s check timers", self)
+        with self._rthr_nextTimesLock:
+            numrts = len(self._rthr_retryTimes)
+            if numrts == 0:
+                self._rthr_next_wait = None
+                log.debug('no scheduled wake-up time')
+                return not self._rthr_cancelled
+
+            next = self._rthr_retryTimes[0]
+            now = Clock()
+
+            if next > now:
+                self._rthr_next_wait = next - now
+                log.debug(
+                    "%s next try in %r seconds", self, self._rthr_next_wait)
+                return not self._rthr_cancelled
+
+            del self._rthr_retryTimes[0]
+
+        # We have some work to do.
+        log.debug("%s retrying as next %r <= now %r", self, next, now)
+        for action in self.__actions:
+            try:
+                action()
+            except Exception:
+                log.exception(
+                    "%s exception doing action %r:", self, action)
+
+        # Immediately respin since we haven't checked the next timer yet.
+        self._rthr_next_wait = 0
+        return not self._rthr_cancelled
+
     @OnlyWhenLocked
     def _mark_input_fd_dead(self, fd):
         was_still_in_sources = self._rthr_fdSources.pop(fd, None)
         if was_still_in_sources:
             self._rthr_dead_fds.add(fd)
+
+    # The following maybes should only be called with the lock.
+    def _rthr_maybe_create(self):
+        if self._rthr_cancelled_thread is not None:
+            log.info('JOIN thread "%s"', self._rthr_cancelled_thread.name)
+            self._rthr_cancelled_thread.join()
+            self._rthr_cancelled_thread = None
+            self._rthr_cancelled = False
+
+        if self._rthr_thread is None and self._rthr_outstanding_work:
+            self._rthr_begin_thread()
+
+    @property
+    def _rthr_outstanding_work(self):
+        return len(self._rthr_fdSources) > 1 or len(self._rthr_retryTimes) > 0
+
+    def _rthr_maybe_cancel(self):
+        if self._rthr_outstanding_work:
+            # outstanding work, no need to cancel
+            return
+
+        log.info('CANCEL worker of RetryThread "%s"', self.name)
+        self._rthr_cancelled = True
+        self._rthr_cancelled = self._rthr_thread
+        self._rthr_thread = None
+
+    def _rthr_begin_thread(self):
+        self._rthr_thread = threading.Thread(
+            name='worker for %s' % (self.name,),
+            target=self._rthr_weak_run,
+            args=(ref(self),)
+        )
+        log.info('START thread')
+        self._rthr_thread.start()
 
     def _rthr_processSelectedReadFDs(self, rfds, rsrcs):
         for rfd in rfds:
@@ -346,10 +403,3 @@ class RetryThread(Singleton, threading.Thread):
             log.debug('Thread already shut down')
             pass
         log.debug('Triggered.')
-
-    def _rthr_shouldKeepRunning(self):
-        return not self._rthr_cancelled and self._rthr_masterThread.isAlive()
-
-    def __rl_log(self, str_, *args, **kwargs):
-        if self.__no_data_count < self.__stop_spam_after_no_data_count:
-            log.debug(str_, *args, **kwargs)
