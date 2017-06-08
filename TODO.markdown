@@ -9,6 +9,7 @@
 3. message.isrequest replace with property is_request
 13. Make util a package with sub-modules.
 14. Rename `release_listen_address` to `release_address`.
+15. Work out why retransmit may not have an existing message.
 
 ## Big List ##
 

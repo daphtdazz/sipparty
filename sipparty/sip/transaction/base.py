@@ -164,7 +164,14 @@ class Transaction(
             receiving a retransmission, but we ignore it.
         """
         log.debug('resend message')
-        self.transmit(self.last_message)
+        msg = self.last_message
+        if msg is None:
+            log.warning(
+                '%s.retransmit called but no previous message',
+                type(self).__name__
+            )
+            return
+        self.transmit(msg)
         self.retransmit_count += 1
 
     def transmit(self, message, remote_name=None, remote_port=None):
