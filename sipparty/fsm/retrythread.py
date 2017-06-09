@@ -285,9 +285,6 @@ class RetryThread(Singleton):
 
         Return whether to retry or not.
         """
-        # import time
-        log.error('WEAK SINGLE')
-
         def cvar(weak_self):
             self = weak_self()
             if self.thr_do_wait:
