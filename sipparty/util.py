@@ -806,7 +806,9 @@ def WaitFor(
         if action_on_timeout:
             action_on_timeout()
         else:
-            raise Timeout("Timed out waiting for %r" % condition)
+            raise Timeout("Timed out (after %lf seconds) waiting for %r" % (
+                float(timeout_s), condition)
+            )
 
 
 class SingletonType(type):
