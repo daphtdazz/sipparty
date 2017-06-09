@@ -76,6 +76,7 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
         log.warning('EXPECT LOG %s', log_info)
 
     def setUp(self):
+        log.info('TEST SETUP %s', self.id())
         super(SIPPartyTestCase, self).setUp()
 
     def patch_clock(self):
@@ -119,8 +120,8 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
             gc.collect()
             log.debug('Done GC collect')
             try:
-                SIPTransport.wait_for_no_instances(timeout_s=0.1)
-                RetryThread.wait_for_no_instances(timeout_s=0.1)
+                SIPTransport.wait_for_no_instances(timeout_s=2.5)
+                RetryThread.wait_for_no_instances(timeout_s=2.5)
             except Timeout as ex:
                 exc = ex
                 continue
