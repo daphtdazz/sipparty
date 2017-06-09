@@ -18,6 +18,7 @@ limitations under the License.
 """
 from __future__ import absolute_import
 
+import gc
 import logging
 import os
 import sys
@@ -66,8 +67,9 @@ class TestRetryThread(SIPPartyTestCase):
         rthr.addRetryTime(20)
         self.assertIsNotNone(rthr._rthr_thread)
         thr = rthr._rthr_thread
-        # raise Exception('help')
+        wr = ref(rthr)
         del rthr
+        WaitFor(lambda: wr() is None, action_each_cycle=gc.collect)
         WaitFor(lambda: not thr.is_alive())
 
     def test_exception_holding_retry_thread(self):

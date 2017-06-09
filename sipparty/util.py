@@ -784,7 +784,8 @@ class Timeout(Exception):
 
 
 def WaitFor(
-    condition, timeout_s=None, action_on_timeout=None, resolution=0.0001
+    condition, timeout_s=None, action_on_timeout=None, resolution=0.0001,
+    action_each_cycle=None
 ):
     if timeout_s is None:
         timeout_s = int(os.environ.get('PYTHON_WAITFOR_TIMEOUT', 1.0))
@@ -798,6 +799,8 @@ def WaitFor(
             next_log = Clock() + 1
             log.debug("Still waiting for %r...", condition)
 
+        if action_each_cycle is not None:
+            action_each_cycle()
         if condition():
             break
         time.sleep(resolution)
@@ -806,7 +809,7 @@ def WaitFor(
         if action_on_timeout:
             action_on_timeout()
         else:
-            raise Timeout("Timed out (after %lf seconds) waiting for %r" % (
+            raise Timeout("Timed out (after %g seconds) waiting for %r" % (
                 float(timeout_s), condition)
             )
 
