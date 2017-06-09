@@ -287,6 +287,7 @@ class RetryThread(Singleton):
         """
         # import time
         log.error('WEAK SINGLE')
+
         def cvar(weak_self):
             self = weak_self()
             if self.thr_do_wait:
