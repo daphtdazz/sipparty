@@ -783,7 +783,9 @@ class Timeout(Exception):
     pass
 
 
-def WaitFor(condition, timeout_s=None, action_on_timeout=None, resolution=0.0001):
+def WaitFor(
+    condition, timeout_s=None, action_on_timeout=None, resolution=0.0001
+):
     if timeout_s is None:
         timeout_s = int(os.environ.get('PYTHON_WAITFOR_TIMEOUT', 1.0))
 
