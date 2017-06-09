@@ -834,7 +834,8 @@ class SingletonType(type):
         # Create a wrapper for the init. This is to prevent the init of the
         # underlying class from being called twice.
         def singleton_init_wrapper(self, singleton=None, *args, **kwargs):
-
+            if 'no_reuse' in kwargs:
+                del kwargs['no_reuse']
             assert len(new_module_name) == 1
             singleton_subclass = cls.__instance_names[new_module_name[0]]
             log.debug(
@@ -941,6 +942,7 @@ class Singleton(object):
 
     def __new__(cls, singleton=None, *args, **kwargs):
         log.detail("Singleton.__new__(%r, %r)", args, kwargs)
+        no_reuse = kwargs.pop('no_reuse', False)
         if singleton is not None:
             name = singleton
         else:
@@ -959,6 +961,8 @@ class Singleton(object):
         existing_inst = insts.get(name, None)
 
         if existing_inst is not None:
+            if no_reuse:
+                raise Exception("Unexpectedly reusing an instance")
             log.debug("Return Existing instance")
             log.detail("%r", existing_inst)
             return existing_inst

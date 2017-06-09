@@ -102,7 +102,7 @@ class _FDSource(object):
 
 class RetryThread(Singleton):
 
-    def __init__(self, name=None, **kwargs):
+    def __init__(self, name=None, thr_wait=False, no_reuse=None, **kwargs):
         """Initialize a new RetryThread.
 
         Callers must be careful that they do not hold references to the
@@ -121,6 +121,8 @@ class RetryThread(Singleton):
         RetryThread is a weak reference in UserObject, or UserObject is a
         weak reference in Action.
         """
+        if no_reuse is not None:
+            kwargs['no_reuse'] = no_reuse
         super(RetryThread, self).__init__(**kwargs)
 
         if not name:
@@ -151,6 +153,9 @@ class RetryThread(Singleton):
         self.addInputFD(
             self._rthr_trigger_run_read_fd,
             lambda selectable: selectable.recv(1))
+
+        self.thr_wait_cvar = threading.Condition()
+        self.thr_do_wait = thr_wait
 
     @OnlyWhenLocked
     def addInputFD(self, fd, action):
@@ -280,6 +285,17 @@ class RetryThread(Singleton):
 
         Return whether to retry or not.
         """
+        # import time
+        log.error('WEAK SINGLE')
+        def cvar(weak_self):
+            self = weak_self()
+            if self.thr_do_wait:
+                return self.thr_wait_cvar
+            return None
+        the_cvar = cvar(weak_self)
+        if the_cvar is not None:
+            with the_cvar:
+                the_cvar.wait()
 
         rsrcs, next_wait = RetryThread._rthr_get_fd_sources_and_next_wait(
             weak_self

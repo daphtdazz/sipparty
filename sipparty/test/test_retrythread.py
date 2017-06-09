@@ -27,7 +27,7 @@ from weakref import ref
 from six import PY2
 
 from ..fsm.retrythread import RetryThread
-from ..util import (WaitFor,)
+from ..util import (Timeout, WaitFor,)
 from .base import (SIPPartyTestCase,)
 
 log = logging.getLogger(__name__)
@@ -74,18 +74,23 @@ class TestRetryThread(SIPPartyTestCase):
 
     def test_exception_holding_retry_thread(self):
 
+        class TException(Exception):
+            pass
+
         def get_rthr_and_raise():
-            rthr = RetryThread()
+            rthr = RetryThread(name='bert', no_reuse=True, thr_wait=True)
             self.wrthr = ref(rthr)
             rthr.addRetryTime(20)
-            raise Exception('exception')
+
+            raise TException('exception')
 
         try:
             get_rthr_and_raise()
-        except Exception:
+        except TException:
             rthr = self.wrthr()
             self.assertIsNotNone(rthr)
             self.wthr = rthr._rthr_thread
+            self.cvar = rthr.thr_wait_cvar
             self.assertIsNotNone(self.wthr)
             self.assertTrue(self.wthr.is_alive())
             del rthr
@@ -95,5 +100,12 @@ class TestRetryThread(SIPPartyTestCase):
         if PY2:
             sys.exc_clear()
         # After dropping out of the except, the rthr should be tidied
+        with self.cvar:
+            self.cvar.notify()
         WaitFor(lambda: self.wrthr() is None)
-        WaitFor(lambda: not self.wthr.is_alive())
+
+        try:
+            WaitFor(lambda: not self.wthr.is_alive())
+        except Timeout:
+
+            raise
