@@ -153,7 +153,7 @@ class TestParty(SIPPartyTestCase):
         self.assertTrue(p3.transport is p2.transport)
         invD3to2 = p2.invite(p3)
 
-        WaitFor(lambda: invD3to2.state == invD3to2.States.InDialog, 1)
+        WaitFor(lambda: invD3to2.state == invD3to2.States.InDialog)
 
         WaitFor(lambda: len(p3.inCallDialogs) == 1)
         self.assertEqual(len(p2.inCallDialogs), 1)
@@ -161,7 +161,7 @@ class TestParty(SIPPartyTestCase):
 
         log.info('Terminate invD3to2')
         invD3to2.terminate()
-        WaitFor(lambda: invD3to2.state == invD3to2.States.Terminated, 1)
+        WaitFor(lambda: invD3to2.state == invD3to2.States.Terminated)
 
         self.assertEqual(len(p3.inCallDialogs), 0)
         self.assertEqual(len(p2.inCallDialogs), 0)
