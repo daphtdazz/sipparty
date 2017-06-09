@@ -20,7 +20,6 @@ from __future__ import absolute_import
 
 import logging
 
-from ..fsm import retrythread
 from ..sip.header import CseqHeader, ViaHeader
 from ..sip.message import Message, MessageResponse
 from ..sip.transaction import (
@@ -29,7 +28,7 @@ from ..sip.transaction.client import NonInviteClientTransaction
 from ..sip.transaction.server import (
     InviteServerTransaction, OneShotServerTransaction)
 from ..util import WaitFor
-from .base import (MagicMock, patch, SIPPartyTestCase)
+from .base import (MagicMock, SIPPartyTestCase)
 
 log = logging.getLogger(__name__)
 
@@ -47,15 +46,7 @@ class TransactionTest(SIPPartyTestCase):
         self.msgs_sent = []
         self.msg_tu_datas = []
 
-        def retry_thread_select(in_, out, error, wait):
-            assert wait >= 0
-
-            return [], [], []
-
-        select_patch = patch.object(
-            retrythread, 'select', new=retry_thread_select)
-        select_patch.start()
-        self.addCleanup(select_patch.stop)
+        self.patch_retrythread_select()
 
         # TU interface
         self.consume_request = MagicMock()

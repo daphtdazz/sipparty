@@ -16,3 +16,16 @@ limitations under the License.
 """
 # Need to import logging before anything else.
 from . import logging
+# need to patch threading on python2
+from six import PY2
+import threading
+
+if PY2:
+    if threading.active_count() > 1:
+        raise Exception(
+            'sipparty needs to be imported on the main thread in python2 so '
+            'that it can deduce the main thread.')
+    mthr = threading.current_thread()
+    def main_thread():
+        return mthr
+    threading.main_thread = main_thread

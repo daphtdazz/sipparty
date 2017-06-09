@@ -275,7 +275,7 @@ class TestTransport(SocketOwner, SIPPartyTestCase):
 class TestTransportErrors(SIPPartyTestCase):
 
     def retry_thread_select(self, in_, out, error, wait):
-        assert wait >= 0
+        assert wait is None or wait >= 0
 
         if self.finished:
             return [], [], []
@@ -400,8 +400,6 @@ class TestTransportErrors(SIPPartyTestCase):
     def test_select_exception(self):
 
         rt = RetryThread()
-
-        WaitFor(lambda: self.sel_queueing)
 
         # There may be other private fds on the rt so find one.
         for fd in range(1, 100):

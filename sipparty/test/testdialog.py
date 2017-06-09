@@ -125,6 +125,7 @@ class TestDialogMockedSockets(SIPPartyTestCase):
 
     def setUp(self):
         super(TestDialogMockedSockets, self).setUp()
+        self.patch_retrythread_select()
         self.patch_socket()
         self.patch_clock()
 

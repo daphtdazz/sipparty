@@ -1154,7 +1154,6 @@ class Transport(Singleton):
     def __del__(self):
 
         log.info('DELETE %s instance', self.__class__.__name__)
-        self._tp_retryThread.cancel()
 
         self.close_all()
 

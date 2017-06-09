@@ -18,5 +18,5 @@ install:
 # command to run tests
 script:
   - flake8
-  - ./run-uts.bash
+  - ./run-uts.bash --no-color
   - sphinx-build -b html docs build

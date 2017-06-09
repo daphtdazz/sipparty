@@ -76,6 +76,7 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
         log.warning('EXPECT LOG %s', log_info)
 
     def setUp(self):
+        log.info('TEST SETUP %s', self.id())
         super(SIPPartyTestCase, self).setUp()
 
     def patch_clock(self):
@@ -87,6 +88,18 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
         self.addCleanup(pp.stop)
         self.clock_time = 0
         self.addCleanup(setattr, self, 'clock_time', 0)
+
+    def patch_retrythread_select(self):
+
+        def retry_thread_select(in_, out, error, wait):
+            assert wait is None or wait >= 0
+
+            return [], [], []
+
+        select_patch = patch.object(
+            retrythread, 'select', new=retry_thread_select)
+        select_patch.start()
+        self.addCleanup(select_patch.stop)
 
     def patch_socket(self):
         SocketMock.test_case = self
@@ -101,16 +114,14 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
 
         getattr(super(SIPPartyTestCase, self), "tearDown", lambda: None)()
 
-        RetryThread().cancel()
-
         exc = None
         for ii in range(4):
             log.debug('Doing GC collect')
             gc.collect()
             log.debug('Done GC collect')
             try:
-                SIPTransport.wait_for_no_instances(timeout_s=0.1)
-                RetryThread.wait_for_no_instances(timeout_s=0.1)
+                SIPTransport.wait_for_no_instances(timeout_s=2.5)
+                RetryThread.wait_for_no_instances(timeout_s=2.5)
             except Timeout as ex:
                 exc = ex
                 continue

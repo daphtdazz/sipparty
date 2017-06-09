@@ -20,12 +20,15 @@
 
 typeset -a tests
 PREPEND=sipparty.test
+COLORIZE=1
 
 while (( $# > 0 ))
 do
     if [[ $1 =~ (-l|--list) ]]
     then
         LIST=1
+    elif [[ $1 =~ ^(--no-color)$ ]]; then
+        COLORIZE=0
     else
         tests[${#tests[@]}]=${PREPEND}.$1
     fi
@@ -44,6 +47,11 @@ then
 fi
 
 colorize () {
+    if (( ! COLORIZE ))
+        then
+        cat
+        return
+    fi
     while IFS= read -r line
     do
         if [[ $line =~ ERROR ]]
