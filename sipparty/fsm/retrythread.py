@@ -47,6 +47,10 @@ class OwnerFreedException(RuntimeError):
     pass
 
 
+class MainThreadDeadException(RuntimeError):
+    pass
+
+
 class _FDSource(object):
 
     def __init__(self, selectable, action):
@@ -241,7 +245,7 @@ class RetryThread(Singleton):
     def _rthr_weak_run(weak_self):
         thr_name = threading.current_thread().name
         try:
-            while RetryThread._rthr_weak_single(weak_self):
+            while RetryThread._rhr_weak_single_and_should_continue(weak_self):
                 pass
         except OwnerFreedException:
             log.debug(
@@ -260,6 +264,17 @@ class RetryThread(Singleton):
         return dict(self._rthr_fdSources), self._rthr_next_wait
 
     @staticmethod
+    def _rhr_weak_single_and_should_continue(weak_self):
+        if not threading.main_thread().is_alive():
+            raise MainThreadDeadException('Main thread dead')
+
+        RetryThread._rthr_weak_single(weak_self)
+        self = weak_self()
+        if self is None:
+            RetryThread._rthr_raise_no_self()
+        return not self._rthr_cancelled
+
+    @staticmethod
     def _rthr_weak_single(weak_self):
         """Run a single pass of the retrythread, passed by weak reference.
 
@@ -274,12 +289,13 @@ class RetryThread(Singleton):
         self = None
 
         try:
+            actual_wait = 2.0 if next_wait is None else next_wait
             log.debug(
                 "thread %s select %r from %r wait %r.",
                 thr_name, select, rsrckeys,
-                next_wait)
+                actual_wait)
             rfds, wfds, efds = select(
-                rsrckeys, [], rsrckeys, next_wait)
+                rsrckeys, [], rsrckeys, actual_wait)
         except select_error as exc:
             # One of the FDs is bad... work out which one and tidy up.
             log.debug(
@@ -307,7 +323,7 @@ class RetryThread(Singleton):
             # Python 3 does this for us, thank you Python 3!
             if PY2:
                 sys.exc_clear()
-            return not self._rthr_cancelled
+            return
 
         self = weak_self()
         if self is None:
@@ -324,7 +340,7 @@ class RetryThread(Singleton):
             if numrts == 0:
                 self._rthr_next_wait = None
                 log.debug('no scheduled wake-up time')
-                return not self._rthr_cancelled
+                return
 
             next = self._rthr_retryTimes[0]
             now = Clock()
@@ -333,7 +349,7 @@ class RetryThread(Singleton):
                 self._rthr_next_wait = next - now
                 log.debug(
                     "%s next try in %r seconds", self, self._rthr_next_wait)
-                return not self._rthr_cancelled
+                return
 
             del self._rthr_retryTimes[0]
 
@@ -348,7 +364,7 @@ class RetryThread(Singleton):
 
         # Immediately respin since we haven't checked the next timer yet.
         self._rthr_next_wait = 0
-        return not self._rthr_cancelled
+        return
 
     @OnlyWhenLocked
     def _mark_input_fd_dead(self, fd):
