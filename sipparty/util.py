@@ -21,6 +21,7 @@ from __future__ import absolute_import
 from abc import (ABCMeta, abstractmethod)
 from collections import (Callable, Sequence)
 import logging
+import os
 from six import (
     add_metaclass, binary_type as bytes, iteritems, itervalues, PY2)
 from threading import currentThread
@@ -782,7 +783,10 @@ class Timeout(Exception):
     pass
 
 
-def WaitFor(condition, timeout_s=1, action_on_timeout=None, resolution=0.0001):
+def WaitFor(condition, timeout_s=None, action_on_timeout=None, resolution=0.0001):
+    if timeout_s is None:
+        timeout_s = int(os.environ.get('PYTHON_WAITFOR_TIMEOUT', 1.0))
+
     now = Clock()
     next_log = now + 1
     until = now + timeout_s
