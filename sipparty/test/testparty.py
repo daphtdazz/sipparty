@@ -114,7 +114,7 @@ class TestParty(SIPPartyTestCase):
 
         invD = p2.invite(p1)
         winvD = ref(invD)
-        WaitFor(lambda: winvD().state == winvD().States.InDialog, 1)
+        WaitFor(lambda: winvD().state == winvD().States.InDialog)
         WaitFor(lambda: len(wp1().inCallDialogs) > 0)
         WaitFor(
             lambda:
