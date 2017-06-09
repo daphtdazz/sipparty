@@ -963,7 +963,11 @@ class Singleton(object):
             log.detail("%r", existing_inst)
             return existing_inst
 
-        ni = super(Singleton, cls).__new__(cls, *args, **kwargs)
+        try:
+            ni = super(Singleton, cls).__new__(cls)
+        except TypeError:
+            log.error('args: %s; kwargs: %s', args, kwargs)
+            raise
         log.info(
             "New Singleton subclass %s instance called '%s' created",
             cls.__name__, name)
