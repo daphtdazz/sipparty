@@ -29,7 +29,7 @@ logging.addLevelName(logging.DETAIL, "DETAIL")
 
 class SipPartyLogger(logging.getLoggerClass()):
 
-    global_debug_logs_enabled = False
+    global_debug_logs_enabled = True
     global_detail_logs_enabled = False
 
     def __init__(self, *args, **kwargs):

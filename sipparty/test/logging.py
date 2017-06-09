@@ -35,7 +35,7 @@ default_logging_config = {
             # NB: for performance global debug logs are disabled by default
             # in sipparty.logging, so you will need to enable them there as
             # well if you want to turn this up.
-            'level': 'INFO',
+            'level': 'DEBUG',
             'formatter': 'console',
             'class': 'logging.StreamHandler',
         },
@@ -47,6 +47,12 @@ default_logging_config = {
     'loggers': {
         'sipparty.test': {
             'level': 'INFO'
+        },
+        'sipparty.fsm.retrythread': {
+            'level': 'DEBUG'
+        },
+        'sipparty.transport.base': {
+            'level': 'DEBUG'
         },
     }
 }
