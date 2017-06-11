@@ -321,6 +321,8 @@ class RetryThread(Singleton):
             RetryThread._rthr_mark_thread_point(
                 '05-single-select'
             )
+            threading.current_thread().extra_diags = (
+                list(rsrckeys), actual_wait)
             rfds, wfds, efds = select(
                 rsrckeys, [], rsrckeys, actual_wait)
         except select_error as exc:

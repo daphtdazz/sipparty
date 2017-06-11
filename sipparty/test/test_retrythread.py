@@ -73,7 +73,8 @@ class TestRetryThread(SIPPartyTestCase):
         try:
             WaitFor(lambda: not thr.is_alive())
         finally:
-            log.info('%s', getattr(thr, 'rthr_mark_points', None))
+            log.info('mark points: %s', getattr(thr, 'rthr_mark_points', None))
+            log.info('Extra diags: %s', getattr(thr, 'extra_diags', None))
 
     def test_exception_holding_retry_thread(self):
 
@@ -112,4 +113,5 @@ class TestRetryThread(SIPPartyTestCase):
         except Timeout:
             raise
         finally:
-            log.info('%s', getattr(self.wthr, 'rthr_mark_points', None))
+            log.info('mark points: %s', getattr(self.wthr, 'rthr_mark_points', None))
+            log.info('Extra diags: %s', getattr(self.wthr, 'extra_diags', None))
