@@ -70,7 +70,10 @@ class TestRetryThread(SIPPartyTestCase):
         wr = ref(rthr)
         del rthr
         WaitFor(lambda: wr() is None, action_each_cycle=gc.collect)
-        WaitFor(lambda: not thr.is_alive())
+        try:
+            WaitFor(lambda: not thr.is_alive())
+        finally:
+            log.info('%s', getattr(thr, 'rthr_mark_points', None))
 
     def test_exception_holding_retry_thread(self):
 
@@ -107,5 +110,6 @@ class TestRetryThread(SIPPartyTestCase):
         try:
             WaitFor(lambda: not self.wthr.is_alive())
         except Timeout:
-
             raise
+        finally:
+            log.info('%s', getattr(self.wthr, 'rthr_mark_points', None))
