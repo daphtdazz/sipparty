@@ -312,7 +312,11 @@ class RetryThread(Singleton):
         self = None
 
         try:
-            actual_wait = 2.0 if next_wait is None else next_wait
+            max_wait = 2.0
+            actual_wait = (
+                max_wait if (next_wait is None or next_wait > max_wait)
+                else next_wait
+            )
             log.debug(
                 "thread %s select %r from %r wait %r.",
                 thr_name, select, rsrckeys,
