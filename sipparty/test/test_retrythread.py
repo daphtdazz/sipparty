@@ -113,5 +113,8 @@ class TestRetryThread(SIPPartyTestCase):
         except Timeout:
             raise
         finally:
-            log.info('mark points: %s', getattr(self.wthr, 'rthr_mark_points', None))
-            log.info('Extra diags: %s', getattr(self.wthr, 'extra_diags', None))
+            log.info(
+                'mark points: %s',
+                getattr(self.wthr, 'rthr_mark_points', None))
+            log.info(
+                'Extra diags: %s', getattr(self.wthr, 'extra_diags', None))
