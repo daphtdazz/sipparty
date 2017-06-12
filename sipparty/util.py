@@ -21,6 +21,7 @@ from __future__ import absolute_import
 from abc import (ABCMeta, abstractmethod)
 from collections import (Callable, Sequence)
 import logging
+import os
 from six import (
     add_metaclass, binary_type as bytes, iteritems, itervalues, PY2)
 from threading import currentThread
@@ -782,7 +783,13 @@ class Timeout(Exception):
     pass
 
 
-def WaitFor(condition, timeout_s=1, action_on_timeout=None, resolution=0.0001):
+def WaitFor(
+    condition, timeout_s=None, action_on_timeout=None, resolution=0.0001,
+    action_each_cycle=None
+):
+    if timeout_s is None:
+        timeout_s = int(os.environ.get('PYTHON_WAITFOR_TIMEOUT', 1.0))
+
     now = Clock()
     next_log = now + 1
     until = now + timeout_s
@@ -792,6 +799,8 @@ def WaitFor(condition, timeout_s=1, action_on_timeout=None, resolution=0.0001):
             next_log = Clock() + 1
             log.debug("Still waiting for %r...", condition)
 
+        if action_each_cycle is not None:
+            action_each_cycle()
         if condition():
             break
         time.sleep(resolution)
@@ -800,7 +809,9 @@ def WaitFor(condition, timeout_s=1, action_on_timeout=None, resolution=0.0001):
         if action_on_timeout:
             action_on_timeout()
         else:
-            raise Timeout("Timed out waiting for %r" % condition)
+            raise Timeout("Timed out (after %g seconds) waiting for %r" % (
+                float(timeout_s), condition)
+            )
 
 
 class SingletonType(type):
@@ -823,7 +834,6 @@ class SingletonType(type):
         # Create a wrapper for the init. This is to prevent the init of the
         # underlying class from being called twice.
         def singleton_init_wrapper(self, singleton=None, *args, **kwargs):
-
             assert len(new_module_name) == 1
             singleton_subclass = cls.__instance_names[new_module_name[0]]
             log.debug(
@@ -952,7 +962,11 @@ class Singleton(object):
             log.detail("%r", existing_inst)
             return existing_inst
 
-        ni = super(Singleton, cls).__new__(cls, *args, **kwargs)
+        try:
+            ni = super(Singleton, cls).__new__(cls)
+        except TypeError:
+            log.error('args: %s; kwargs: %s', args, kwargs)
+            raise
         log.info(
             "New Singleton subclass %s instance called '%s' created",
             cls.__name__, name)

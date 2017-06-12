@@ -31,9 +31,9 @@ from ..transport import base as transport_base
 from ..transport.mocksock import SocketMock
 from ..util import Timeout, WaitFor
 if PY2:
-    from mock import (MagicMock, Mock, patch)  # noqa
+    from mock import (ANY, MagicMock, Mock, patch)  # noqa
 else:
-    from unittest.mock import (MagicMock, Mock, patch)  # noqa
+    from unittest.mock import (ANY, MagicMock, Mock, patch)  # noqa
 
 log = logging.getLogger(__name__)
 sipparty = sys.modules['sipparty']
@@ -110,6 +110,7 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
         self.addCleanup(socket_patch.stop)
 
     def tearDown(self):
+        log.info('TEARDOWN START')
         self.popAllLogLevels()
 
         getattr(super(SIPPartyTestCase, self), "tearDown", lambda: None)()
@@ -120,8 +121,8 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
             gc.collect()
             log.debug('Done GC collect')
             try:
-                SIPTransport.wait_for_no_instances(timeout_s=2.5)
-                RetryThread.wait_for_no_instances(timeout_s=2.5)
+                SIPTransport.wait_for_no_instances(timeout_s=0.3)
+                RetryThread.wait_for_no_instances(timeout_s=0.3)
             except Timeout as ex:
                 exc = ex
                 continue
@@ -129,6 +130,7 @@ class SIPPartyTestCase(TestCaseREMixin, unittest.TestCase):
                 break
         else:
             raise exc
+        log.info('TEARDOWN DONE')
 
     def pushLogLevelToSubMod(self, module, sub_module_name, level):
 

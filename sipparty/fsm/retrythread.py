@@ -102,6 +102,8 @@ class _FDSource(object):
 
 class RetryThread(Singleton):
 
+    max_select_wait = 2.0
+
     def __init__(self, name=None, **kwargs):
         """Initialize a new RetryThread.
 
@@ -267,7 +269,6 @@ class RetryThread(Singleton):
     def _rhr_weak_single_and_should_continue(weak_self):
         if not threading.main_thread().is_alive():
             raise MainThreadDeadException('Main thread dead')
-
         RetryThread._rthr_weak_single(weak_self)
         self = weak_self()
         if self is None:
@@ -280,16 +281,19 @@ class RetryThread(Singleton):
 
         Return whether to retry or not.
         """
-
         rsrcs, next_wait = RetryThread._rthr_get_fd_sources_and_next_wait(
             weak_self
         )
-        rsrckeys = rsrcs.keys()
+        rsrckeys = list(rsrcs.keys())
         thr_name = threading.current_thread().name
         self = None
 
         try:
-            actual_wait = 2.0 if next_wait is None else next_wait
+            actual_wait = (
+                RetryThread.max_select_wait
+                if next_wait is None or next_wait > RetryThread.max_select_wait
+                else next_wait
+            )
             log.debug(
                 "thread %s select %r from %r wait %r.",
                 thr_name, select, rsrckeys,
@@ -298,7 +302,7 @@ class RetryThread(Singleton):
                 rsrckeys, [], rsrckeys, actual_wait)
         except select_error as exc:
             # One of the FDs is bad... work out which one and tidy up.
-            log.debug(
+            log.warning(
                 "thread %s one of %r is a bad file descriptor: %r", thr_name,
                 rsrckeys, exc)
             self = weak_self()
@@ -329,8 +333,8 @@ class RetryThread(Singleton):
         if self is None:
             RetryThread._rthr_raise_no_self()
 
+        log.debug("%s process %r, %r, %r", self, rfds, wfds, efds)
         if len(rfds) > 0:
-            log.debug("%s process %r, %r, %r", self, rfds, wfds, efds)
             self._rthr_processSelectedReadFDs(rfds, rsrcs)
 
         # Check timers.
@@ -394,7 +398,6 @@ class RetryThread(Singleton):
 
         log.info('CANCEL worker of RetryThread "%s"', self.name)
         self._rthr_cancelled = True
-        self._rthr_cancelled = self._rthr_thread
         self._rthr_thread = None
 
     def _rthr_begin_thread(self):
