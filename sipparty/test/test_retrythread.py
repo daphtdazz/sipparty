@@ -80,7 +80,7 @@ class TestRetryThread(SIPPartyTestCase):
             pass
 
         def get_rthr_and_raise():
-            rthr = RetryThread(name='bert', no_reuse=True)
+            rthr = RetryThread()
             self.wrthr = ref(rthr)
             rthr.addRetryTime(20)
 

@@ -104,7 +104,7 @@ class RetryThread(Singleton):
 
     max_select_wait = 2.0
 
-    def __init__(self, name=None, no_reuse=None, **kwargs):
+    def __init__(self, name=None, **kwargs):
         """Initialize a new RetryThread.
 
         Callers must be careful that they do not hold references to the
@@ -123,8 +123,6 @@ class RetryThread(Singleton):
         RetryThread is a weak reference in UserObject, or UserObject is a
         weak reference in Action.
         """
-        if no_reuse is not None:
-            kwargs['no_reuse'] = no_reuse
         super(RetryThread, self).__init__(**kwargs)
 
         if not name:
