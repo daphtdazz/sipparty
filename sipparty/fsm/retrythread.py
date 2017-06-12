@@ -103,6 +103,8 @@ class _FDSource(object):
 
 class RetryThread(Singleton):
 
+    max_select_wait = 2.0
+
     def __init__(self, name=None, no_reuse=None, **kwargs):
         """Initialize a new RetryThread.
 
@@ -288,14 +290,13 @@ class RetryThread(Singleton):
 
         Return whether to retry or not.
         """
-
         RetryThread._rthr_mark_thread_point(
             '03-single-get-fds'
         )
         rsrcs, next_wait = RetryThread._rthr_get_fd_sources_and_next_wait(
             weak_self
         )
-        rsrckeys = rsrcs.keys()
+        rsrckeys = list(rsrcs.keys())
         RetryThread._rthr_mark_thread_point(
             '04-single-get-current-thread-name'
         )
@@ -303,9 +304,9 @@ class RetryThread(Singleton):
         self = None
 
         try:
-            max_wait = 2.0
             actual_wait = (
-                max_wait if (next_wait is None or next_wait > max_wait)
+                RetryThread.max_select_wait
+                if next_wait is None or next_wait > RetryThread.max_select_wait
                 else next_wait
             )
             log.debug(
@@ -317,7 +318,7 @@ class RetryThread(Singleton):
                 '05-single-select'
             )
             threading.current_thread().extra_diags = (
-                list(rsrckeys), actual_wait)
+                rsrckeys, actual_wait)
             rfds, wfds, efds = select(
                 rsrckeys, [], rsrckeys, actual_wait)
         except select_error as exc:

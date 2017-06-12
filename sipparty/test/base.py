@@ -31,9 +31,9 @@ from ..transport import base as transport_base
 from ..transport.mocksock import SocketMock
 from ..util import Timeout, WaitFor
 if PY2:
-    from mock import (MagicMock, Mock, patch)  # noqa
+    from mock import (ANY, MagicMock, Mock, patch)  # noqa
 else:
-    from unittest.mock import (MagicMock, Mock, patch)  # noqa
+    from unittest.mock import (ANY, MagicMock, Mock, patch)  # noqa
 
 log = logging.getLogger(__name__)
 sipparty = sys.modules['sipparty']

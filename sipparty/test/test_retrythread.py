@@ -22,13 +22,16 @@ import gc
 import logging
 import os
 import sys
+import threading
+import time
 from weakref import ref
 
 from six import PY2
 
+from ..fsm import retrythread
 from ..fsm.retrythread import RetryThread
 from ..util import (Timeout, WaitFor,)
-from .base import (SIPPartyTestCase,)
+from .base import (ANY, MagicMock, patch, SIPPartyTestCase,)
 
 log = logging.getLogger(__name__)
 
@@ -115,3 +118,34 @@ class TestRetryThread(SIPPartyTestCase):
                 getattr(self.wthr, 'rthr_mark_points', None))
             log.info(
                 'Extra diags: %s', getattr(self.wthr, 'extra_diags', None))
+
+    def test_max_select_wait(self):
+
+        self.assertLess(RetryThread.max_select_wait, 20)
+
+        cvar = threading.Condition()
+        self.do_cvar = True
+        sel_mock = MagicMock()
+
+        def sel_patch(rsrcs, wsrcs, esrcs, wait):
+            do_cvar = self.do_cvar
+            sel_mock(rsrcs, wsrcs, esrcs, wait)
+            if do_cvar:
+                with cvar:
+                    cvar.wait()
+            return [], [], []
+
+        select_patch = patch.object(
+            retrythread, 'select', new=sel_patch)
+        select_patch.start()
+        self.addCleanup(select_patch.stop)
+
+        rthr = RetryThread()
+        rthr.addRetryTime(20)
+        self.wait_for(lambda: sel_mock.call_count == 1)
+        del rthr
+        self.do_cvar = False
+        with cvar:
+            cvar.notify()
+
+        sel_mock.assert_called_with(ANY, [], ANY, RetryThread.max_select_wait)
