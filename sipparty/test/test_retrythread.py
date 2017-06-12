@@ -23,14 +23,13 @@ import logging
 import os
 import sys
 import threading
-import time
 from weakref import ref
 
 from six import PY2
 
 from ..fsm import retrythread
 from ..fsm.retrythread import RetryThread
-from ..util import (Timeout, WaitFor,)
+from ..util import (WaitFor,)
 from .base import (ANY, MagicMock, patch, SIPPartyTestCase,)
 
 log = logging.getLogger(__name__)
@@ -73,11 +72,7 @@ class TestRetryThread(SIPPartyTestCase):
         wr = ref(rthr)
         del rthr
         WaitFor(lambda: wr() is None, action_each_cycle=gc.collect)
-        try:
-            WaitFor(lambda: not thr.is_alive())
-        finally:
-            log.info('mark points: %s', getattr(thr, 'rthr_mark_points', None))
-            log.info('Extra diags: %s', getattr(thr, 'extra_diags', None))
+        WaitFor(lambda: not thr.is_alive())
 
     def test_exception_holding_retry_thread(self):
 
@@ -107,17 +102,7 @@ class TestRetryThread(SIPPartyTestCase):
             sys.exc_clear()
         # After dropping out of the except, the rthr should be tidied
         WaitFor(lambda: self.wrthr() is None)
-
-        try:
-            WaitFor(lambda: not self.wthr.is_alive())
-        except Timeout:
-            raise
-        finally:
-            log.info(
-                'mark points: %s',
-                getattr(self.wthr, 'rthr_mark_points', None))
-            log.info(
-                'Extra diags: %s', getattr(self.wthr, 'extra_diags', None))
+        WaitFor(lambda: not self.wthr.is_alive())
 
     def test_max_select_wait(self):
 

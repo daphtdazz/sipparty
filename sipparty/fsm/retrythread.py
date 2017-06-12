@@ -31,7 +31,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from collections import Counter
 import logging
 from select import error as select_error, select
 from six import PY2
@@ -270,14 +269,8 @@ class RetryThread(Singleton):
 
     @staticmethod
     def _rhr_weak_single_and_should_continue(weak_self):
-        RetryThread._rthr_mark_thread_point(
-            '01-single-and-continue-main-is-alive'
-        )
         if not threading.main_thread().is_alive():
             raise MainThreadDeadException('Main thread dead')
-        RetryThread._rthr_mark_thread_point(
-            '02-single-and-continue-call-single'
-        )
         RetryThread._rthr_weak_single(weak_self)
         self = weak_self()
         if self is None:
@@ -290,16 +283,10 @@ class RetryThread(Singleton):
 
         Return whether to retry or not.
         """
-        RetryThread._rthr_mark_thread_point(
-            '03-single-get-fds'
-        )
         rsrcs, next_wait = RetryThread._rthr_get_fd_sources_and_next_wait(
             weak_self
         )
         rsrckeys = list(rsrcs.keys())
-        RetryThread._rthr_mark_thread_point(
-            '04-single-get-current-thread-name'
-        )
         thr_name = threading.current_thread().name
         self = None
 
@@ -313,12 +300,6 @@ class RetryThread(Singleton):
                 "thread %s select %r from %r wait %r.",
                 thr_name, select, rsrckeys,
                 actual_wait)
-
-            RetryThread._rthr_mark_thread_point(
-                '05-single-select'
-            )
-            threading.current_thread().extra_diags = (
-                rsrckeys, actual_wait)
             rfds, wfds, efds = select(
                 rsrckeys, [], rsrckeys, actual_wait)
         except select_error as exc:
@@ -350,26 +331,16 @@ class RetryThread(Singleton):
                 sys.exc_clear()
             return
 
-        RetryThread._rthr_mark_thread_point(
-            '06-single-get-self'
-        )
         self = weak_self()
         if self is None:
             RetryThread._rthr_raise_no_self()
 
         log.debug("%s process %r, %r, %r", self, rfds, wfds, efds)
-        RetryThread._rthr_mark_thread_point(
-            '07-single-processfds'
-        )
         if len(rfds) > 0:
             self._rthr_processSelectedReadFDs(rfds, rsrcs)
 
         # Check timers.
         log.debug("%s check timers", self)
-
-        RetryThread._rthr_mark_thread_point(
-            '08-single-get-next-times-lock'
-        )
         with self._rthr_nextTimesLock:
             numrts = len(self._rthr_retryTimes)
             if numrts == 0:
@@ -400,12 +371,6 @@ class RetryThread(Singleton):
         # Immediately respin since we haven't checked the next timer yet.
         self._rthr_next_wait = 0
         return
-
-    @staticmethod
-    def _rthr_mark_thread_point(mp_name):
-        cthr = threading.current_thread()
-        cthr.rthr_mark_points = getattr(cthr, 'rthr_mark_points', Counter())
-        cthr.rthr_mark_points[mp_name] += 1
 
     @OnlyWhenLocked
     def _mark_input_fd_dead(self, fd):
