@@ -42,15 +42,9 @@ default_logging_config = {
     },
     'root': {
         'handlers': ['console'],
-        'level': 'WARNING'
+        'level': 'INFO'
     },
     'loggers': {
-        'sipparty.test': {
-            'level': 'INFO'
-        },
-        'sipparty.fsm.retrythread': {
-            'level': 'INFO'
-        },
     }
 }
 
