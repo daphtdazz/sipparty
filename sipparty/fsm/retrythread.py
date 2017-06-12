@@ -103,7 +103,7 @@ class _FDSource(object):
 
 class RetryThread(Singleton):
 
-    def __init__(self, name=None, thr_wait=False, no_reuse=None, **kwargs):
+    def __init__(self, name=None, no_reuse=None, **kwargs):
         """Initialize a new RetryThread.
 
         Callers must be careful that they do not hold references to the
@@ -154,9 +154,6 @@ class RetryThread(Singleton):
         self.addInputFD(
             self._rthr_trigger_run_read_fd,
             lambda selectable: selectable.recv(1))
-
-        self.thr_wait_cvar = threading.Condition()
-        self.thr_do_wait = thr_wait
 
     @OnlyWhenLocked
     def addInputFD(self, fd, action):
@@ -291,12 +288,6 @@ class RetryThread(Singleton):
 
         Return whether to retry or not.
         """
-        def cvar(weak_self):
-            self = weak_self()
-            if self is not None and self.thr_do_wait:
-                return self.thr_wait_cvar
-            return None
-        # the_cvar = cvar(weak_self)
 
         RetryThread._rthr_mark_thread_point(
             '03-single-get-fds'

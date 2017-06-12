@@ -82,7 +82,7 @@ class TestRetryThread(SIPPartyTestCase):
             pass
 
         def get_rthr_and_raise():
-            rthr = RetryThread(name='bert', no_reuse=True, thr_wait=True)
+            rthr = RetryThread(name='bert', no_reuse=True)
             self.wrthr = ref(rthr)
             rthr.addRetryTime(20)
 
@@ -94,7 +94,6 @@ class TestRetryThread(SIPPartyTestCase):
             rthr = self.wrthr()
             self.assertIsNotNone(rthr)
             self.wthr = rthr._rthr_thread
-            self.cvar = rthr.thr_wait_cvar
             self.assertIsNotNone(self.wthr)
             self.assertTrue(self.wthr.is_alive())
             del rthr
@@ -104,8 +103,6 @@ class TestRetryThread(SIPPartyTestCase):
         if PY2:
             sys.exc_clear()
         # After dropping out of the except, the rthr should be tidied
-        with self.cvar:
-            self.cvar.notify()
         WaitFor(lambda: self.wrthr() is None)
 
         try:
